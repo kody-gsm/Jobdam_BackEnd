@@ -1,9 +1,0 @@
-{
-  "settings": {
-    "project": {
-      "name": "Kody-JOBDAM",
-      "description": "A Spring Boot application for managing Kody-JOBDAM"
-    },
-    "styleGuide": ".gemini/styleguide.md"
-  }
-}

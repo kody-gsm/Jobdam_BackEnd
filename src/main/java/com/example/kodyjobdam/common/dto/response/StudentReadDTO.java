@@ -1,7 +1,10 @@
 package com.example.kodyjobdam.common.dto.response;
 
+import lombok.Getter;
+
 import java.time.LocalDate;
 
+@Getter
 public class StudentReadDTO {
 
     private Long id;

@@ -1,0 +1,9 @@
+# .codex/rules/team.rules
+prefix_rule(
+    pattern = ["git", "status"],
+    decision = "allow",
+)
+prefix_rule(
+    pattern = ["git", "reset", "--hard"],
+    decision = "forbidden",
+)

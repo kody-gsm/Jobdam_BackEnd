@@ -18,7 +18,7 @@ public class CommonController {
 
     private final CommonService commonService;
 
-    SecurityUtil securityUtil;
+    private final SecurityUtil securityUtil;
 
     @PostMapping("/student/common")
     public ResponseEntity<?> createReservation(@RequestBody CreateDTO dto) {

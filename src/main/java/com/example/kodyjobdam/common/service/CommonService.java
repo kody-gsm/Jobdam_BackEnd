@@ -11,6 +11,7 @@ import com.example.kodyjobdam.common.repository.CommonRepository;
 import com.example.kodyjobdam.user.UserRepository;
 import com.example.kodyjobdam.user.entity.User;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.web.server.ResponseStatusException;
@@ -18,6 +19,7 @@ import org.springframework.web.server.ResponseStatusException;
 import java.util.List;
 
 @Service
+@Slf4j
 @RequiredArgsConstructor
 public class CommonService {
 
@@ -56,6 +58,7 @@ public class CommonService {
                 }
             }
         }
+        commonSave(dto.toEntity(userId));
     }
 
     public void cancelReservation(Long reservationId, Long userId) {
@@ -74,12 +77,19 @@ public class CommonService {
     }
 
     public void allow(Long reservationId, Long teacherId) {
+
+        log.info("start");
+
         CommonEntity entity = commonRepository.findById(reservationId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "값을 찾을 수 없습니다."));
+
+        log.info("first");
 
         if(entity.getState() == StateEnum.CANCEL) {
             throw new ResponseStatusException(HttpStatus.NOT_FOUND, "이미 취소된 에약입니다.");
         }
+
+        log.info("second");
 
         entity.setState(StateEnum.RESERVED);
         entity.setTeacher_id(teacherId);
