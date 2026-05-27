@@ -19,7 +19,6 @@
 - Entity 직접 반환 금지
 - Request DTO / Response DTO 분리
 - Service 계층에서 비즈니스 로직 처리
-- @Transactional은 Service 계층에서 사용
 
 ## Entity 규칙
 
