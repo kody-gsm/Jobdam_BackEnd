@@ -1,2 +1,5 @@
 approval_policy = "on-request"
 sandbox_mode = "workspace-write"
+
+[mcp_servers.notion]
+url = "https://mcp.notion.com/mcp"
