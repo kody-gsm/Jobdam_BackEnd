@@ -2,7 +2,6 @@ package com.example.kodyjobdam.common.entity;
 
 import com.example.kodyjobdam.user.entity.User;
 import jakarta.persistence.*;
-import jakarta.validation.constraints.NotNull;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Getter;
@@ -15,7 +14,7 @@ import java.time.LocalDate;
 @Builder
 @NoArgsConstructor()
 @AllArgsConstructor
-@Table(name="reservation")
+@Table(name="common")
 public class CommonEntity {
 
     @Id
@@ -37,15 +36,15 @@ public class CommonEntity {
 
     private String content;
 
-    private Long teacher_id;
+    private Long allow_id;
 
     @Column(nullable = false)
     @Enumerated(EnumType.STRING) //DB에 이 ENUM을 문자열로 저장해줘
     private StateEnum state = StateEnum.WAITING;
 
-    @Column(nullable = false)
+    /*@Column(nullable = false)
     @Enumerated(EnumType.STRING)
-    private KindEnum kind;
+    private KindEnum kind;*/
 
     public void setDate(LocalDate date) {
         this.date = date;
@@ -60,6 +59,6 @@ public class CommonEntity {
     }
 
     public void setTeacher_id(Long teacher_id) {
-        this.teacher_id = teacher_id;
+        this.allow_id = teacher_id;
     }
 }

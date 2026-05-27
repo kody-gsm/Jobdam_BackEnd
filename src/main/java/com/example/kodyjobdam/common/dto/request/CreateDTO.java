@@ -1,7 +1,6 @@
 package com.example.kodyjobdam.common.dto.request;
 
 import com.example.kodyjobdam.common.entity.CommonEntity;
-import com.example.kodyjobdam.common.entity.KindEnum;
 import com.example.kodyjobdam.common.entity.StateEnum;
 import com.example.kodyjobdam.user.entity.User;
 import lombok.Getter;
@@ -23,15 +22,12 @@ public class CreateDTO {
 
     private String period;
 
-    private KindEnum kind;
-
     public CommonEntity toEntity(User user) { //title, content 이런건 DTO에 있는 값
         return CommonEntity.builder()
                 .title(title)
                 .content(content)
                 .date(date)
                 .period(period)
-                .kind(kind)
                 .state(StateEnum.WAITING)
                 .user(user)
                 .build();

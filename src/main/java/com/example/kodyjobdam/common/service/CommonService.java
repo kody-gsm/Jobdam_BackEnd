@@ -108,7 +108,6 @@ public class CommonService {
                 continue;
             }
             entity.setState(StateEnum.CANCEL);
-
         }
 
         commonSave(dto.toEntity(dto));
