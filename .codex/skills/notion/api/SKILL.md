@@ -47,4 +47,16 @@ api 명세서는 잡담 페이지에 api 명세서 DB에 작성한다.
 ## Endpoint 형식
 
 api 명세서는 잡담 페이지에 api 명세서 DB에 미리 정의된 형식을 따른다.
+requestBody에 DTO 값이 아닌 DTO내 필드 값을 넣는다.
 
+# 예시
+
+## requestBody
+
+{
+"title": "취업 상담 신청",
+"content": "자소서 1번 항목 첨삭 부탁드립니다.",
+"date": "2024-04-28",
+"period": "1교시",
+"kind": "COURSE"
+}
