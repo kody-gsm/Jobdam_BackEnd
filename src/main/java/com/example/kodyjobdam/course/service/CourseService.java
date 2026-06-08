@@ -15,12 +15,19 @@ import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.web.server.ResponseStatusException;
 
+import java.time.LocalDate;
+import java.time.LocalTime;
 import java.util.List;
+import java.util.Optional;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 @Service
 @Slf4j
 @RequiredArgsConstructor
 public class CourseService {
+
+    private static final Pattern TIME_PATTERN = Pattern.compile("(\\d{1,2})(?::(\\d{2}))?\\s*시?");
 
     private final CourseRepository courseRepository;
 
@@ -104,7 +111,7 @@ public class CourseService {
         courseSave(dto.toEntity(dto));
     }
 
-    public List<TeacherReadDTO> T_Read(Long id) {
+    public List<TeacherReadDTO> teacherRecord(Long id) {
         List<CourseEntity> entity = courseRepository.findByUser_id(id);
 
         return entity.stream()
@@ -117,7 +124,7 @@ public class CourseService {
                 .toList();
     }
 
-    public List<StudentReadDTO> S_Read(Long id) {
+    public List<StudentReadDTO> studentRecord(Long id) {
         List<CourseEntity> entity = courseRepository.findByUser_id(id);
 
         return entity.stream()
@@ -128,5 +135,54 @@ public class CourseService {
                         e.getPeriod()
                 ))
                 .toList();
+    }
+
+    public List<StudentReadDTO> selectRecordStatus(Long id) {
+        LocalDate today = LocalDate.now();
+        LocalTime now = LocalTime.now();
+
+        List<CourseEntity> entity = courseRepository.findByUser_idAndDateGreaterThanEqual(id, today);
+
+        return entity.stream()
+                .filter(e -> e.getState() != StateEnum.CANCEL && e.getState() != StateEnum.LOCKED)
+                .filter(e -> isFutureReservation(e.getDate(), e.getPeriod(), today, now))
+                .map(e -> new StudentReadDTO(
+                        e.getReservation_id(),
+                        e.getUser().getName(),
+                        e.getDate(),
+                        e.getPeriod()
+                ))
+                .toList();
+    }
+
+    private boolean isFutureReservation(LocalDate reservationDate, String period, LocalDate today, LocalTime now) {
+        if (reservationDate.isAfter(today)) {
+            return true;
+        }
+
+        return reservationDate.isEqual(today)
+                && parseStartTime(period)
+                .map(startTime -> startTime.isAfter(now))
+                .orElse(false);
+    }
+
+    private Optional<LocalTime> parseStartTime(String period) {
+        if (period == null) {
+            return Optional.empty();
+        }
+
+        Matcher matcher = TIME_PATTERN.matcher(period);
+        if (!matcher.find()) {
+            return Optional.empty();
+        }
+
+        int hour = Integer.parseInt(matcher.group(1));
+        int minute = matcher.group(2) == null ? 0 : Integer.parseInt(matcher.group(2));
+
+        if (hour < 0 || hour > 23 || minute < 0 || minute > 59) {
+            return Optional.empty();
+        }
+
+        return Optional.of(LocalTime.of(hour, minute));
     }
 }
