@@ -44,17 +44,17 @@ public class CommonController {
         return ResponseEntity.ok().body("해당 시간을 잠궜습니다.");
     }
 
-    @GetMapping("/student/common")
+    @GetMapping("/student/common/read")
     public List<StudentReadDTO> studentRecord() {
         return commonService.studentRecord(securityUtil.getCurrentUserId());
     }
 
-    @GetMapping("/teacher/common")
+    @GetMapping("/teacher/common/read")
     public List<TeacherReadDTO> teacherRecord() {
         return commonService.teacherRecord(securityUtil.getCurrentUserId());
     }
 
-    @GetMapping("/student/common")
+    @GetMapping("/student/common/record")
     public List<StudentReadDTO> selectStudentRecord() {
         return commonService.selectRecordStatus(securityUtil.getCurrentUserId());
     }

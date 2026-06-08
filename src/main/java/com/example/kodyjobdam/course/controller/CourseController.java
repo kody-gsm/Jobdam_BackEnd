@@ -48,22 +48,22 @@ public class CourseController {
         return ResponseEntity.ok().body("해당 시간을 잠궜습니다.");
     }
 
-    @GetMapping("/student/course")
+    @GetMapping("/student/course/read")
     public List<StudentReadDTO> studentRecord() {
         return courseService.studentRecord(securityUtil.getCurrentUserId());
     }
 
-    @GetMapping("/teacher/course")
+    @GetMapping("/teacher/course/read")
     public List<TeacherReadDTO> teacherRecord() {
         return courseService.teacherRecord(securityUtil.getCurrentUserId());
     }
 
-    @GetMapping("/teacher") //여기에 선생님 id 3개를 받아오는
+    @GetMapping("/teacher/id") //여기에 선생님 id 3개를 받아오는
     public List<Integer> Id_read() {
         return userRepository.findByRole(UserRole.TEACHER);
     }
 
-    @GetMapping("/student/common")
+    @GetMapping("/student/course/record")
     public List<StudentReadDTO> selectStudentRecord() {
         return courseService.selectRecordStatus(securityUtil.getCurrentUserId());
     }
