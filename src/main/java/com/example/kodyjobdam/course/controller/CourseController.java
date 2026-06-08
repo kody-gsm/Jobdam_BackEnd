@@ -49,17 +49,22 @@ public class CourseController {
     }
 
     @GetMapping("/student/course")
-    public List<StudentReadDTO> S_read() {
-        return courseService.S_Read(securityUtil.getCurrentUserId());
+    public List<StudentReadDTO> studentRecord() {
+        return courseService.studentRecord(securityUtil.getCurrentUserId());
     }
 
     @GetMapping("/teacher/course")
-    public List<TeacherReadDTO> T_read() {
-        return courseService.T_Read(securityUtil.getCurrentUserId());
+    public List<TeacherReadDTO> teacherRecord() {
+        return courseService.teacherRecord(securityUtil.getCurrentUserId());
     }
 
     @GetMapping("/teacher") //여기에 선생님 id 3개를 받아오는
     public List<Integer> Id_read() {
         return userRepository.findByRole(UserRole.TEACHER);
+    }
+
+    @GetMapping("/student/common")
+    public List<StudentReadDTO> selectStudentRecord() {
+        return courseService.selectRecordStatus(securityUtil.getCurrentUserId());
     }
 }

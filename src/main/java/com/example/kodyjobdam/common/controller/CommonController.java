@@ -32,9 +32,9 @@ public class CommonController {
         return ResponseEntity.ok().body("취소되었습니다.");
     }
 
-    @PatchMapping("/teacher/common/allow/{id}")
-    public ResponseEntity<?> reservationAllow(@PathVariable Long id) {
-        commonService.allow(id, securityUtil.getCurrentUserId());
+    @PatchMapping("/teacher/common/allow/{reservation_id}")
+    public ResponseEntity<?> reservationAllow(@PathVariable Long reservation_id) {
+        commonService.allow(reservation_id, securityUtil.getCurrentUserId());
         return ResponseEntity.ok().body("요청을 수락했습니다.");
     }
 
@@ -45,12 +45,17 @@ public class CommonController {
     }
 
     @GetMapping("/student/common")
-    public List<StudentReadDTO> S_read() {
-        return commonService.S_Read(securityUtil.getCurrentUserId());
+    public List<StudentReadDTO> studentRecord() {
+        return commonService.studentRecord(securityUtil.getCurrentUserId());
     }
 
     @GetMapping("/teacher/common")
-    public List<TeacherReadDTO> T_read() {
-        return commonService.T_Read(securityUtil.getCurrentUserId());
+    public List<TeacherReadDTO> teacherRecord() {
+        return commonService.teacherRecord(securityUtil.getCurrentUserId());
+    }
+
+    @GetMapping("/student/common")
+    public List<StudentReadDTO> selectStudentRecord() {
+        return commonService.selectRecordStatus(securityUtil.getCurrentUserId());
     }
 }
