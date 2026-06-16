@@ -13,4 +13,6 @@ public interface CommonRepository extends JpaRepository<CommonEntity, Long> {
     List<CommonEntity> findAllByDateAndPeriod(LocalDate date, String period);
 
     List<CommonEntity> findByUser_id(Long userId);
+
+    List<CommonEntity> findByUser_idAndDateGreaterThanEqual(Long userId, LocalDate date);
 }
