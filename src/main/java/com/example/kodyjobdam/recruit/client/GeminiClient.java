@@ -25,7 +25,7 @@ import java.util.Base64;
 public class GeminiClient {
 
     private static final String ENDPOINT =
-            "https://generativelanguage.googleapis.com/v1beta/models/%s:generateContent?key=%s";
+            "https://generativelanguage.googleapis.com/v1beta/models/%s:generateContent";
 
     private static final String PROMPT = """
             다음 이미지는 채용 공고 또는 면접 안내문입니다.
@@ -57,14 +57,15 @@ public class GeminiClient {
 
         HttpHeaders headers = new HttpHeaders();
         headers.setContentType(MediaType.APPLICATION_JSON);
+        headers.set("x-goog-api-key", apiKey);
 
-        String url = String.format(ENDPOINT, model, apiKey);
+        String url = String.format(ENDPOINT, model);
 
         ResponseEntity<String> response;
         try {
             response = restTemplate.postForEntity(url, new HttpEntity<>(requestBody, headers), String.class);
         } catch (RestClientException e) {
-            log.error("Gemini API 호출 실패", e);
+            log.error("Gemini API 호출 실패: {}", url, e);
             throw new ResponseStatusException(HttpStatus.BAD_GATEWAY, "이미지 분석 요청에 실패했습니다.");
         }
 
