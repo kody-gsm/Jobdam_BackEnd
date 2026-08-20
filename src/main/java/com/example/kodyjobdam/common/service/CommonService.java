@@ -96,10 +96,15 @@ public class CommonService {
             throw new ResponseStatusException(HttpStatus.NOT_FOUND, "이미 취소된 에약입니다.");
         }
 
+        // 잠긴 시간(LOCKED)이나 이미 수락한 예약(RESERVED)이 수락되지 않도록 막는다
+        if(entity.getState() != StateEnum.WAITING) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "수락할 수 있는 예약이 아닙니다.");
+        }
+
         log.info("second");
 
         entity.setState(StateEnum.RESERVED);
-        entity.setTeacher_id(teacherId);
+        entity.assignTeacher(teacherId);
 
         commonSave(entity);
     }
@@ -121,16 +126,29 @@ public class CommonService {
     }
 
     public List<TeacherReadDTO> teacherRecord(Long id) { //수락한 예약
-        List<CommonEntity> entity = commonRepository.findByUser_id(id);
+        List<CommonEntity> entity = commonRepository.findByAllowId(id);
 
         return entity.stream()
-                .map(e -> new TeacherReadDTO(
+                .map(this::toTeacherDTO)
+                .toList();
+    }
+
+    public List<TeacherReadDTO> pendingRecord() { //수락 대기중인 예약
+        List<CommonEntity> entity = commonRepository.findByStateOrderByDateAscPeriodAsc(StateEnum.WAITING);
+
+        return entity.stream()
+                .filter(e -> e.getUser() != null) // 잠긴 시간대는 신청자가 없다
+                .map(this::toTeacherDTO)
+                .toList();
+    }
+
+    private TeacherReadDTO toTeacherDTO(CommonEntity e) {
+        return new TeacherReadDTO(
                         e.getReservation_id(),
                         e.getUser().getName(),
                         e.getDate(),
                         e.getPeriod()
-                ))
-                .toList();
+        );
     }
 
     public List<StudentReadDTO> studentRecord(Long id) {

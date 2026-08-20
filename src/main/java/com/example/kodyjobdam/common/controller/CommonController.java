@@ -54,6 +54,12 @@ public class CommonController {
         return commonService.teacherRecord(securityUtil.getCurrentUserId());
     }
 
+    /** 수락 대기중인 예약 목록 (검토 대상) */
+    @GetMapping("/teacher/common/pending")
+    public List<TeacherReadDTO> pendingRecord() {
+        return commonService.pendingRecord();
+    }
+
     @GetMapping("/student/common/record")
     public List<StudentReadDTO> selectStudentRecord() {
         return commonService.selectRecordStatus(securityUtil.getCurrentUserId());
