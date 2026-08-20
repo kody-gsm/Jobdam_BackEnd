@@ -7,6 +7,7 @@ import lombok.Builder;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import org.hibernate.annotations.CreationTimestamp;
+import org.hibernate.annotations.UpdateTimestamp;
 
 import java.time.LocalDateTime;
 
@@ -35,6 +36,26 @@ public class RecruitEntity {
     @Column(length = 1000)
     private String summary;
 
+    @Enumerated(EnumType.STRING)
+    @Builder.Default
+    private RecruitStatus status = RecruitStatus.DRAFT;
+
     @CreationTimestamp
     private LocalDateTime createdAt;
+
+    @UpdateTimestamp
+    private LocalDateTime updatedAt;
+
+    /** 선생님 검토 후 내용 수정 */
+    public void update(String companyName, String interviewDate, String deadline, String summary) {
+        this.companyName = companyName;
+        this.interviewDate = interviewDate;
+        this.deadline = deadline;
+        this.summary = summary;
+    }
+
+    /** 학생에게 공개 */
+    public void publish() {
+        this.status = RecruitStatus.PUBLISHED;
+    }
 }

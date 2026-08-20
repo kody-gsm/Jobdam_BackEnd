@@ -1,6 +1,7 @@
 package com.example.kodyjobdam.recruit.dto.response;
 
 import com.example.kodyjobdam.recruit.entity.RecruitEntity;
+import com.example.kodyjobdam.recruit.entity.RecruitStatus;
 import lombok.Builder;
 import lombok.Getter;
 
@@ -20,7 +21,11 @@ public class RecruitResponseDTO {
 
     private String summary;
 
+    private RecruitStatus status;
+
     private LocalDateTime createdAt;
+
+    private LocalDateTime updatedAt;
 
     public static RecruitResponseDTO from(RecruitEntity entity) {
         return RecruitResponseDTO.builder()
@@ -29,7 +34,9 @@ public class RecruitResponseDTO {
                 .interviewDate(entity.getInterviewDate())
                 .deadline(entity.getDeadline())
                 .summary(entity.getSummary())
+                .status(entity.getStatus())
                 .createdAt(entity.getCreatedAt())
+                .updatedAt(entity.getUpdatedAt())
                 .build();
     }
 }

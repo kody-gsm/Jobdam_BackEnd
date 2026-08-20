@@ -40,6 +40,8 @@ public class SecurityConfig {
                 )
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers(HttpMethod.POST, "/auth/**").permitAll()
+                        // 채용 공고 관리(분석/수정/공개/관리목록)는 선생님만 — 모든 HTTP 메서드 보호
+                        .requestMatchers("/teacher/recruit/**").hasRole("TEACHER")
                         .requestMatchers(HttpMethod.POST, "/teacher/**").hasRole("TEACHER")
                         .requestMatchers(HttpMethod.POST, "/student/**").hasRole("STUDENT")
                         .anyRequest().authenticated()
