@@ -36,7 +36,8 @@ public class CourseEntity {
 
     private String content;
 
-    private Long teacher_id;
+    /** 예약을 수락한 선생님의 user id (컬럼명은 그대로 teacher_id) */
+    private Long teacherId;
 
     @Column(nullable = false)
     @Enumerated(EnumType.STRING)
@@ -54,7 +55,7 @@ public class CourseEntity {
         this.state = state;
     }
 
-    public void setTeacher_id(Long teacher_id) {
-        this.teacher_id = teacher_id;
+    public void assignTeacher(Long teacherId) {
+        this.teacherId = teacherId;
     }
 }
