@@ -40,10 +40,11 @@ public class SecurityConfig {
                 )
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers(HttpMethod.POST, "/auth/**").permitAll()
-                        // 채용 공고 관리(분석/수정/공개/관리목록)는 선생님만 — 모든 HTTP 메서드 보호
-                        .requestMatchers("/teacher/recruit/**").hasRole("TEACHER")
-                        .requestMatchers(HttpMethod.POST, "/teacher/**").hasRole("TEACHER")
-                        .requestMatchers(HttpMethod.POST, "/student/**").hasRole("STUDENT")
+                        // 메서드를 한정하면 GET·PATCH가 anyRequest().authenticated()로 흘러
+                        // 다른 역할도 호출할 수 있으므로 모든 HTTP 메서드를 보호한다
+                        // (채용 공고 관리 API도 /teacher/** 규칙에 포함된다)
+                        .requestMatchers("/teacher/**").hasRole("TEACHER")
+                        .requestMatchers("/student/**").hasRole("STUDENT")
                         .anyRequest().authenticated()
                 )
                 .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class);
