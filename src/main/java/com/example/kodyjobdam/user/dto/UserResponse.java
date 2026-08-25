@@ -12,4 +12,5 @@ public class UserResponse {
     private String email;
     private String name;
     private String student_number;
+    private boolean emailVerified;
 }

@@ -4,6 +4,8 @@ import com.example.kodyjobdam.user.UserRole;
 import jakarta.persistence.*;
 import lombok.*;
 
+import java.time.LocalDateTime;
+
 @Entity
 @Table(name = "user")
 @Getter
@@ -23,15 +25,31 @@ public class User {
     @Column(nullable = false, length = 255)
     private String student_number;
 
-    @Column(nullable = false, length = 255)
+    @Column(nullable = false, unique = true, length = 255)
     private String email;
 
-    @Column(nullable = false, length = 255)
+    @Column(nullable = true, length = 255)
     private String password;
 
     @Enumerated(EnumType.STRING)
     private UserRole role;
 
+    @Column(unique = true)
+    private Long dataGsmStudentId;
+
+    private Integer grade;
+
+    private Integer classNum;
+
+    private Integer number;
+
+    @Column(nullable = false)
+    private boolean emailVerified;
+
+    @Column(length = 64)
+    private String refreshToken;
+
+    private LocalDateTime refreshTokenExpiresAt;
 
 
 }

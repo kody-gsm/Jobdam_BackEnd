@@ -1,6 +1,5 @@
 package com.example.kodyjobdam.user.dto;
 
-import com.example.kodyjobdam.user.UserRole;
 import jakarta.validation.constraints.*;
 import lombok.Getter;
 import lombok.Setter;
@@ -13,20 +12,15 @@ public class SignupRequest {
     @NotBlank
     @Pattern(
             regexp = "^s.*@gsm\\.hs\\.kr$",
-            message = "이메일은 s로 시작하고 @gsm.hs.kr로 끝나야 합니다"
+            message = "이메일은 학교계정을 사용해야합니다."
     )
     private String email;
 
     @NotBlank
-    @Size(min = 8, max = 255)
+    @Size(min = 10, max = 255)
     private String password;
 
     @NotBlank
-    private String name;
-
-    @NotBlank
-    private String student_number;
-
-    @NotNull
-    private UserRole role;
+    @Size(min = 6, max = 6)
+    private String verificationCode;
 }
