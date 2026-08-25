@@ -1,33 +1,46 @@
 services:
-  db:
-    image: mysql:8.0
+  mysql:
+    image: mysql:8.4
+    container_name: jobdam-mysql
     restart: unless-stopped
     environment:
-      MYSQL_ROOT_PASSWORD: ${DB_PASSWORD}
-      MYSQL_DATABASE: kodyjobdam
+      MYSQL_DATABASE: ${DB_NAME:-jobdam}
+      MYSQL_ROOT_PASSWORD: ${DB_PASSWORD:-jobdam1234}
+      TZ: Asia/Seoul
     ports:
-      - "3306:3306"
+      - "${DB_PORT:-3306}:3306"
     volumes:
-      - db-data:/var/lib/mysql
+      - mysql-data:/var/lib/mysql
     healthcheck:
-      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-p${DB_PASSWORD}"]
-      interval: 5s
+      test: ["CMD-SHELL", "mysqladmin ping -h localhost -uroot -p$${MYSQL_ROOT_PASSWORD}"]
+      interval: 10s
       timeout: 5s
       retries: 10
+      start_period: 30s
 
   app:
-    build: .
+    image: gradle:8.5-jdk21
+    container_name: jobdam-app
     restart: unless-stopped
+    working_dir: /workspace
+    command: gradle bootRun --no-daemon
+    env_file:
+      - .env
     environment:
-      DB_URL: jdbc:mysql://db:3306/kodyjobdam
-      DB_USER: ${DB_USER}
-      DB_PASSWORD: ${DB_PASSWORD}
-      GEMINI_API_KEY: ${GEMINI_API_KEY}
+      DB_URL: jdbc:mysql://mysql:3306/${DB_NAME:-jobdam}?serverTimezone=Asia/Seoul&characterEncoding=UTF-8&useSSL=false&allowPublicKeyRetrieval=true
+      DB_USER: root
+      DB_PASSWORD: ${DB_PASSWORD:-jobdam1234}
+      JWT_ACCESS_TOKEN_EXPIRATION: ${JWT_ACCESS_TOKEN_EXPIRATION:-3600000}
+      JWT_REFRESH_TOKEN_EXPIRATION: ${JWT_REFRESH_TOKEN_EXPIRATION:-1209600000}
     ports:
-      - "8088:8088"
+      - "${APP_PORT:-8088}:8088"
+    volumes:
+      - .:/workspace
+      - gradle-cache:/home/gradle/.gradle
     depends_on:
-      db:
+      mysql:
         condition: service_healthy
 
 volumes:
-  db-data:
+  mysql-data:
+  gradle-cache:
