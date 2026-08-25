@@ -32,9 +32,9 @@ public class CommonController {
         return ResponseEntity.ok().body("취소되었습니다.");
     }
 
-    @PatchMapping("/teacher/common/allow/{reservation_id}")
-    public ResponseEntity<?> reservationAllow(@PathVariable Long reservation_id) {
-        commonService.allow(reservation_id, securityUtil.getCurrentUserId());
+    @PatchMapping("/teacher/common/allow/{id}")
+    public ResponseEntity<?> reservationAllow(@PathVariable Long id) {
+        commonService.allow(id, securityUtil.getCurrentUserId());
         return ResponseEntity.ok().body("요청을 수락했습니다.");
     }
 
@@ -44,24 +44,13 @@ public class CommonController {
         return ResponseEntity.ok().body("해당 시간을 잠궜습니다.");
     }
 
-    @GetMapping("/student/common/read")
-    public List<StudentReadDTO> studentRecord() {
-        return commonService.studentRecord(securityUtil.getCurrentUserId());
+    @GetMapping("/student/common")
+    public List<StudentReadDTO> S_read() {
+        return commonService.S_Read(securityUtil.getCurrentUserId());
     }
 
-    @GetMapping("/teacher/common/read")
-    public List<TeacherReadDTO> teacherRecord() {
-        return commonService.teacherRecord(securityUtil.getCurrentUserId());
-    }
-
-    /** 수락 대기중인 예약 목록 (검토 대상) */
-    @GetMapping("/teacher/common/pending")
-    public List<TeacherReadDTO> pendingRecord() {
-        return commonService.pendingRecord();
-    }
-
-    @GetMapping("/student/common/record")
-    public List<StudentReadDTO> selectStudentRecord() {
-        return commonService.selectRecordStatus(securityUtil.getCurrentUserId());
+    @GetMapping("/teacher/common")
+    public List<TeacherReadDTO> T_read() {
+        return commonService.T_Read(securityUtil.getCurrentUserId());
     }
 }
