@@ -41,7 +41,7 @@ public class LockDTO {
                 .title("Locked")
                 .content("이 시간은 잠긴 시간입니다.")
                 .user(null)
-                .allowId(null)
+                .allow_id(null)
                 .build();
     }
 

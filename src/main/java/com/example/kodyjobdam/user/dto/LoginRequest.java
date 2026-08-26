@@ -14,7 +14,7 @@ public class LoginRequest {
     @NotBlank
     @Pattern(
             regexp = "^s.*@gsm\\.hs\\.kr$",
-            message = "이메일은 s로 시작하고 @gsm.hs.kr로 끝나야 합니다"
+            message = "이메일은 학교계정을 사용해야합니다."
     )
     private String email;
 
