@@ -117,12 +117,12 @@ public class FormService {
                 .toList();
     }
 
-    /** 학생용: 공개된 폼 단건 */
+    /** 학생용: 공개된 폼 단건 (초안·마감된 폼은 보이지 않는다) */
     @Transactional(readOnly = true)
     public FormResponseDTO getPublished(Long formId) {
         FormEntity form = findOrThrow(formId);
 
-        if (form.getStatus() == FormStatus.DRAFT) {
+        if (form.getStatus() != FormStatus.PUBLISHED) {
             throw new ResponseStatusException(HttpStatus.NOT_FOUND, "공개된 폼이 아닙니다.");
         }
 
