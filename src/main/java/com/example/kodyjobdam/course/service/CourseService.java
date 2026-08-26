@@ -105,6 +105,7 @@ public class CourseService {
                 continue;
             }
             entity.setState(StateEnum.CANCEL);
+            courseSave(entity);
         }
 
         courseSave(dto.toEntity(dto));
