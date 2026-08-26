@@ -1,5 +1,6 @@
 package com.example.kodyjobdam.recruit.service;
 
+import com.example.kodyjobdam.common.exception.RecruitException;
 import com.example.kodyjobdam.recruit.client.GeminiAnalysisResult;
 import com.example.kodyjobdam.recruit.client.GeminiClient;
 import com.example.kodyjobdam.recruit.dto.request.RecruitUpdateDTO;
@@ -11,11 +12,9 @@ import com.example.kodyjobdam.user.UserRepository;
 import com.example.kodyjobdam.user.entity.User;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
-import org.springframework.web.server.ResponseStatusException;
 
 import java.io.IOException;
 import java.util.List;
@@ -38,22 +37,22 @@ public class RecruitService {
     /** 선생님: 이미지 분석 → 초안(DRAFT)으로 저장 후 결과 반환 */
     public RecruitResponseDTO analyze(MultipartFile image, Long userId) {
         if (image == null || image.isEmpty()) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "이미지를 첨부해주세요.");
+            throw RecruitException.badRequest("이미지를 첨부해주세요.");
         }
 
         String contentType = image.getContentType();
         if (contentType == null || !SUPPORTED_IMAGE_TYPES.contains(contentType)) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "이미지 파일만 업로드할 수 있습니다.");
+            throw RecruitException.badRequest("이미지 파일만 업로드할 수 있습니다.");
         }
 
         User user = userRepository.findById(userId)
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "회원이 없습니다."));
+                .orElseThrow(() -> RecruitException.notFound("회원이 없습니다."));
 
         byte[] imageBytes;
         try {
             imageBytes = image.getBytes();
         } catch (IOException e) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "이미지를 읽을 수 없습니다.");
+            throw RecruitException.badRequest("이미지를 읽을 수 없습니다.");
         }
 
         GeminiAnalysisResult result = geminiClient.analyze(imageBytes, contentType);
@@ -104,13 +103,13 @@ public class RecruitService {
     public RecruitResponseDTO getPublished(Long recruitId) {
         RecruitEntity entity = findOrThrow(recruitId);
         if (entity.getStatus() != RecruitStatus.PUBLISHED) {
-            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "공개된 공고가 아닙니다.");
+            throw RecruitException.notFound("공개된 공고가 아닙니다.");
         }
         return RecruitResponseDTO.from(entity);
     }
 
     private RecruitEntity findOrThrow(Long recruitId) {
         return recruitRepository.findById(recruitId)
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "채용 공고를 찾을 수 없습니다."));
+                .orElseThrow(() -> RecruitException.notFound("채용 공고를 찾을 수 없습니다."));
     }
 }
