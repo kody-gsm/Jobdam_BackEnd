@@ -38,25 +38,21 @@ public class CommonService {
         User userId = userRepository.findById(id)
                 .orElseThrow(() -> ReservationException.notFound("회원이 없습니다."));
 
-        if (CreateList.isEmpty()) {
-            commonSave(dto.toEntity(userId));
-        }
-        else {
-            for (CommonEntity entity : CreateList) {
-                if(entity.getState() == StateEnum.LOCKED) {
-                    throw ReservationException.locked("잠긴 날짜 입니다.");
-                }
-                if (
-                        entity.getUser().getId().equals(id) &&
-                        entity.getState() != StateEnum.CANCEL) {
-                    throw ReservationException.conflict("이미 예약한 시간입니다.");
-                }
-                if (entity.getState() == StateEnum.RESERVED) {
+        for (CommonEntity entity : CreateList) {
+            if(entity.getState() == StateEnum.LOCKED) {
+                throw ReservationException.locked("잠긴 날짜 입니다.");
+            }
+            if (
+                    entity.getUser().getId().equals(id) &&
+                    entity.getState() != StateEnum.CANCEL) {
+                throw ReservationException.conflict("이미 예약한 시간입니다.");
+            }
+            if (entity.getState() == StateEnum.RESERVED) {
 
-                    throw ReservationException.conflict("누군가 예약한 시간입니다.");
-                }
+                throw ReservationException.conflict("누군가 예약한 시간입니다.");
             }
         }
+
         commonSave(dto.toEntity(userId));
     }
 
@@ -99,9 +95,6 @@ public class CommonService {
     public void teacherRock(LockDTO dto) {
         List<CommonEntity> rockList = commonRepository.findAllByDateAndPeriod(dto.getDate(), dto.getPeriod());
 
-        if(rockList.isEmpty()) {
-           commonSave(dto.toEntity(dto));
-        }
         for(CommonEntity entity : rockList) {
             if(entity.getState() == StateEnum.CANCEL) {
                 continue;
