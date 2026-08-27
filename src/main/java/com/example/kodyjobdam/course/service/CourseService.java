@@ -35,21 +35,18 @@ public class CourseService {
         User userId = userRepository.findById(id)
                 .orElseThrow(() -> ReservationException.notFound("회원이 없습니다."));
 
-        if (createList.isEmpty()) {
-            courseSave(dto.toEntity(userId));
-        } else {
-            for (CourseEntity entity : createList) {
-                if (entity.getState() == StateEnum.LOCKED) {
-                    throw ReservationException.locked("잠긴 날짜 입니다.");
-                }
-                if (entity.getUser().getId().equals(id) && entity.getState() != StateEnum.CANCEL) {
-                    throw ReservationException.conflict("이미 예약한 시간입니다.");
-                }
-                if (entity.getState() == StateEnum.RESERVED) {
-                    throw ReservationException.conflict("누군가 예약한 시간입니다.");
-                }
+        for (CourseEntity entity : createList) {
+            if (entity.getState() == StateEnum.LOCKED) {
+                throw ReservationException.locked("잠긴 날짜 입니다.");
+            }
+            if (entity.getUser().getId().equals(id) && entity.getState() != StateEnum.CANCEL) {
+                throw ReservationException.conflict("이미 예약한 시간입니다.");
+            }
+            if (entity.getState() == StateEnum.RESERVED) {
+                throw ReservationException.conflict("누군가 예약한 시간입니다.");
             }
         }
+
         courseSave(dto.toEntity(userId));
     }
 
@@ -90,14 +87,12 @@ public class CourseService {
     public void teacherRock(LockDTO dto) {
         List<CourseEntity> rockList = courseRepository.findAllByDateAndPeriod(dto.getDate(), dto.getPeriod());
 
-        if (rockList.isEmpty()) {
-            courseSave(dto.toEntity(dto));
-        }
         for (CourseEntity entity : rockList) {
             if (entity.getState() == StateEnum.CANCEL) {
                 continue;
             }
             entity.setState(StateEnum.CANCEL);
+            courseSave(entity);
         }
 
         courseSave(dto.toEntity(dto));
