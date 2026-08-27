@@ -1,5 +1,6 @@
 package com.example.kodyjobdam.course.service;
 
+import com.example.kodyjobdam.common.exception.ReservationException;
 import com.example.kodyjobdam.course.dto.request.CreateDTO;
 import com.example.kodyjobdam.course.dto.request.LockDTO;
 import com.example.kodyjobdam.course.dto.response.StudentReadDTO;
@@ -11,9 +12,7 @@ import com.example.kodyjobdam.user.UserRepository;
 import com.example.kodyjobdam.user.entity.User;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
-import org.springframework.web.server.ResponseStatusException;
 
 import java.util.List;
 
@@ -34,20 +33,20 @@ public class CourseService {
         List<CourseEntity> createList = courseRepository.findAllByDateAndPeriod(dto.getDate(), dto.getPeriod());
 
         User userId = userRepository.findById(id)
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "회원이 없습니다."));
+                .orElseThrow(() -> ReservationException.notFound("회원이 없습니다."));
 
         if (createList.isEmpty()) {
             courseSave(dto.toEntity(userId));
         } else {
             for (CourseEntity entity : createList) {
                 if (entity.getState() == StateEnum.LOCKED) {
-                    throw new ResponseStatusException(HttpStatus.LOCKED, "잠긴 날짜 입니다.");
+                    throw ReservationException.locked("잠긴 날짜 입니다.");
                 }
                 if (entity.getUser().getId().equals(id) && entity.getState() != StateEnum.CANCEL) {
-                    throw new ResponseStatusException(HttpStatus.CONFLICT, "이미 예약한 시간입니다.");
+                    throw ReservationException.conflict("이미 예약한 시간입니다.");
                 }
                 if (entity.getState() == StateEnum.RESERVED) {
-                    throw new ResponseStatusException(HttpStatus.CONFLICT, "누군가 예약한 시간입니다.");
+                    throw ReservationException.conflict("누군가 예약한 시간입니다.");
                 }
             }
         }
@@ -57,10 +56,10 @@ public class CourseService {
     public void cancelReservation(Long reservationId, Long userId) {
         CourseEntity entity = courseRepository.findById(reservationId)
                 .orElseThrow(() ->
-                        new ResponseStatusException(HttpStatus.NOT_FOUND, "취소 할 수 없습니다."));
+                        ReservationException.notFound("취소 할 수 없습니다."));
 
         if (!entity.getUser().getId().equals(userId)) {
-            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "권한이 없습니다.");
+            throw ReservationException.forbidden("권한이 없습니다.");
         }
 
         entity.setState(StateEnum.CANCEL);
@@ -72,12 +71,12 @@ public class CourseService {
         log.info("start");
 
         CourseEntity entity = courseRepository.findById(reservationId)
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "값을 찾을 수 없습니다."));
+                .orElseThrow(() -> ReservationException.notFound("값을 찾을 수 없습니다."));
 
         log.info("first");
 
         if (entity.getState() == StateEnum.CANCEL) {
-            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "이미 취소된 에약입니다.");
+            throw ReservationException.notFound("이미 취소된 에약입니다.");
         }
 
         log.info("second");
