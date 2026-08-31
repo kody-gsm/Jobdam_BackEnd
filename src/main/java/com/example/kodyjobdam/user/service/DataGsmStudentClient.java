@@ -1,6 +1,7 @@
 package com.example.kodyjobdam.user.service;
 
 import com.example.kodyjobdam.user.dto.DataGsmStudent;
+import com.example.kodyjobdam.common.exception.ConfigException;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
@@ -61,7 +62,7 @@ public class DataGsmStudentClient {
 
     private DataGsmStudentApiResponse get(URI uri) {
         if (apiKey == null || apiKey.isBlank()) {
-            throw new IllegalStateException("DataGSM API key is not configured.");
+            throw ConfigException.serviceUnavailable("DataGSM API key is not configured.");
         }
 
         return restClientBuilder.build()

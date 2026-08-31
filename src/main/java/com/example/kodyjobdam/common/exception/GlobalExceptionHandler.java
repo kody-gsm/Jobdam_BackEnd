@@ -14,6 +14,13 @@ import org.springframework.web.client.RestClientResponseException;
 @RestControllerAdvice
 public class GlobalExceptionHandler {
 
+    @ExceptionHandler(BusinessException.class)
+    public ResponseEntity<ErrorResponse> handleBusinessException(BusinessException e) {
+        return ResponseEntity
+                .status(e.getStatus())
+                .body(new ErrorResponse(e.getCode(), e.getMessage()));
+    }
+
     @ExceptionHandler(MethodArgumentNotValidException.class)
     public ResponseEntity<ErrorResponse> handleValidationException(MethodArgumentNotValidException e) {
         FieldError fieldError = e.getBindingResult().getFieldError();
