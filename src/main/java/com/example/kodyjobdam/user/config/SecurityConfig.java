@@ -41,6 +41,7 @@ public class SecurityConfig {
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers(HttpMethod.POST, "/auth/**").permitAll()
                         .requestMatchers("/error").permitAll()
+                        .requestMatchers("/api/**").permitAll() // 디스코드 알림 등 API 요청 허용 추가
                         .requestMatchers(HttpMethod.POST, "/teacher/**").hasRole("TEACHER")
                         .requestMatchers(HttpMethod.POST, "/student/**").hasRole("STUDENT")
                         .anyRequest().authenticated()

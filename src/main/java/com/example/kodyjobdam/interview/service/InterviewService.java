@@ -31,15 +31,12 @@ public class InterviewService {
         User user = userRepository.findByEmail(email)
                 .orElseThrow(() -> new IllegalArgumentException("사용자를 찾을 수 없습니다."));
 
-        // 🔥 [새로운 규칙 1] 기존에 예약한 기록(RESERVED)이 있다면 추가 예약 불가
         boolean hasExistingReservation = interviewRepository.existsByUserAndStatus(user, ReservationStatus.RESERVED);
         if (hasExistingReservation) {
             throw new IllegalArgumentException("이미 활성화된 면접실 예약 내역이 존재하여 추가 예약이 불가능합니다.");
         }
 
-        // 🔥 [새로운 규칙 2] 예약 날짜 연속성 검증
         List<LocalDate> requestDates = request.getReservationDates();
-        // 혹시 순서가 섞여서 들어올 수 있으므로 오름차순 정렬
         List<LocalDate> sortedDates = requestDates.stream().sorted().collect(Collectors.toList());
 
         for (int i = 0; i < sortedDates.size() - 1; i++) {
