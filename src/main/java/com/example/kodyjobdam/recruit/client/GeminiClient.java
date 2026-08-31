@@ -1,5 +1,6 @@
 package com.example.kodyjobdam.recruit.client;
 
+import com.example.kodyjobdam.common.exception.ConfigException;
 import com.example.kodyjobdam.common.exception.RecruitException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -43,13 +44,17 @@ public class GeminiClient {
 
     private final ObjectMapper objectMapper;
 
-    @Value("${gemini.api.key}")
+    @Value("${gemini.api.key:}")
     private String apiKey;
 
     @Value("${gemini.model:gemini-2.0-flash}")
     private String model;
 
     public GeminiAnalysisResult analyze(byte[] imageBytes, String mimeType) {
+        if (apiKey == null || apiKey.isBlank()) {
+            throw ConfigException.serviceUnavailable("Gemini API key is not configured.");
+        }
+
         String base64Image = Base64.getEncoder().encodeToString(imageBytes);
 
         ObjectNode requestBody = buildRequestBody(base64Image, mimeType);
