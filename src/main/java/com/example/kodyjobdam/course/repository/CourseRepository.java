@@ -13,4 +13,6 @@ public interface CourseRepository extends JpaRepository<CourseEntity, Long> {
     List<CourseEntity> findAllByDateAndPeriod(LocalDate date, String period);
 
     List<CourseEntity> findByUser_id(Long userId);
+
+    List<CourseEntity> findByUser_idAndDateGreaterThanEqual(Long userId, LocalDate date);
 }
