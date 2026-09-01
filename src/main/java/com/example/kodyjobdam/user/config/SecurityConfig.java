@@ -42,8 +42,6 @@ public class SecurityConfig {
                         .requestMatchers("/error").permitAll()
                         .requestMatchers("/auth/profile").authenticated()
                         .requestMatchers("/auth/**").permitAll()
-                        // Temporary test endpoint for loading DataGSM students without an admin token.
-                        .requestMatchers(HttpMethod.POST, "/admin/students/sync").permitAll()
                         .requestMatchers("/admin/**").hasRole("ADMIN")
                         .requestMatchers("/teacher/**").hasRole("TEACHER")
                         .requestMatchers("/student/**").hasRole("STUDENT")
