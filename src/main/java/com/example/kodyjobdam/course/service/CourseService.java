@@ -76,6 +76,11 @@ public class CourseService {
             throw ReservationException.notFound("이미 취소된 에약입니다.");
         }
 
+        // 잠긴 시간(LOCKED)이나 이미 수락한 예약(RESERVED)이 수락되지 않도록 막는다
+        if (entity.getState() != StateEnum.WAITING) {
+            throw ReservationException.conflict("수락할 수 있는 예약이 아닙니다.");
+        }
+
         log.info("second");
 
         entity.setState(StateEnum.RESERVED);
