@@ -8,6 +8,9 @@ import com.example.kodyjobdam.recruit.dto.response.RecruitResponseDTO;
 import com.example.kodyjobdam.recruit.entity.RecruitEntity;
 import com.example.kodyjobdam.recruit.entity.RecruitStatus;
 import com.example.kodyjobdam.recruit.repository.RecruitRepository;
+import com.example.kodyjobdam.notification.entity.NotificationType;
+import com.example.kodyjobdam.notification.service.NotificationExpirationService;
+import com.example.kodyjobdam.notification.service.NotificationService;
 import com.example.kodyjobdam.user.UserRepository;
 import com.example.kodyjobdam.user.entity.User;
 import lombok.RequiredArgsConstructor;
@@ -33,6 +36,10 @@ public class RecruitService {
     private final UserRepository userRepository;
 
     private final GeminiClient geminiClient;
+
+    private final NotificationService notificationService;
+
+    private final NotificationExpirationService notificationExpirationService;
 
     /** 선생님: 이미지 분석 → 초안(DRAFT)으로 저장 후 결과 반환 */
     public RecruitResponseDTO analyze(MultipartFile image, Long userId) {
@@ -81,7 +88,19 @@ public class RecruitService {
     @Transactional
     public RecruitResponseDTO publish(Long recruitId) {
         RecruitEntity entity = findOrThrow(recruitId);
+        if (entity.getStatus() != RecruitStatus.DRAFT) {
+            throw RecruitException.badRequest("초안 상태의 채용 공고만 공개할 수 있습니다.");
+        }
+
         entity.publish();
+        notificationService.notifyAllStudents(
+                NotificationType.RECRUIT_PUBLISHED,
+                "새로운 취업 공지",
+                entity.getCompanyName() + " 취업 공지가 게시되었습니다.",
+                entity.getId(),
+                "/recruit/" + entity.getId(),
+                notificationExpirationService.recruitExpiresAt(entity.getDeadline())
+        );
         return RecruitResponseDTO.from(entity);
     }
 

@@ -18,6 +18,8 @@ public class FormSummaryResponseDTO {
 
     private String description;
 
+    private LocalDateTime deadline;
+
     private FormStatus status;
 
     private int questionCount;
@@ -29,6 +31,7 @@ public class FormSummaryResponseDTO {
                 .id(entity.getId())
                 .title(entity.getTitle())
                 .description(entity.getDescription())
+                .deadline(entity.getDeadline())
                 .status(entity.getStatus())
                 .questionCount(entity.getQuestions().size())
                 .createdAt(entity.getCreatedAt())

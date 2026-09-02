@@ -22,17 +22,16 @@ public class CreateDTO {
 
     private String period;
 
-    /** 상담을 신청할 선생님의 user id */
     private Long teacherId;
 
-    public CourseEntity toEntity(User user) {
+    public CourseEntity toEntity(User user, User teacher) {
         return CourseEntity.builder()
                 .title(title)
                 .content(content)
                 .date(date)
                 .period(period)
                 .state(StateEnum.WAITING)
-                .teacherId(teacherId)
+                .teacher(teacher)
                 .user(user)
                 .build();
     }

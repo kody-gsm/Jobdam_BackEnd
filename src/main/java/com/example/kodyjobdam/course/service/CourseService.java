@@ -8,12 +8,16 @@ import com.example.kodyjobdam.course.dto.response.TeacherReadDTO;
 import com.example.kodyjobdam.course.entity.CourseEntity;
 import com.example.kodyjobdam.course.entity.StateEnum;
 import com.example.kodyjobdam.course.repository.CourseRepository;
+import com.example.kodyjobdam.notification.entity.NotificationType;
+import com.example.kodyjobdam.notification.service.NotificationExpirationService;
+import com.example.kodyjobdam.notification.service.NotificationService;
 import com.example.kodyjobdam.user.UserRepository;
 import com.example.kodyjobdam.user.UserRole;
 import com.example.kodyjobdam.user.entity.User;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
 
@@ -23,40 +27,29 @@ import java.util.List;
 public class CourseService {
 
     private final CourseRepository courseRepository;
-
     private final UserRepository userRepository;
+    private final NotificationService notificationService;
+    private final NotificationExpirationService notificationExpirationService;
 
     public void courseSave(CourseEntity entity) {
         courseRepository.save(entity);
     }
 
+    @Transactional
     public void createReservation(CreateDTO dto, Long id) {
-
-        User userId = userRepository.findById(id)
+        User user = userRepository.findById(id)
                 .orElseThrow(() -> ReservationException.notFound("회원이 없습니다."));
+        User teacher = findTeacher(dto.getTeacherId(), id);
 
-        if (dto.getTeacherId() == null) {
-            throw ReservationException.badRequest("선생님을 선택해야 합니다.");
-        }
-
-        User teacher = userRepository.findById(dto.getTeacherId())
-                .orElseThrow(() -> ReservationException.notFound("선생님을 찾을 수 없습니다."));
-
-        if (teacher.getRole() != UserRole.TEACHER) {
-            throw ReservationException.badRequest("선생님이 아닙니다.");
-        }
-
-        // 학생은 같은 교시에 한 번만 신청할 수 있다 (선생님과 무관하게 전체를 확인)
         for (CourseEntity entity : courseRepository.findAllByDateAndPeriod(dto.getDate(), dto.getPeriod())) {
-            if (entity.getUser() != null &&
-                    entity.getUser().getId().equals(id) &&
-                    entity.getState() != StateEnum.CANCEL) {
+            if (entity.getUser() != null
+                    && entity.getUser().getId().equals(id)
+                    && entity.getState() != StateEnum.CANCEL) {
                 throw ReservationException.conflict("이미 예약한 시간입니다.");
             }
         }
 
-        // 슬롯은 선생님별로 나뉘므로 해당 선생님의 그 시간대만 확인한다
-        for (CourseEntity entity : courseRepository.findAllByDateAndPeriodAndTeacherId(
+        for (CourseEntity entity : courseRepository.findAllByDateAndPeriodAndTeacher_Id(
                 dto.getDate(), dto.getPeriod(), teacher.getId())) {
             if (entity.getState() == StateEnum.LOCKED) {
                 throw ReservationException.locked("잠긴 날짜 입니다.");
@@ -66,81 +59,121 @@ public class CourseService {
             }
         }
 
-        courseSave(dto.toEntity(userId));
+        CourseEntity reservation = courseRepository.save(dto.toEntity(user, teacher));
+        notificationService.notifyUser(
+                teacher,
+                NotificationType.COURSE_COUNSELING_REQUESTED,
+                "새로운 상담 신청",
+                user.getStudent_number() + " " + user.getName() + " 학생이 상담을 신청했습니다.",
+                reservation.getReservation_id(),
+                "/teacher/course/" + reservation.getReservation_id(),
+                notificationExpirationService.counselingExpiresAt(reservation.getDate())
+        );
     }
 
+    @Transactional
     public void cancelReservation(Long reservationId, Long userId) {
         CourseEntity entity = courseRepository.findById(reservationId)
-                .orElseThrow(() ->
-                        ReservationException.notFound("취소 할 수 없습니다."));
+                .orElseThrow(() -> ReservationException.notFound("취소 할 수 없습니다."));
 
         if (!entity.getUser().getId().equals(userId)) {
             throw ReservationException.forbidden("권한이 없습니다.");
         }
 
         entity.setState(StateEnum.CANCEL);
-
-        courseSave(entity);
     }
 
+    @Transactional
     public void allow(Long reservationId, Long teacherId) {
-        log.info("start");
-
         CourseEntity entity = courseRepository.findById(reservationId)
                 .orElseThrow(() -> ReservationException.notFound("값을 찾을 수 없습니다."));
-
-        log.info("first");
-
-        // 나에게 신청된 예약만 수락할 수 있다
-        if (!teacherId.equals(entity.getTeacherId())) {
-            throw ReservationException.forbidden("본인에게 신청된 예약이 아닙니다.");
-        }
 
         if (entity.getState() == StateEnum.CANCEL) {
             throw ReservationException.notFound("이미 취소된 에약입니다.");
         }
-
-        // 잠긴 시간(LOCKED)이나 이미 수락한 예약(RESERVED)이 수락되지 않도록 막는다
+        if (!entity.getTeacher().getId().equals(teacherId)) {
+            throw ReservationException.forbidden("담당 선생님만 처리할 수 있습니다.");
+        }
         if (entity.getState() != StateEnum.WAITING) {
-            throw ReservationException.conflict("수락할 수 있는 예약이 아닙니다.");
+            throw ReservationException.conflict("이미 처리된 예약입니다.");
         }
 
-        log.info("second");
-
         entity.setState(StateEnum.RESERVED);
-
-        courseSave(entity);
+        notificationService.notifyUser(
+                entity.getUser(),
+                NotificationType.COUNSELING_APPROVED,
+                "상담 신청 승인",
+                entity.getTeacher().getName() + " 선생님이 상담 신청을 승인했습니다.",
+                entity.getReservation_id(),
+                "/student/course/" + entity.getReservation_id(),
+                notificationExpirationService.counselingExpiresAt(entity.getDate())
+        );
     }
 
+    @Transactional
+    public void reject(Long reservationId, Long teacherId) {
+        CourseEntity entity = courseRepository.findById(reservationId)
+                .orElseThrow(() -> ReservationException.notFound("값을 찾을 수 없습니다."));
+
+        if (!entity.getTeacher().getId().equals(teacherId)) {
+            throw ReservationException.forbidden("담당 선생님만 처리할 수 있습니다.");
+        }
+        if (entity.getState() != StateEnum.WAITING) {
+            throw ReservationException.conflict("이미 처리된 예약입니다.");
+        }
+
+        entity.setState(StateEnum.CANCEL);
+        notificationService.notifyUser(
+                entity.getUser(),
+                NotificationType.COUNSELING_REJECTED,
+                "상담 신청 거절",
+                entity.getTeacher().getName() + " 선생님이 상담 신청을 거절했습니다.",
+                entity.getReservation_id(),
+                "/student/course/" + entity.getReservation_id(),
+                notificationExpirationService.counselingExpiresAt(entity.getDate())
+        );
+    }
+
+    @Transactional
     public void teacherRock(LockDTO dto, Long teacherId) {
-        // 잠금은 본인 시간대에만 적용된다
-        List<CourseEntity> rockList = courseRepository.findAllByDateAndPeriodAndTeacherId(
-                dto.getDate(), dto.getPeriod(), teacherId);
+        User teacher = userRepository.findById(teacherId)
+                .orElseThrow(() -> ReservationException.notFound("회원이 없습니다."));
+        List<CourseEntity> rockList = courseRepository.findAllByDateAndPeriodAndTeacher_Id(
+                dto.getDate(), dto.getPeriod(), teacher.getId());
 
         for (CourseEntity entity : rockList) {
             if (entity.getState() == StateEnum.CANCEL) {
                 continue;
             }
             entity.setState(StateEnum.CANCEL);
-            courseSave(entity);
         }
 
-        courseSave(dto.toEntity(teacherId));
+        courseRepository.save(dto.toEntity(teacher));
     }
 
-    public List<TeacherReadDTO> T_Read(Long id) { //수락한 예약
-        List<CourseEntity> entity = courseRepository.findByTeacherIdAndStateOrderByDateAscPeriodAsc(id, StateEnum.RESERVED);
-
-        return entity.stream()
+    @Transactional(readOnly = true)
+    public List<TeacherReadDTO> T_Read(Long id) {
+        return courseRepository.findByTeacher_IdAndStateOrderByDateAscPeriodAsc(id, StateEnum.RESERVED).stream()
                 .map(this::toTeacherDTO)
                 .toList();
     }
 
-    public List<TeacherReadDTO> P_Read(Long id) { //나에게 신청된 수락 대기중인 예약
-        List<CourseEntity> entity = courseRepository.findByTeacherIdAndStateOrderByDateAscPeriodAsc(id, StateEnum.WAITING);
-
-        return entity.stream()
+    @Transactional(readOnly = true)
+    public List<TeacherReadDTO> P_Read(Long id) {
+        return courseRepository.findByTeacher_IdAndStateOrderByDateAscPeriodAsc(id, StateEnum.WAITING).stream()
                 .map(this::toTeacherDTO)
+                .toList();
+    }
+
+    @Transactional(readOnly = true)
+    public List<StudentReadDTO> S_Read(Long id) {
+        return courseRepository.findByUser_id(id).stream()
+                .map(e -> new StudentReadDTO(
+                        e.getReservation_id(),
+                        e.getUser().getName(),
+                        e.getDate(),
+                        e.getPeriod()
+                ))
                 .toList();
     }
 
@@ -153,16 +186,19 @@ public class CourseService {
         );
     }
 
-    public List<StudentReadDTO> S_Read(Long id) {
-        List<CourseEntity> entity = courseRepository.findByUser_id(id);
+    private User findTeacher(Long teacherId, Long studentId) {
+        if (teacherId == null) {
+            throw ReservationException.badRequest("선생님을 선택해주세요.");
+        }
+        if (teacherId.equals(studentId)) {
+            throw ReservationException.badRequest("자기 자신을 선생님으로 지정할 수 없습니다.");
+        }
 
-        return entity.stream()
-                .map(e -> new StudentReadDTO(
-                        e.getReservation_id(),
-                        e.getUser().getName(),
-                        e.getDate(),
-                        e.getPeriod()
-                ))
-                .toList();
+        User teacher = userRepository.findById(teacherId)
+                .orElseThrow(() -> ReservationException.notFound("선생님을 찾을 수 없습니다."));
+        if (teacher.getRole() != UserRole.TEACHER) {
+            throw ReservationException.badRequest("선생님 계정만 선택할 수 있습니다.");
+        }
+        return teacher;
     }
 }

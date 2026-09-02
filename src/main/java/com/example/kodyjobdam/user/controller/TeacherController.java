@@ -14,8 +14,7 @@ public class TeacherController {
 
     private final TeacherService teacherService;
 
-    // 학생이 상담을 신청할 선생님을 고르기 위한 목록
-    @GetMapping("/student/teachers")
+    @GetMapping({"/student/teachers", "/api/teachers"})
     public List<TeacherResponse> readTeachers() {
         return teacherService.findTeachers();
     }

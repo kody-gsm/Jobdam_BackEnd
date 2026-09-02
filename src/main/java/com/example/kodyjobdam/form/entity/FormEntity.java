@@ -36,6 +36,8 @@ public class FormEntity {
     @Column(length = 1000)
     private String description;
 
+    private LocalDateTime deadline;
+
     @Enumerated(EnumType.STRING)
     @Builder.Default
     private FormStatus status = FormStatus.DRAFT;
@@ -53,9 +55,10 @@ public class FormEntity {
     private LocalDateTime updatedAt;
 
     /** 제목·설명 수정 */
-    public void update(String title, String description) {
+    public void update(String title, String description, LocalDateTime deadline) {
         this.title = title;
         this.description = description;
+        this.deadline = deadline;
     }
 
     /** 질문 추가 (양방향 연관관계 동기화) */
