@@ -13,6 +13,26 @@
 - 기능(feature) 기반 패키지 구조 사용
 - 각 기능 내부에 controller/service/repository/dto/entity 구성
 
-## 중요
-- 여기 백엔드 폴더는 확인용일뿐 수정을 해도 실제로 쓰이는 서비스에 적용되지 않는 코드들임
-- 확인만하며 어떻게 코드가 짜여져있는지만 확인하고 여기선 코드 작업을 하지말것
+## 코드 규칙
+
+- Controller에는 비즈니스 로직 작성 금지
+- Entity 직접 반환 금지
+- Request DTO / Response DTO 분리
+- Service 계층에서 비즈니스 로직 처리
+
+## Entity 규칙
+
+- Lombok 사용 허용
+- Setter 사용 최소화
+- 상태값은 enum 사용
+
+## 기타
+
+- Gradle 기준으로 작업
+- 모든 응답은 한국어
+- 자동 커밋 및 자동 푸시 금지
+- 커밋 메시지와 PR 본문에 AI 도구 흔적을 남기지 않는다
+  - `Co-Authored-By: Claude ...` 서명 금지
+  - `🤖 Generated with Claude Code` 등 푸터 금지
+  - 세션 링크(`claude.ai/code/...`) 첨부 금지
+  - 커밋 메시지는 변경 내용만 한국어 Conventional Commits 형식으로 작성
