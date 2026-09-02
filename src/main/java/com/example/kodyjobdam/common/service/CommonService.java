@@ -92,7 +92,7 @@ public class CommonService {
         log.info("second");
 
         entity.setState(StateEnum.RESERVED);
-        entity.setTeacher_id(teacherId);
+        entity.assignTeacher(teacherId);
 
         commonSave(entity);
     }
@@ -112,16 +112,29 @@ public class CommonService {
     }
 
     public List<TeacherReadDTO> T_Read(Long id) { //수락한 예약
-        List<CommonEntity> entity = commonRepository.findByUser_id(id);
+        List<CommonEntity> entity = commonRepository.findByAllowId(id);
 
         return entity.stream()
-                .map(e -> new TeacherReadDTO(
-                        e.getReservation_id(),
-                        e.getUser().getName(),
-                        e.getDate(),
-                        e.getPeriod()
-                ))
+                .map(this::toTeacherDTO)
                 .toList();
+    }
+
+    public List<TeacherReadDTO> P_Read() { //수락 대기중인 예약
+        List<CommonEntity> entity = commonRepository.findByStateOrderByDateAscPeriodAsc(StateEnum.WAITING);
+
+        return entity.stream()
+                .filter(e -> e.getUser() != null) //잠긴 시간대는 신청자가 없다
+                .map(this::toTeacherDTO)
+                .toList();
+    }
+
+    private TeacherReadDTO toTeacherDTO(CommonEntity e) {
+        return new TeacherReadDTO(
+                e.getReservation_id(),
+                e.getUser().getName(),
+                e.getDate(),
+                e.getPeriod()
+        );
     }
 
     public List<StudentReadDTO> S_Read(Long id) {

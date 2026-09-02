@@ -84,7 +84,7 @@ public class CourseService {
         log.info("second");
 
         entity.setState(StateEnum.RESERVED);
-        entity.setTeacher_id(teacherId);
+        entity.assignTeacher(teacherId);
 
         courseSave(entity);
     }
@@ -103,17 +103,30 @@ public class CourseService {
         courseSave(dto.toEntity(dto));
     }
 
-    public List<TeacherReadDTO> T_Read(Long id) {
-        List<CourseEntity> entity = courseRepository.findByUser_id(id);
+    public List<TeacherReadDTO> T_Read(Long id) { //수락한 예약
+        List<CourseEntity> entity = courseRepository.findByTeacherId(id);
 
         return entity.stream()
-                .map(e -> new TeacherReadDTO(
-                        e.getReservation_id(),
-                        e.getUser().getName(),
-                        e.getDate(),
-                        e.getPeriod()
-                ))
+                .map(this::toTeacherDTO)
                 .toList();
+    }
+
+    public List<TeacherReadDTO> P_Read() { //수락 대기중인 예약
+        List<CourseEntity> entity = courseRepository.findByStateOrderByDateAscPeriodAsc(StateEnum.WAITING);
+
+        return entity.stream()
+                .filter(e -> e.getUser() != null) //잠긴 시간대는 신청자가 없다
+                .map(this::toTeacherDTO)
+                .toList();
+    }
+
+    private TeacherReadDTO toTeacherDTO(CourseEntity e) {
+        return new TeacherReadDTO(
+                e.getReservation_id(),
+                e.getUser().getName(),
+                e.getDate(),
+                e.getPeriod()
+        );
     }
 
     public List<StudentReadDTO> S_Read(Long id) {
