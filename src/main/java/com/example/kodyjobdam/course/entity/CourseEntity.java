@@ -36,7 +36,7 @@ public class CourseEntity {
 
     private String content;
 
-    /** 예약을 수락한 선생님의 user id (컬럼명은 그대로 teacher_id) */
+    /** 상담을 신청한 대상 선생님의 user id */
     private Long teacherId;
 
     @Column(nullable = false)
@@ -53,9 +53,5 @@ public class CourseEntity {
 
     public void setState(StateEnum state) {
         this.state = state;
-    }
-
-    public void assignTeacher(Long teacherId) {
-        this.teacherId = teacherId;
     }
 }

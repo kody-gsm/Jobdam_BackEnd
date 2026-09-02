@@ -44,7 +44,7 @@ public class CourseController {
 
     @PostMapping("/teacher/course/lock")
     public ResponseEntity<?> teacherRock(@RequestBody LockDTO dto) {
-        courseService.teacherRock(dto);
+        courseService.teacherRock(dto, securityUtil.getCurrentUserId());
         return ResponseEntity.ok().body("해당 시간을 잠궜습니다.");
     }
 
@@ -60,7 +60,7 @@ public class CourseController {
 
     @GetMapping("/teacher/course/pending")
     public List<TeacherReadDTO> P_read() {
-        return courseService.P_Read();
+        return courseService.P_Read(securityUtil.getCurrentUserId());
     }
 
     @GetMapping("/teacher") //여기에 선생님 id 3개를 받아오는

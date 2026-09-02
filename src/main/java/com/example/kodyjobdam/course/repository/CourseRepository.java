@@ -13,11 +13,11 @@ public interface CourseRepository extends JpaRepository<CourseEntity, Long> {
 
     List<CourseEntity> findAllByDateAndPeriod(LocalDate date, String period);
 
+    // 해당 선생님의 그 시간대 예약 (잠금·중복 확인용)
+    List<CourseEntity> findAllByDateAndPeriodAndTeacherId(LocalDate date, String period, Long teacherId);
+
     List<CourseEntity> findByUser_id(Long userId);
 
-    // 선생님이 수락한 예약
-    List<CourseEntity> findByTeacherId(Long teacherId);
-
-    // 선생님이 검토해야 할 대기중인 예약
-    List<CourseEntity> findByStateOrderByDateAscPeriodAsc(StateEnum state);
+    // 선생님별 상태 목록 (WAITING = 대기, RESERVED = 수락 완료)
+    List<CourseEntity> findByTeacherIdAndStateOrderByDateAscPeriodAsc(Long teacherId, StateEnum state);
 }

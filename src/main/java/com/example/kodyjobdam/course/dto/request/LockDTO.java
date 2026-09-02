@@ -29,15 +29,15 @@ public class LockDTO {
         return entity;
     }*/
 
-    public CourseEntity toEntity(LockDTO dto) {
+    public CourseEntity toEntity(Long teacherId) {
         return CourseEntity.builder()
-                .date(dto.date)
-                .period(dto.period)
+                .date(date)
+                .period(period)
                 .state(StateEnum.LOCKED)
                 .title("Locked")
                 .content("이 시간은 잠긴 시간입니다.")
                 .user(null)
-                .teacherId(null)
+                .teacherId(teacherId)
                 .build();
     }
 }
