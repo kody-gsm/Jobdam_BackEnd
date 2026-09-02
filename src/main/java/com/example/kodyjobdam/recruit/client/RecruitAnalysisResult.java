@@ -1,6 +1,6 @@
 package com.example.kodyjobdam.recruit.client;
 
-public record GeminiAnalysisResult(
+public record RecruitAnalysisResult(
         String companyName,
         String interviewDate,
         String deadline,

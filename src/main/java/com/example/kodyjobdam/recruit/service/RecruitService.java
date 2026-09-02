@@ -1,8 +1,8 @@
 package com.example.kodyjobdam.recruit.service;
 
 import com.example.kodyjobdam.common.exception.RecruitException;
-import com.example.kodyjobdam.recruit.client.GeminiAnalysisResult;
-import com.example.kodyjobdam.recruit.client.GeminiClient;
+import com.example.kodyjobdam.recruit.client.ClaudeClient;
+import com.example.kodyjobdam.recruit.client.RecruitAnalysisResult;
 import com.example.kodyjobdam.recruit.dto.request.RecruitUpdateDTO;
 import com.example.kodyjobdam.recruit.dto.response.RecruitResponseDTO;
 import com.example.kodyjobdam.recruit.entity.RecruitEntity;
@@ -26,13 +26,13 @@ import java.util.Set;
 public class RecruitService {
 
     private static final Set<String> SUPPORTED_IMAGE_TYPES =
-            Set.of("image/png", "image/jpeg", "image/webp", "image/heic", "image/heif");
+            Set.of("image/png", "image/jpeg", "image/gif", "image/webp");
 
     private final RecruitRepository recruitRepository;
 
     private final UserRepository userRepository;
 
-    private final GeminiClient geminiClient;
+    private final ClaudeClient claudeClient;
 
     /** 선생님: 이미지 분석 → 초안(DRAFT)으로 저장 후 결과 반환 */
     public RecruitResponseDTO analyze(MultipartFile image, Long userId) {
@@ -55,7 +55,7 @@ public class RecruitService {
             throw RecruitException.badRequest("이미지를 읽을 수 없습니다.");
         }
 
-        GeminiAnalysisResult result = geminiClient.analyze(imageBytes, contentType);
+        RecruitAnalysisResult result = claudeClient.analyze(imageBytes, contentType);
 
         RecruitEntity entity = recruitRepository.save(RecruitEntity.builder()
                 .user(user)
