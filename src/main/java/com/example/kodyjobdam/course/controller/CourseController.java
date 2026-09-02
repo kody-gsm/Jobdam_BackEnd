@@ -58,6 +58,11 @@ public class CourseController {
         return courseService.T_Read(securityUtil.getCurrentUserId());
     }
 
+    @GetMapping("/teacher/course/pending")
+    public List<TeacherReadDTO> P_read() {
+        return courseService.P_Read();
+    }
+
     @GetMapping("/teacher") //여기에 선생님 id 3개를 받아오는
     public List<Integer> Id_read() {
         return userRepository.findByRole(UserRole.TEACHER);

@@ -1,6 +1,7 @@
 package com.example.kodyjobdam.recruit.client;
 
 import com.example.kodyjobdam.common.exception.ConfigException;
+import com.example.kodyjobdam.common.exception.RecruitException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ArrayNode;
@@ -10,13 +11,11 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpEntity;
 import org.springframework.http.HttpHeaders;
-import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClientException;
 import org.springframework.web.client.RestTemplate;
-import org.springframework.web.server.ResponseStatusException;
 
 import java.util.Base64;
 
@@ -71,7 +70,7 @@ public class GeminiClient {
             response = restTemplate.postForEntity(url, new HttpEntity<>(requestBody, headers), String.class);
         } catch (RestClientException e) {
             log.error("Gemini API 호출 실패: {}", url, e);
-            throw new ResponseStatusException(HttpStatus.BAD_GATEWAY, "이미지 분석 요청에 실패했습니다.");
+            throw RecruitException.badGateway("이미지 분석 요청에 실패했습니다.");
         }
 
         return parseResponse(response.getBody());
@@ -98,15 +97,15 @@ public class GeminiClient {
             String text = root.path("candidates").path(0).path("content").path("parts").path(0).path("text").asText();
 
             if (text.isBlank()) {
-                throw new ResponseStatusException(HttpStatus.UNPROCESSABLE_ENTITY, "이미지에서 정보를 추출하지 못했습니다.");
+                throw RecruitException.unprocessableEntity("이미지에서 정보를 추출하지 못했습니다.");
             }
 
             return objectMapper.readValue(text, GeminiAnalysisResult.class);
-        } catch (ResponseStatusException e) {
+        } catch (RecruitException e) {
             throw e;
         } catch (Exception e) {
             log.error("Gemini 응답 파싱 실패: {}", body, e);
-            throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "분석 결과를 해석하지 못했습니다.");
+            throw RecruitException.internalServerError("분석 결과를 해석하지 못했습니다.");
         }
     }
 }

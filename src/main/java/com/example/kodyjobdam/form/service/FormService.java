@@ -1,5 +1,6 @@
 package com.example.kodyjobdam.form.service;
 
+import com.example.kodyjobdam.common.exception.FormException;
 import com.example.kodyjobdam.form.dto.request.FormCreateDTO;
 import com.example.kodyjobdam.form.dto.request.FormQuestionCreateDTO;
 import com.example.kodyjobdam.form.dto.request.FormUpdateDTO;
@@ -13,10 +14,8 @@ import com.example.kodyjobdam.form.repository.FormRepository;
 import com.example.kodyjobdam.user.UserRepository;
 import com.example.kodyjobdam.user.entity.User;
 import lombok.RequiredArgsConstructor;
-import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-import org.springframework.web.server.ResponseStatusException;
 
 import java.util.List;
 
@@ -32,7 +31,7 @@ public class FormService {
     @Transactional
     public FormResponseDTO create(FormCreateDTO dto, Long userId) {
         User user = userRepository.findById(userId)
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "회원이 없습니다."));
+                .orElseThrow(() -> FormException.notFound("회원이 없습니다."));
 
         FormEntity form = FormEntity.builder()
                 .user(user)
@@ -55,8 +54,7 @@ public class FormService {
         FormEntity form = findOrThrow(formId);
 
         if (!form.isEditable()) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
-                    "이미 공개된 폼은 수정할 수 없습니다. 새 폼을 만들어주세요.");
+            throw FormException.badRequest("이미 공개된 폼은 수정할 수 없습니다. 새 폼을 만들어주세요.");
         }
 
         form.update(dto.getTitle(), dto.getDescription());
@@ -72,10 +70,10 @@ public class FormService {
         FormEntity form = findOrThrow(formId);
 
         if (form.getStatus() != FormStatus.DRAFT) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "초안 상태의 폼만 공개할 수 있습니다.");
+            throw FormException.badRequest("초안 상태의 폼만 공개할 수 있습니다.");
         }
         if (form.getQuestions().isEmpty()) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "질문이 없는 폼은 공개할 수 없습니다.");
+            throw FormException.badRequest("질문이 없는 폼은 공개할 수 없습니다.");
         }
 
         form.publish();
@@ -88,7 +86,7 @@ public class FormService {
         FormEntity form = findOrThrow(formId);
 
         if (form.getStatus() != FormStatus.PUBLISHED) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "공개된 폼만 마감할 수 있습니다.");
+            throw FormException.badRequest("공개된 폼만 마감할 수 있습니다.");
         }
 
         form.close();
@@ -123,7 +121,7 @@ public class FormService {
         FormEntity form = findOrThrow(formId);
 
         if (form.getStatus() != FormStatus.PUBLISHED) {
-            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "공개된 폼이 아닙니다.");
+            throw FormException.notFound("공개된 폼이 아닙니다.");
         }
 
         return FormResponseDTO.from(form);
@@ -162,21 +160,18 @@ public class FormService {
         boolean hasOptions = dto.getOptions() != null && !dto.getOptions().isEmpty();
 
         if (dto.getType().hasOptions() && !hasOptions) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
-                    "선택형 질문에는 선택지가 1개 이상 필요합니다: " + dto.getTitle());
+            throw FormException.badRequest("선택형 질문에는 선택지가 1개 이상 필요합니다: " + dto.getTitle());
         }
         if (!dto.getType().hasOptions() && hasOptions) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
-                    "주관식 질문에는 선택지를 넣을 수 없습니다: " + dto.getTitle());
+            throw FormException.badRequest("주관식 질문에는 선택지를 넣을 수 없습니다: " + dto.getTitle());
         }
         if (hasOptions && dto.getOptions().stream().anyMatch(label -> label == null || label.isBlank())) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
-                    "빈 선택지는 넣을 수 없습니다: " + dto.getTitle());
+            throw FormException.badRequest("빈 선택지는 넣을 수 없습니다: " + dto.getTitle());
         }
     }
 
     private FormEntity findOrThrow(Long formId) {
         return formRepository.findById(formId)
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "폼을 찾을 수 없습니다."));
+                .orElseThrow(() -> FormException.notFound("폼을 찾을 수 없습니다."));
     }
 }

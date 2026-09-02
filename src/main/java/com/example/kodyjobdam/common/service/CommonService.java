@@ -7,14 +7,13 @@ import com.example.kodyjobdam.common.dto.response.StudentReadDTO;
 import com.example.kodyjobdam.common.dto.response.TeacherReadDTO;
 import com.example.kodyjobdam.common.entity.CommonEntity;
 import com.example.kodyjobdam.common.entity.StateEnum;
+import com.example.kodyjobdam.common.exception.ReservationException;
 import com.example.kodyjobdam.common.repository.CommonRepository;
 import com.example.kodyjobdam.user.UserRepository;
 import com.example.kodyjobdam.user.entity.User;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
-import org.springframework.web.server.ResponseStatusException;
 
 import java.util.List;
 
@@ -37,20 +36,20 @@ public class CommonService {
         List<CommonEntity> CreateList = commonRepository.findAllByDateAndPeriod(dto.getDate(), dto.getPeriod()); //여기 state확인 해야함. RESERVED인가
 
         User userId = userRepository.findById(id)
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "회원이 없습니다."));
+                .orElseThrow(() -> ReservationException.notFound("회원이 없습니다."));
 
         for (CommonEntity entity : CreateList) {
             if(entity.getState() == StateEnum.LOCKED) {
-                throw new ResponseStatusException(HttpStatus.LOCKED, "잠긴 날짜 입니다.");
+                throw ReservationException.locked("잠긴 날짜 입니다.");
             }
             if (
                     entity.getUser().getId().equals(id) &&
                     entity.getState() != StateEnum.CANCEL) {
-                throw new ResponseStatusException(HttpStatus.CONFLICT, "이미 예약한 시간입니다.");
+                throw ReservationException.conflict("이미 예약한 시간입니다.");
             }
             if (entity.getState() == StateEnum.RESERVED) {
 
-                throw new ResponseStatusException(HttpStatus.CONFLICT, "누군가 예약한 시간입니다.");
+                throw ReservationException.conflict("누군가 예약한 시간입니다.");
             }
         }
 
@@ -61,10 +60,10 @@ public class CommonService {
 
         CommonEntity entity = commonRepository.findById(reservationId)
                 .orElseThrow(() ->
-                new ResponseStatusException(HttpStatus.NOT_FOUND, "취소 할 수 없습니다."));
+                ReservationException.notFound("취소 할 수 없습니다."));
 
         if (!entity.getUser().getId().equals(userId)) { // 본인 예약을 본인이 취소하였는지
-            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "권한이 없습니다.");
+            throw ReservationException.forbidden("권한이 없습니다.");
         }
 
         entity.setState(StateEnum.CANCEL);
@@ -77,18 +76,23 @@ public class CommonService {
         log.info("start");
 
         CommonEntity entity = commonRepository.findById(reservationId)
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "값을 찾을 수 없습니다."));
+                .orElseThrow(() -> ReservationException.notFound("값을 찾을 수 없습니다."));
 
         log.info("first");
 
         if(entity.getState() == StateEnum.CANCEL) {
-            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "이미 취소된 에약입니다.");
+            throw ReservationException.notFound("이미 취소된 에약입니다.");
+        }
+
+        // 잠긴 시간(LOCKED)이나 이미 수락한 예약(RESERVED)이 수락되지 않도록 막는다
+        if(entity.getState() != StateEnum.WAITING) {
+            throw ReservationException.conflict("수락할 수 있는 예약이 아닙니다.");
         }
 
         log.info("second");
 
         entity.setState(StateEnum.RESERVED);
-        entity.setTeacher_id(teacherId);
+        entity.assignTeacher(teacherId);
 
         commonSave(entity);
     }
@@ -108,16 +112,29 @@ public class CommonService {
     }
 
     public List<TeacherReadDTO> T_Read(Long id) { //수락한 예약
-        List<CommonEntity> entity = commonRepository.findByUser_id(id);
+        List<CommonEntity> entity = commonRepository.findByAllowId(id);
 
         return entity.stream()
-                .map(e -> new TeacherReadDTO(
-                        e.getReservation_id(),
-                        e.getUser().getName(),
-                        e.getDate(),
-                        e.getPeriod()
-                ))
+                .map(this::toTeacherDTO)
                 .toList();
+    }
+
+    public List<TeacherReadDTO> P_Read() { //수락 대기중인 예약
+        List<CommonEntity> entity = commonRepository.findByStateOrderByDateAscPeriodAsc(StateEnum.WAITING);
+
+        return entity.stream()
+                .filter(e -> e.getUser() != null) //잠긴 시간대는 신청자가 없다
+                .map(this::toTeacherDTO)
+                .toList();
+    }
+
+    private TeacherReadDTO toTeacherDTO(CommonEntity e) {
+        return new TeacherReadDTO(
+                e.getReservation_id(),
+                e.getUser().getName(),
+                e.getDate(),
+                e.getPeriod()
+        );
     }
 
     public List<StudentReadDTO> S_Read(Long id) {

@@ -53,4 +53,9 @@ public class CommonController {
     public List<TeacherReadDTO> T_read() {
         return commonService.T_Read(securityUtil.getCurrentUserId());
     }
+
+    @GetMapping("/teacher/common/pending")
+    public List<TeacherReadDTO> P_read() {
+        return commonService.P_Read();
+    }
 }
