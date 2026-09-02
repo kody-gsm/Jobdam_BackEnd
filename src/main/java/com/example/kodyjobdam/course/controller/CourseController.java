@@ -5,8 +5,6 @@ import com.example.kodyjobdam.course.dto.request.LockDTO;
 import com.example.kodyjobdam.course.dto.response.StudentReadDTO;
 import com.example.kodyjobdam.course.dto.response.TeacherReadDTO;
 import com.example.kodyjobdam.course.service.CourseService;
-import com.example.kodyjobdam.user.UserRepository;
-import com.example.kodyjobdam.user.UserRole;
 import com.example.kodyjobdam.user.security.SecurityUtil;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
@@ -21,8 +19,6 @@ public class CourseController {
     private final CourseService courseService;
 
     private final SecurityUtil securityUtil;
-
-    private final UserRepository userRepository;
 
     @PostMapping("/student/course")
     public ResponseEntity<?> createReservation(@RequestBody CreateDTO dto) {
@@ -61,10 +57,5 @@ public class CourseController {
     @GetMapping("/teacher/course/pending")
     public List<TeacherReadDTO> P_read() {
         return courseService.P_Read(securityUtil.getCurrentUserId());
-    }
-
-    @GetMapping("/teacher") //여기에 선생님 id 3개를 받아오는
-    public List<Integer> Id_read() {
-        return userRepository.findByRole(UserRole.TEACHER);
     }
 }
