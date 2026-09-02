@@ -47,7 +47,7 @@ public class OpenAiClient {
     @Value("${openai.api.key:}")
     private String apiKey;
 
-    @Value("${openai.model:gpt-5.6}")
+    @Value("${openai.model:gpt-5.6-luna}")
     private String model;
 
     public RecruitAnalysisResult analyze(byte[] imageBytes, String mimeType) {
