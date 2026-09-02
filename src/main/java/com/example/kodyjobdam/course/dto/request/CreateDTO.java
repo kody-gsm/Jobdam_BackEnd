@@ -22,6 +22,9 @@ public class CreateDTO {
 
     private String period;
 
+    /** 상담을 신청할 선생님의 user id */
+    private Long teacherId;
+
     public CourseEntity toEntity(User user) {
         return CourseEntity.builder()
                 .title(title)
@@ -29,6 +32,7 @@ public class CreateDTO {
                 .date(date)
                 .period(period)
                 .state(StateEnum.WAITING)
+                .teacherId(teacherId)
                 .user(user)
                 .build();
     }

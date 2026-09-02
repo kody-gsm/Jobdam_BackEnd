@@ -33,15 +33,15 @@ public class LockDTO {
     }*/
 
     //toEntity를 만들고 싶어 위 toEntity2의 값은 그냥 저대로 하고 새로운 toEntity를 만들어줘, CommonEntity에 있는 필드값들에 기본값을 넣어주었으면 좋겠어
-    public CommonEntity toEntity(LockDTO dto) {
+    public CommonEntity toEntity(Long teacherId) {
         return CommonEntity.builder()
-                .date(dto.date)
-                .period(dto.period)
+                .date(date)
+                .period(period)
                 .state(StateEnum.LOCKED)
                 .title("Locked")
                 .content("이 시간은 잠긴 시간입니다.")
                 .user(null)
-                .allowId(null)
+                .teacherId(teacherId)
                 .build();
     }
 

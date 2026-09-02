@@ -9,6 +9,7 @@ import com.example.kodyjobdam.course.entity.CourseEntity;
 import com.example.kodyjobdam.course.entity.StateEnum;
 import com.example.kodyjobdam.course.repository.CourseRepository;
 import com.example.kodyjobdam.user.UserRepository;
+import com.example.kodyjobdam.user.UserRole;
 import com.example.kodyjobdam.user.entity.User;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -30,17 +31,35 @@ public class CourseService {
     }
 
     public void createReservation(CreateDTO dto, Long id) {
-        List<CourseEntity> createList = courseRepository.findAllByDateAndPeriod(dto.getDate(), dto.getPeriod());
 
         User userId = userRepository.findById(id)
                 .orElseThrow(() -> ReservationException.notFound("회원이 없습니다."));
 
-        for (CourseEntity entity : createList) {
+        if (dto.getTeacherId() == null) {
+            throw ReservationException.badRequest("선생님을 선택해야 합니다.");
+        }
+
+        User teacher = userRepository.findById(dto.getTeacherId())
+                .orElseThrow(() -> ReservationException.notFound("선생님을 찾을 수 없습니다."));
+
+        if (teacher.getRole() != UserRole.TEACHER) {
+            throw ReservationException.badRequest("선생님이 아닙니다.");
+        }
+
+        // 학생은 같은 교시에 한 번만 신청할 수 있다 (선생님과 무관하게 전체를 확인)
+        for (CourseEntity entity : courseRepository.findAllByDateAndPeriod(dto.getDate(), dto.getPeriod())) {
+            if (entity.getUser() != null &&
+                    entity.getUser().getId().equals(id) &&
+                    entity.getState() != StateEnum.CANCEL) {
+                throw ReservationException.conflict("이미 예약한 시간입니다.");
+            }
+        }
+
+        // 슬롯은 선생님별로 나뉘므로 해당 선생님의 그 시간대만 확인한다
+        for (CourseEntity entity : courseRepository.findAllByDateAndPeriodAndTeacherId(
+                dto.getDate(), dto.getPeriod(), teacher.getId())) {
             if (entity.getState() == StateEnum.LOCKED) {
                 throw ReservationException.locked("잠긴 날짜 입니다.");
-            }
-            if (entity.getUser().getId().equals(id) && entity.getState() != StateEnum.CANCEL) {
-                throw ReservationException.conflict("이미 예약한 시간입니다.");
             }
             if (entity.getState() == StateEnum.RESERVED) {
                 throw ReservationException.conflict("누군가 예약한 시간입니다.");
@@ -72,6 +91,11 @@ public class CourseService {
 
         log.info("first");
 
+        // 나에게 신청된 예약만 수락할 수 있다
+        if (!teacherId.equals(entity.getTeacherId())) {
+            throw ReservationException.forbidden("본인에게 신청된 예약이 아닙니다.");
+        }
+
         if (entity.getState() == StateEnum.CANCEL) {
             throw ReservationException.notFound("이미 취소된 에약입니다.");
         }
@@ -84,13 +108,14 @@ public class CourseService {
         log.info("second");
 
         entity.setState(StateEnum.RESERVED);
-        entity.assignTeacher(teacherId);
 
         courseSave(entity);
     }
 
-    public void teacherRock(LockDTO dto) {
-        List<CourseEntity> rockList = courseRepository.findAllByDateAndPeriod(dto.getDate(), dto.getPeriod());
+    public void teacherRock(LockDTO dto, Long teacherId) {
+        // 잠금은 본인 시간대에만 적용된다
+        List<CourseEntity> rockList = courseRepository.findAllByDateAndPeriodAndTeacherId(
+                dto.getDate(), dto.getPeriod(), teacherId);
 
         for (CourseEntity entity : rockList) {
             if (entity.getState() == StateEnum.CANCEL) {
@@ -100,22 +125,21 @@ public class CourseService {
             courseSave(entity);
         }
 
-        courseSave(dto.toEntity(dto));
+        courseSave(dto.toEntity(teacherId));
     }
 
     public List<TeacherReadDTO> T_Read(Long id) { //수락한 예약
-        List<CourseEntity> entity = courseRepository.findByTeacherId(id);
+        List<CourseEntity> entity = courseRepository.findByTeacherIdAndStateOrderByDateAscPeriodAsc(id, StateEnum.RESERVED);
 
         return entity.stream()
                 .map(this::toTeacherDTO)
                 .toList();
     }
 
-    public List<TeacherReadDTO> P_Read() { //수락 대기중인 예약
-        List<CourseEntity> entity = courseRepository.findByStateOrderByDateAscPeriodAsc(StateEnum.WAITING);
+    public List<TeacherReadDTO> P_Read(Long id) { //나에게 신청된 수락 대기중인 예약
+        List<CourseEntity> entity = courseRepository.findByTeacherIdAndStateOrderByDateAscPeriodAsc(id, StateEnum.WAITING);
 
         return entity.stream()
-                .filter(e -> e.getUser() != null) //잠긴 시간대는 신청자가 없다
                 .map(this::toTeacherDTO)
                 .toList();
     }

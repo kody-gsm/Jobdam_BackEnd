@@ -40,7 +40,7 @@ public class CommonController {
 
     @PostMapping("/teacher/common/lock")
     public ResponseEntity<?> teacherRock(@RequestBody LockDTO dto) {
-        commonService.teacherRock(dto);
+        commonService.teacherRock(dto, securityUtil.getCurrentUserId());
         return ResponseEntity.ok().body("해당 시간을 잠궜습니다.");
     }
 
@@ -56,6 +56,6 @@ public class CommonController {
 
     @GetMapping("/teacher/common/pending")
     public List<TeacherReadDTO> P_read() {
-        return commonService.P_Read();
+        return commonService.P_Read(securityUtil.getCurrentUserId());
     }
 }

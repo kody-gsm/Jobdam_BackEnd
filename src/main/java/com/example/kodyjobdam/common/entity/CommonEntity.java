@@ -36,8 +36,9 @@ public class CommonEntity {
 
     private String content;
 
-    /** 예약을 수락한 선생님의 user id (컬럼명은 그대로 allow_id) */
-    private Long allowId;
+    /** 상담을 신청한 대상 선생님의 user id (컬럼명은 기존 allow_id 유지) */
+    @Column(name = "allow_id")
+    private Long teacherId;
 
     @Column(nullable = false)
     @Enumerated(EnumType.STRING) //DB에 이 ENUM을 문자열로 저장해줘
@@ -57,9 +58,5 @@ public class CommonEntity {
 
     public void setState(StateEnum state) {
         this.state = state;
-    }
-
-    public void assignTeacher(Long teacherId) {
-        this.allowId = teacherId;
     }
 }
