@@ -1,6 +1,5 @@
 package com.example.kodyjobdam.common.service;
 
-
 import com.example.kodyjobdam.common.dto.request.CreateDTO;
 import com.example.kodyjobdam.common.dto.request.LockDTO;
 import com.example.kodyjobdam.common.dto.response.StudentReadDTO;
@@ -28,11 +27,8 @@ import java.util.List;
 public class CommonService {
 
     private final CommonRepository commonRepository;
-
     private final UserRepository userRepository;
-
     private final NotificationService notificationService;
-
     private final NotificationExpirationService notificationExpirationService;
 
     public void commonSave(CommonEntity entity) {
@@ -41,26 +37,24 @@ public class CommonService {
 
     @Transactional
     public void createReservation(CreateDTO dto, Long id) {
-
-        //여기에 나중에 토큰에서 빼온 id를 매개변수로
-        List<CommonEntity> CreateList = commonRepository.findAllByDateAndPeriod(dto.getDate(), dto.getPeriod()); //여기 state확인 해야함. RESERVED인가
-
         User user = userRepository.findById(id)
                 .orElseThrow(() -> ReservationException.notFound("회원이 없습니다."));
         User teacher = findTeacher(dto.getTeacherId(), id);
 
-        for (CommonEntity entity : CreateList) {
-            if(entity.getState() == StateEnum.LOCKED) {
-                throw ReservationException.locked("잠긴 날짜 입니다.");
-            }
-            if (
-                    entity.getUser() != null &&
-                    entity.getUser().getId().equals(id) &&
-                    entity.getState() != StateEnum.CANCEL) {
+        for (CommonEntity entity : commonRepository.findAllByDateAndPeriod(dto.getDate(), dto.getPeriod())) {
+            if (entity.getUser() != null
+                    && entity.getUser().getId().equals(id)
+                    && entity.getState() != StateEnum.CANCEL) {
                 throw ReservationException.conflict("이미 예약한 시간입니다.");
             }
-            if (entity.getState() == StateEnum.RESERVED) {
+        }
 
+        for (CommonEntity entity : commonRepository.findAllByDateAndPeriodAndTeacher_Id(
+                dto.getDate(), dto.getPeriod(), teacher.getId())) {
+            if (entity.getState() == StateEnum.LOCKED) {
+                throw ReservationException.locked("잠긴 날짜 입니다.");
+            }
+            if (entity.getState() == StateEnum.RESERVED) {
                 throw ReservationException.conflict("누군가 예약한 시간입니다.");
             }
         }
@@ -79,18 +73,14 @@ public class CommonService {
 
     @Transactional
     public void cancelReservation(Long reservationId, Long userId) {
-
         CommonEntity entity = commonRepository.findById(reservationId)
-                .orElseThrow(() ->
-                ReservationException.notFound("취소 할 수 없습니다."));
+                .orElseThrow(() -> ReservationException.notFound("취소 할 수 없습니다."));
 
-        if (!entity.getUser().getId().equals(userId)) { // 본인 예약을 본인이 취소하였는지
+        if (!entity.getUser().getId().equals(userId)) {
             throw ReservationException.forbidden("권한이 없습니다.");
         }
 
         entity.setState(StateEnum.CANCEL);
-
-        commonSave(entity);
     }
 
     @Transactional
@@ -98,7 +88,7 @@ public class CommonService {
         CommonEntity entity = commonRepository.findById(reservationId)
                 .orElseThrow(() -> ReservationException.notFound("값을 찾을 수 없습니다."));
 
-        if(entity.getState() == StateEnum.CANCEL) {
+        if (entity.getState() == StateEnum.CANCEL) {
             throw ReservationException.notFound("이미 취소된 에약입니다.");
         }
         if (!entity.getTeacher().getId().equals(teacherId)) {
@@ -109,7 +99,6 @@ public class CommonService {
         }
 
         entity.setState(StateEnum.RESERVED);
-
         notificationService.notifyUser(
                 entity.getUser(),
                 NotificationType.COUNSELING_APPROVED,
@@ -147,40 +136,38 @@ public class CommonService {
 
     @Transactional
     public void teacherRock(LockDTO dto, Long teacherId) {
-        List<CommonEntity> rockList = commonRepository.findAllByDateAndPeriod(dto.getDate(), dto.getPeriod());
         User teacher = userRepository.findById(teacherId)
                 .orElseThrow(() -> ReservationException.notFound("회원이 없습니다."));
+        List<CommonEntity> rockList = commonRepository.findAllByDateAndPeriodAndTeacher_Id(
+                dto.getDate(), dto.getPeriod(), teacher.getId());
 
-        for(CommonEntity entity : rockList) {
-            if(entity.getState() == StateEnum.CANCEL) {
+        for (CommonEntity entity : rockList) {
+            if (entity.getState() == StateEnum.CANCEL) {
                 continue;
             }
             entity.setState(StateEnum.CANCEL);
-            commonSave(entity);
         }
 
-        commonSave(dto.toEntity(dto, teacher));
+        commonRepository.save(dto.toEntity(teacher));
     }
 
     @Transactional(readOnly = true)
-    public List<TeacherReadDTO> T_Read(Long id) { //수락한 예약
-        List<CommonEntity> entity = commonRepository.findByTeacher_Id(id);
+    public List<TeacherReadDTO> T_Read(Long id) {
+        return commonRepository.findByTeacher_IdAndStateOrderByDateAscPeriodAsc(id, StateEnum.RESERVED).stream()
+                .map(this::toTeacherDTO)
+                .toList();
+    }
 
-        return entity.stream()
-                .map(e -> new TeacherReadDTO(
-                        e.getReservation_id(),
-                        e.getUser().getName(),
-                        e.getDate(),
-                        e.getPeriod()
-                ))
+    @Transactional(readOnly = true)
+    public List<TeacherReadDTO> P_Read(Long id) {
+        return commonRepository.findByTeacher_IdAndStateOrderByDateAscPeriodAsc(id, StateEnum.WAITING).stream()
+                .map(this::toTeacherDTO)
                 .toList();
     }
 
     @Transactional(readOnly = true)
     public List<StudentReadDTO> S_Read(Long id) {
-        List<CommonEntity> entity = commonRepository.findByUser_id(id);
-
-        return entity.stream()
+        return commonRepository.findByUser_id(id).stream()
                 .map(e -> new StudentReadDTO(
                         e.getReservation_id(),
                         e.getUser().getName(),
@@ -188,6 +175,15 @@ public class CommonService {
                         e.getPeriod()
                 ))
                 .toList();
+    }
+
+    private TeacherReadDTO toTeacherDTO(CommonEntity e) {
+        return new TeacherReadDTO(
+                e.getReservation_id(),
+                e.getUser().getName(),
+                e.getDate(),
+                e.getPeriod()
+        );
     }
 
     private User findTeacher(Long teacherId, Long studentId) {

@@ -88,7 +88,6 @@ class CommonServiceTest {
         User notTeacher = user(3L, UserRole.STUDENT);
         CreateDTO dto = createDto(3L);
 
-        when(commonRepository.findAllByDateAndPeriod(dto.getDate(), dto.getPeriod())).thenReturn(List.of());
         when(userRepository.findById(1L)).thenReturn(Optional.of(student));
         when(userRepository.findById(3L)).thenReturn(Optional.of(notTeacher));
 

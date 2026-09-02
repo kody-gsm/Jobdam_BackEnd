@@ -8,7 +8,12 @@ import com.example.kodyjobdam.common.service.CommonService;
 import com.example.kodyjobdam.user.security.SecurityUtil;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
-import org.springframework.web.bind.annotation.*;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PatchMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RestController;
 
 import java.util.List;
 
@@ -58,5 +63,10 @@ public class CommonController {
     @GetMapping("/teacher/common")
     public List<TeacherReadDTO> T_read() {
         return commonService.T_Read(securityUtil.getCurrentUserId());
+    }
+
+    @GetMapping("/teacher/common/pending")
+    public List<TeacherReadDTO> P_read() {
+        return commonService.P_Read(securityUtil.getCurrentUserId());
     }
 }

@@ -17,22 +17,22 @@ public class CreateDTO {
 
     private String content;
 
-    private Long teacherId;
-
     @DateTimeFormat(pattern = "yyyy-MM-dd")
     private LocalDate date;
 
     private String period;
 
-    public CommonEntity toEntity(User user, User teacher) { //title, content 이런건 DTO에 있는 값
+    private Long teacherId;
+
+    public CommonEntity toEntity(User user, User teacher) {
         return CommonEntity.builder()
                 .title(title)
                 .content(content)
                 .date(date)
                 .period(period)
                 .state(StateEnum.WAITING)
-                .user(user)
                 .teacher(teacher)
+                .user(user)
                 .build();
     }
 }

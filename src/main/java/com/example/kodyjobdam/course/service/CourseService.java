@@ -27,11 +27,8 @@ import java.util.List;
 public class CourseService {
 
     private final CourseRepository courseRepository;
-
     private final UserRepository userRepository;
-
     private final NotificationService notificationService;
-
     private final NotificationExpirationService notificationExpirationService;
 
     public void courseSave(CourseEntity entity) {
@@ -40,18 +37,22 @@ public class CourseService {
 
     @Transactional
     public void createReservation(CreateDTO dto, Long id) {
-        List<CourseEntity> createList = courseRepository.findAllByDateAndPeriod(dto.getDate(), dto.getPeriod());
-
         User user = userRepository.findById(id)
                 .orElseThrow(() -> ReservationException.notFound("회원이 없습니다."));
         User teacher = findTeacher(dto.getTeacherId(), id);
 
-        for (CourseEntity entity : createList) {
+        for (CourseEntity entity : courseRepository.findAllByDateAndPeriod(dto.getDate(), dto.getPeriod())) {
+            if (entity.getUser() != null
+                    && entity.getUser().getId().equals(id)
+                    && entity.getState() != StateEnum.CANCEL) {
+                throw ReservationException.conflict("이미 예약한 시간입니다.");
+            }
+        }
+
+        for (CourseEntity entity : courseRepository.findAllByDateAndPeriodAndTeacher_Id(
+                dto.getDate(), dto.getPeriod(), teacher.getId())) {
             if (entity.getState() == StateEnum.LOCKED) {
                 throw ReservationException.locked("잠긴 날짜 입니다.");
-            }
-            if (entity.getUser() != null && entity.getUser().getId().equals(id) && entity.getState() != StateEnum.CANCEL) {
-                throw ReservationException.conflict("이미 예약한 시간입니다.");
             }
             if (entity.getState() == StateEnum.RESERVED) {
                 throw ReservationException.conflict("누군가 예약한 시간입니다.");
@@ -73,16 +74,13 @@ public class CourseService {
     @Transactional
     public void cancelReservation(Long reservationId, Long userId) {
         CourseEntity entity = courseRepository.findById(reservationId)
-                .orElseThrow(() ->
-                        ReservationException.notFound("취소 할 수 없습니다."));
+                .orElseThrow(() -> ReservationException.notFound("취소 할 수 없습니다."));
 
         if (!entity.getUser().getId().equals(userId)) {
             throw ReservationException.forbidden("권한이 없습니다.");
         }
 
         entity.setState(StateEnum.CANCEL);
-
-        courseSave(entity);
     }
 
     @Transactional
@@ -101,7 +99,6 @@ public class CourseService {
         }
 
         entity.setState(StateEnum.RESERVED);
-
         notificationService.notifyUser(
                 entity.getUser(),
                 NotificationType.COUNSELING_APPROVED,
@@ -139,40 +136,38 @@ public class CourseService {
 
     @Transactional
     public void teacherRock(LockDTO dto, Long teacherId) {
-        List<CourseEntity> rockList = courseRepository.findAllByDateAndPeriod(dto.getDate(), dto.getPeriod());
         User teacher = userRepository.findById(teacherId)
                 .orElseThrow(() -> ReservationException.notFound("회원이 없습니다."));
+        List<CourseEntity> rockList = courseRepository.findAllByDateAndPeriodAndTeacher_Id(
+                dto.getDate(), dto.getPeriod(), teacher.getId());
 
         for (CourseEntity entity : rockList) {
             if (entity.getState() == StateEnum.CANCEL) {
                 continue;
             }
             entity.setState(StateEnum.CANCEL);
-            courseSave(entity);
         }
 
-        courseSave(dto.toEntity(dto, teacher));
+        courseRepository.save(dto.toEntity(teacher));
     }
 
     @Transactional(readOnly = true)
     public List<TeacherReadDTO> T_Read(Long id) {
-        List<CourseEntity> entity = courseRepository.findByTeacher_Id(id);
+        return courseRepository.findByTeacher_IdAndStateOrderByDateAscPeriodAsc(id, StateEnum.RESERVED).stream()
+                .map(this::toTeacherDTO)
+                .toList();
+    }
 
-        return entity.stream()
-                .map(e -> new TeacherReadDTO(
-                        e.getReservation_id(),
-                        e.getUser().getName(),
-                        e.getDate(),
-                        e.getPeriod()
-                ))
+    @Transactional(readOnly = true)
+    public List<TeacherReadDTO> P_Read(Long id) {
+        return courseRepository.findByTeacher_IdAndStateOrderByDateAscPeriodAsc(id, StateEnum.WAITING).stream()
+                .map(this::toTeacherDTO)
                 .toList();
     }
 
     @Transactional(readOnly = true)
     public List<StudentReadDTO> S_Read(Long id) {
-        List<CourseEntity> entity = courseRepository.findByUser_id(id);
-
-        return entity.stream()
+        return courseRepository.findByUser_id(id).stream()
                 .map(e -> new StudentReadDTO(
                         e.getReservation_id(),
                         e.getUser().getName(),
@@ -180,6 +175,15 @@ public class CourseService {
                         e.getPeriod()
                 ))
                 .toList();
+    }
+
+    private TeacherReadDTO toTeacherDTO(CourseEntity e) {
+        return new TeacherReadDTO(
+                e.getReservation_id(),
+                e.getUser().getName(),
+                e.getDate(),
+                e.getPeriod()
+        );
     }
 
     private User findTeacher(Long teacherId, Long studentId) {

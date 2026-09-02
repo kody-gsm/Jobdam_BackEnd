@@ -17,12 +17,12 @@ public class CreateDTO {
 
     private String content;
 
-    private Long teacherId;
-
     @DateTimeFormat(pattern = "yyyy-MM-dd")
     private LocalDate date;
 
     private String period;
+
+    private Long teacherId;
 
     public CourseEntity toEntity(User user, User teacher) {
         return CourseEntity.builder()
@@ -31,8 +31,8 @@ public class CreateDTO {
                 .date(date)
                 .period(period)
                 .state(StateEnum.WAITING)
-                .user(user)
                 .teacher(teacher)
+                .user(user)
                 .build();
     }
 }

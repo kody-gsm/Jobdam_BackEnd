@@ -1,8 +1,7 @@
 package com.example.kodyjobdam.user.controller;
 
-import com.example.kodyjobdam.user.UserRepository;
-import com.example.kodyjobdam.user.UserRole;
-import com.example.kodyjobdam.user.dto.TeacherResponseDTO;
+import com.example.kodyjobdam.user.dto.TeacherResponse;
+import com.example.kodyjobdam.user.service.TeacherService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RestController;
@@ -13,12 +12,10 @@ import java.util.List;
 @RequiredArgsConstructor
 public class TeacherController {
 
-    private final UserRepository userRepository;
+    private final TeacherService teacherService;
 
-    @GetMapping("/api/teachers")
-    public List<TeacherResponseDTO> getTeachers() {
-        return userRepository.findByRole(UserRole.TEACHER).stream()
-                .map(TeacherResponseDTO::from)
-                .toList();
+    @GetMapping({"/student/teachers", "/api/teachers"})
+    public List<TeacherResponse> readTeachers() {
+        return teacherService.findTeachers();
     }
 }
