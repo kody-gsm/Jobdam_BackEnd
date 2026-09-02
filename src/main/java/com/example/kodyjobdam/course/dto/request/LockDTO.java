@@ -2,6 +2,7 @@ package com.example.kodyjobdam.course.dto.request;
 
 import com.example.kodyjobdam.course.entity.CourseEntity;
 import com.example.kodyjobdam.course.entity.StateEnum;
+import com.example.kodyjobdam.user.entity.User;
 
 import java.time.LocalDate;
 
@@ -29,7 +30,7 @@ public class LockDTO {
         return entity;
     }*/
 
-    public CourseEntity toEntity(LockDTO dto) {
+    public CourseEntity toEntity(LockDTO dto, User teacher) {
         return CourseEntity.builder()
                 .date(dto.date)
                 .period(dto.period)
@@ -37,7 +38,7 @@ public class LockDTO {
                 .title("Locked")
                 .content("이 시간은 잠긴 시간입니다.")
                 .user(null)
-                .teacher_id(null)
+                .teacher(teacher)
                 .build();
     }
 }

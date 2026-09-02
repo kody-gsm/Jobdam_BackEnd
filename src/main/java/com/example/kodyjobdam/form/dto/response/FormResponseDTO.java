@@ -18,6 +18,8 @@ public class FormResponseDTO {
 
     private String description;
 
+    private LocalDateTime deadline;
+
     private FormStatus status;
 
     private List<FormQuestionResponseDTO> questions;
@@ -31,6 +33,7 @@ public class FormResponseDTO {
                 .id(entity.getId())
                 .title(entity.getTitle())
                 .description(entity.getDescription())
+                .deadline(entity.getDeadline())
                 .status(entity.getStatus())
                 .questions(entity.getQuestions().stream()
                         .map(FormQuestionResponseDTO::from)

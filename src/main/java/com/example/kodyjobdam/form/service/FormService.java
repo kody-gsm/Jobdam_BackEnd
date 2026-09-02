@@ -11,6 +11,9 @@ import com.example.kodyjobdam.form.entity.FormQuestionEntity;
 import com.example.kodyjobdam.form.entity.FormQuestionOptionEntity;
 import com.example.kodyjobdam.form.entity.FormStatus;
 import com.example.kodyjobdam.form.repository.FormRepository;
+import com.example.kodyjobdam.notification.entity.NotificationType;
+import com.example.kodyjobdam.notification.service.NotificationExpirationService;
+import com.example.kodyjobdam.notification.service.NotificationService;
 import com.example.kodyjobdam.user.UserRepository;
 import com.example.kodyjobdam.user.entity.User;
 import lombok.RequiredArgsConstructor;
@@ -27,6 +30,10 @@ public class FormService {
 
     private final UserRepository userRepository;
 
+    private final NotificationService notificationService;
+
+    private final NotificationExpirationService notificationExpirationService;
+
     /** 선생님: 폼 생성 (초안 상태로 저장) */
     @Transactional
     public FormResponseDTO create(FormCreateDTO dto, Long userId) {
@@ -37,6 +44,7 @@ public class FormService {
                 .user(user)
                 .title(dto.getTitle())
                 .description(dto.getDescription())
+                .deadline(dto.getDeadline())
                 .status(FormStatus.DRAFT)
                 .build();
 
@@ -57,7 +65,7 @@ public class FormService {
             throw FormException.badRequest("이미 공개된 폼은 수정할 수 없습니다. 새 폼을 만들어주세요.");
         }
 
-        form.update(dto.getTitle(), dto.getDescription());
+        form.update(dto.getTitle(), dto.getDescription(), dto.getDeadline());
         form.clearQuestions();
         applyQuestions(form, dto.getQuestions());
 
@@ -77,6 +85,14 @@ public class FormService {
         }
 
         form.publish();
+        notificationService.notifyAllStudents(
+                NotificationType.FORM_PUBLISHED,
+                "새로운 폼",
+                form.getTitle() + " 폼이 게시되었습니다.",
+                form.getId(),
+                "/form/" + form.getId(),
+                notificationExpirationService.formExpiresAt(form.getDeadline())
+        );
         return FormResponseDTO.from(form);
     }
 

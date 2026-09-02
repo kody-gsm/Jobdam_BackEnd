@@ -1,6 +1,7 @@
 package com.example.kodyjobdam.common.repository;
 
 import com.example.kodyjobdam.common.entity.CommonEntity;
+import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.stereotype.Repository;
 
@@ -12,5 +13,9 @@ public interface CommonRepository extends JpaRepository<CommonEntity, Long> {
 
     List<CommonEntity> findAllByDateAndPeriod(LocalDate date, String period);
 
+    @EntityGraph(attributePaths = {"user", "teacher"})
     List<CommonEntity> findByUser_id(Long userId);
+
+    @EntityGraph(attributePaths = {"user", "teacher"})
+    List<CommonEntity> findByTeacher_Id(Long teacherId);
 }

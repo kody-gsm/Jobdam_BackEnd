@@ -5,6 +5,7 @@ import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotEmpty;
 import lombok.Getter;
 
+import java.time.LocalDateTime;
 import java.util.List;
 
 @Getter
@@ -14,6 +15,8 @@ public class FormUpdateDTO {
     private String title;
 
     private String description;
+
+    private LocalDateTime deadline;
 
     /** 질문은 부분 수정이 아니라 통째로 교체된다 */
     @Valid

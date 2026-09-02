@@ -27,7 +27,7 @@ public class CourseEntity {
     @Column(nullable = false)
     private String period;
 
-    @ManyToOne
+    @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "user_id")
     private User user;
 
@@ -36,7 +36,9 @@ public class CourseEntity {
 
     private String content;
 
-    private Long teacher_id;
+    @ManyToOne(fetch = FetchType.LAZY, optional = false)
+    @JoinColumn(name = "teacher_id", nullable = false)
+    private User teacher;
 
     @Column(nullable = false)
     @Enumerated(EnumType.STRING)
@@ -54,7 +56,7 @@ public class CourseEntity {
         this.state = state;
     }
 
-    public void setTeacher_id(Long teacher_id) {
-        this.teacher_id = teacher_id;
+    public void assignTeacher(User teacher) {
+        this.teacher = teacher;
     }
 }

@@ -27,7 +27,7 @@ public class CommonEntity {
     @Column(nullable = false)
     private String period;
 
-    @ManyToOne
+    @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "user_id")
     private User user;
 
@@ -36,7 +36,9 @@ public class CommonEntity {
 
     private String content;
 
-    private Long allow_id;
+    @ManyToOne(fetch = FetchType.LAZY, optional = false)
+    @JoinColumn(name = "teacher_id", nullable = false)
+    private User teacher;
 
     @Column(nullable = false)
     @Enumerated(EnumType.STRING) //DB에 이 ENUM을 문자열로 저장해줘
@@ -58,7 +60,7 @@ public class CommonEntity {
         this.state = state;
     }
 
-    public void setTeacher_id(Long teacher_id) {
-        this.allow_id = teacher_id;
+    public void assignTeacher(User teacher) {
+        this.teacher = teacher;
     }
 }

@@ -38,9 +38,15 @@ public class CommonController {
         return ResponseEntity.ok().body("요청을 수락했습니다.");
     }
 
+    @PatchMapping("/teacher/common/reject/{id}")
+    public ResponseEntity<?> reservationReject(@PathVariable Long id) {
+        commonService.reject(id, securityUtil.getCurrentUserId());
+        return ResponseEntity.ok().body("요청을 거절했습니다.");
+    }
+
     @PostMapping("/teacher/common/lock")
     public ResponseEntity<?> teacherRock(@RequestBody LockDTO dto) {
-        commonService.teacherRock(dto);
+        commonService.teacherRock(dto, securityUtil.getCurrentUserId());
         return ResponseEntity.ok().body("해당 시간을 잠궜습니다.");
     }
 
