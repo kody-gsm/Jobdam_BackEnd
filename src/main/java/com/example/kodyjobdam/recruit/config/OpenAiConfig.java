@@ -8,13 +8,14 @@ import org.springframework.web.client.RestTemplate;
 import java.time.Duration;
 
 @Configuration
-public class GeminiConfig {
+public class OpenAiConfig {
 
     @Bean
     public RestTemplate restTemplate(RestTemplateBuilder builder) {
         return builder
                 .setConnectTimeout(Duration.ofSeconds(10))
-                .setReadTimeout(Duration.ofSeconds(30))
+                // 이미지 한 장 분석이라 응답이 30초를 넘길 수 있다
+                .setReadTimeout(Duration.ofSeconds(60))
                 .build();
     }
 }
