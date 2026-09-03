@@ -1,0 +1,52 @@
+services:
+  mysql:
+    image: mysql:8.4
+    container_name: jobdam-mysql
+    restart: unless-stopped
+    environment:
+      MYSQL_DATABASE: ${DB_NAME:-jobdam}
+      MYSQL_ROOT_PASSWORD: ${DB_PASSWORD:-jobdam1234}
+      TZ: Asia/Seoul
+    ports:
+      - "${DB_PORT:-3306}:3306"
+    volumes:
+      - mysql-data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h localhost -uroot -p$${MYSQL_ROOT_PASSWORD}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+
+  app:
+    image: gradle:8.5-jdk21
+    container_name: jobdam-app
+    restart: unless-stopped
+    working_dir: /workspace
+    command: gradle bootRun --no-daemon
+    env_file:
+      - .env
+    environment:
+      DB_URL: jdbc:mysql://mysql:3306/${DB_NAME:-jobdam}?serverTimezone=Asia/Seoul&characterEncoding=UTF-8&useSSL=false&allowPublicKeyRetrieval=true
+      DB_USER: root
+      DB_PASSWORD: ${DB_PASSWORD:-jobdam1234}
+      JWT_ACCESS_TOKEN_EXPIRATION: ${JWT_ACCESS_TOKEN_EXPIRATION:-3600000}
+      JWT_REFRESH_TOKEN_EXPIRATION: ${JWT_REFRESH_TOKEN_EXPIRATION:-1209600000}
+      NOTIFICATION_CLEANUP_CRON: "${NOTIFICATION_CLEANUP_CRON:-0 0 3 * * *}"
+      NOTIFICATION_CLEANUP_ZONE: ${NOTIFICATION_CLEANUP_ZONE:-Asia/Seoul}
+      NOTIFICATION_DEFAULT_RETENTION_DAYS: ${NOTIFICATION_DEFAULT_RETENTION_DAYS:-90}
+      NOTIFICATION_RECRUIT_RETENTION_DAYS: ${NOTIFICATION_RECRUIT_RETENTION_DAYS:-30}
+      NOTIFICATION_FORM_RETENTION_DAYS: ${NOTIFICATION_FORM_RETENTION_DAYS:-30}
+      NOTIFICATION_COUNSELING_RETENTION_DAYS: ${NOTIFICATION_COUNSELING_RETENTION_DAYS:-90}
+    ports:
+      - "${APP_PORT:-8088}:8088"
+    volumes:
+      - .:/workspace
+      - gradle-cache:/home/gradle/.gradle
+    depends_on:
+      mysql:
+        condition: service_healthy
+
+volumes:
+  mysql-data:
+  gradle-cache:

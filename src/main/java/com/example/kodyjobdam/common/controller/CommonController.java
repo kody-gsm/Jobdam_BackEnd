@@ -8,7 +8,12 @@ import com.example.kodyjobdam.common.service.CommonService;
 import com.example.kodyjobdam.user.security.SecurityUtil;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
-import org.springframework.web.bind.annotation.*;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PatchMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RestController;
 
 import java.util.List;
 
@@ -32,30 +37,36 @@ public class CommonController {
         return ResponseEntity.ok().body("취소되었습니다.");
     }
 
-    @PatchMapping("/teacher/common/allow/{reservation_id}")
-    public ResponseEntity<?> reservationAllow(@PathVariable Long reservation_id) {
-        commonService.allow(reservation_id, securityUtil.getCurrentUserId());
+    @PatchMapping("/teacher/common/allow/{id}")
+    public ResponseEntity<?> reservationAllow(@PathVariable Long id) {
+        commonService.allow(id, securityUtil.getCurrentUserId());
         return ResponseEntity.ok().body("요청을 수락했습니다.");
+    }
+
+    @PatchMapping("/teacher/common/reject/{id}")
+    public ResponseEntity<?> reservationReject(@PathVariable Long id) {
+        commonService.reject(id, securityUtil.getCurrentUserId());
+        return ResponseEntity.ok().body("요청을 거절했습니다.");
     }
 
     @PostMapping("/teacher/common/lock")
     public ResponseEntity<?> teacherRock(@RequestBody LockDTO dto) {
-        commonService.teacherRock(dto);
+        commonService.teacherRock(dto, securityUtil.getCurrentUserId());
         return ResponseEntity.ok().body("해당 시간을 잠궜습니다.");
     }
 
-    @GetMapping("/student/common/read")
-    public List<StudentReadDTO> studentRecord() {
-        return commonService.studentRecord(securityUtil.getCurrentUserId());
+    @GetMapping("/student/common")
+    public List<StudentReadDTO> S_read() {
+        return commonService.S_Read(securityUtil.getCurrentUserId());
     }
 
-    @GetMapping("/teacher/common/read")
-    public List<TeacherReadDTO> teacherRecord() {
-        return commonService.teacherRecord(securityUtil.getCurrentUserId());
+    @GetMapping("/teacher/common")
+    public List<TeacherReadDTO> T_read() {
+        return commonService.T_Read(securityUtil.getCurrentUserId());
     }
 
-    @GetMapping("/student/common/record")
-    public List<StudentReadDTO> selectStudentRecord() {
-        return commonService.selectRecordStatus(securityUtil.getCurrentUserId());
+    @GetMapping("/teacher/common/pending")
+    public List<TeacherReadDTO> P_read() {
+        return commonService.P_Read(securityUtil.getCurrentUserId());
     }
 }

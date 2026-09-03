@@ -22,13 +22,16 @@ public class CreateDTO {
 
     private String period;
 
-    public CourseEntity toEntity(User user) {
+    private Long teacherId;
+
+    public CourseEntity toEntity(User user, User teacher) {
         return CourseEntity.builder()
                 .title(title)
                 .content(content)
                 .date(date)
                 .period(period)
                 .state(StateEnum.WAITING)
+                .teacher(teacher)
                 .user(user)
                 .build();
     }

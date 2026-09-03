@@ -40,11 +40,14 @@ public class SecurityConfig {
                         session.sessionCreationPolicy(SessionCreationPolicy.STATELESS)
                 )
                 .authorizeHttpRequests(auth -> auth
-                        .requestMatchers(HttpMethod.POST, "/auth/**").permitAll()
                         .requestMatchers("/error").permitAll()
-                        .requestMatchers("/api/**").permitAll() // 디스코드 알림 등 /api 경로 허용 추가
-                        .requestMatchers(HttpMethod.POST, "/teacher/**").hasRole("TEACHER")
-                        .requestMatchers(HttpMethod.POST, "/student/**").hasRole("STUDENT")
+                        .requestMatchers(HttpMethod.POST, "/api/notices").permitAll()
+                        .requestMatchers(HttpMethod.GET, "/api/notifications/subscribe").permitAll()
+                        .requestMatchers("/auth/profile").authenticated()
+                        .requestMatchers("/auth/**").permitAll()
+                        .requestMatchers("/admin/**").hasRole("ADMIN")
+                        .requestMatchers("/teacher/**").hasRole("TEACHER")
+                        .requestMatchers("/student/**").hasRole("STUDENT")
                         .anyRequest().authenticated()
                 )
                 .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class);

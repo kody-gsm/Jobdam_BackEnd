@@ -1,7 +1,17 @@
 package com.example.kodyjobdam.course.entity;
 
 import com.example.kodyjobdam.user.entity.User;
-import jakarta.persistence.*;
+import jakarta.persistence.Column;
+import jakarta.persistence.Entity;
+import jakarta.persistence.EnumType;
+import jakarta.persistence.Enumerated;
+import jakarta.persistence.FetchType;
+import jakarta.persistence.GeneratedValue;
+import jakarta.persistence.GenerationType;
+import jakarta.persistence.Id;
+import jakarta.persistence.JoinColumn;
+import jakarta.persistence.ManyToOne;
+import jakarta.persistence.Table;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Getter;
@@ -27,7 +37,7 @@ public class CourseEntity {
     @Column(nullable = false)
     private String period;
 
-    @ManyToOne
+    @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "user_id")
     private User user;
 
@@ -36,7 +46,9 @@ public class CourseEntity {
 
     private String content;
 
-    private Long teacher_id;
+    @ManyToOne(fetch = FetchType.LAZY, optional = false)
+    @JoinColumn(name = "teacher_id", nullable = false)
+    private User teacher;
 
     @Column(nullable = false)
     @Enumerated(EnumType.STRING)
@@ -52,9 +64,5 @@ public class CourseEntity {
 
     public void setState(StateEnum state) {
         this.state = state;
-    }
-
-    public void setTeacher_id(Long teacher_id) {
-        this.teacher_id = teacher_id;
     }
 }

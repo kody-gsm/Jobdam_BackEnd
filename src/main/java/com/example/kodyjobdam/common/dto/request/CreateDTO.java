@@ -22,13 +22,16 @@ public class CreateDTO {
 
     private String period;
 
-    public CommonEntity toEntity(User user) { //title, content 이런건 DTO에 있는 값
+    private Long teacherId;
+
+    public CommonEntity toEntity(User user, User teacher) {
         return CommonEntity.builder()
                 .title(title)
                 .content(content)
                 .date(date)
                 .period(period)
                 .state(StateEnum.WAITING)
+                .teacher(teacher)
                 .user(user)
                 .build();
     }
