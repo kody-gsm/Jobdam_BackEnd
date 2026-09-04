@@ -13,6 +13,8 @@ public interface FormRepository extends JpaRepository<FormEntity, Long> {
     // 선생님 관리용: 초안 포함 전체 최신순
     List<FormEntity> findAllByOrderByCreatedAtDesc();
 
+    List<FormEntity> findByUserIdOrderByCreatedAtDesc(Long userId);
+
     // 학생용: 공개된 폼만 최신순
     List<FormEntity> findByStatusOrderByCreatedAtDesc(FormStatus status);
 }

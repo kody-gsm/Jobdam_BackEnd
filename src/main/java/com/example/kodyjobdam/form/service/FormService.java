@@ -58,8 +58,9 @@ public class FormService {
      * 이미 제출된 응답과 질문이 어긋나는 것을 막기 위해 초안 상태에서만 허용한다.
      */
     @Transactional
-    public FormResponseDTO update(Long formId, FormUpdateDTO dto) {
+    public FormResponseDTO update(Long formId, FormUpdateDTO dto, Long teacherId) {
         FormEntity form = findOrThrow(formId);
+        validateOwner(form, teacherId);
 
         if (!form.isEditable()) {
             throw FormException.badRequest("이미 공개된 폼은 수정할 수 없습니다. 새 폼을 만들어주세요.");
@@ -74,8 +75,9 @@ public class FormService {
 
     /** 선생님: 학생에게 공개 */
     @Transactional
-    public FormResponseDTO publish(Long formId) {
+    public FormResponseDTO publish(Long formId, Long teacherId) {
         FormEntity form = findOrThrow(formId);
+        validateOwner(form, teacherId);
 
         if (form.getStatus() != FormStatus.DRAFT) {
             throw FormException.badRequest("초안 상태의 폼만 공개할 수 있습니다.");
@@ -98,8 +100,9 @@ public class FormService {
 
     /** 선생님: 응답 마감 */
     @Transactional
-    public FormResponseDTO close(Long formId) {
+    public FormResponseDTO close(Long formId, Long teacherId) {
         FormEntity form = findOrThrow(formId);
+        validateOwner(form, teacherId);
 
         if (form.getStatus() != FormStatus.PUBLISHED) {
             throw FormException.badRequest("공개된 폼만 마감할 수 있습니다.");
@@ -111,16 +114,18 @@ public class FormService {
 
     /** 선생님 관리용: 초안 포함 전체 목록 */
     @Transactional(readOnly = true)
-    public List<FormSummaryResponseDTO> listForTeacher() {
-        return formRepository.findAllByOrderByCreatedAtDesc().stream()
+    public List<FormSummaryResponseDTO> listForTeacher(Long teacherId) {
+        return formRepository.findByUserIdOrderByCreatedAtDesc(teacherId).stream()
                 .map(FormSummaryResponseDTO::from)
                 .toList();
     }
 
     /** 선생님 관리용: 폼 단건 (상태 무관) */
     @Transactional(readOnly = true)
-    public FormResponseDTO getForTeacher(Long formId) {
-        return FormResponseDTO.from(findOrThrow(formId));
+    public FormResponseDTO getForTeacher(Long formId, Long teacherId) {
+        FormEntity form = findOrThrow(formId);
+        validateOwner(form, teacherId);
+        return FormResponseDTO.from(form);
     }
 
     /** 학생용: 공개된 폼 목록 */
@@ -189,5 +194,11 @@ public class FormService {
     private FormEntity findOrThrow(Long formId) {
         return formRepository.findById(formId)
                 .orElseThrow(() -> FormException.notFound("폼을 찾을 수 없습니다."));
+    }
+
+    private void validateOwner(FormEntity form, Long teacherId) {
+        if (form.getUser() == null || !form.getUser().getId().equals(teacherId)) {
+            throw FormException.forbidden("폼을 관리할 권한이 없습니다.");
+        }
     }
 }

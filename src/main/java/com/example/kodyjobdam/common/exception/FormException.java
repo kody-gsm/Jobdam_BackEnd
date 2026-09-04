@@ -19,4 +19,8 @@ public class FormException extends BusinessException {
     public static FormException conflict(String message) {
         return new FormException(HttpStatus.CONFLICT, "FORM_CONFLICT", message);
     }
+
+    public static FormException forbidden(String message) {
+        return new FormException(HttpStatus.FORBIDDEN, "FORM_FORBIDDEN", message);
+    }
 }

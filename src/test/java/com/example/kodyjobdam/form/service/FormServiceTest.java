@@ -79,7 +79,7 @@ class FormServiceTest {
         when(notificationExpirationService.formExpiresAt(form.getDeadline()))
                 .thenReturn(LocalDateTime.of(2026, 10, 10, 0, 0));
 
-        formService.publish(10L);
+        formService.publish(10L, 2L);
 
         verify(notificationService).notifyAllStudents(
                 eq(NotificationType.FORM_PUBLISHED),
@@ -101,8 +101,24 @@ class FormServiceTest {
                 .build();
         when(formRepository.findById(10L)).thenReturn(Optional.of(form));
 
-        assertThatThrownBy(() -> formService.publish(10L))
+        assertThatThrownBy(() -> formService.publish(10L, 2L))
                 .isInstanceOf(FormException.class);
+        verify(notificationService, never()).notifyAllStudents(any(), any(), any(), any(), any(), any());
+    }
+
+    @Test
+    void publishOtherTeachersFormThrowsForbidden() {
+        FormEntity form = FormEntity.builder()
+                .id(10L)
+                .user(user(2L))
+                .title("만족도 조사")
+                .status(FormStatus.DRAFT)
+                .build();
+        when(formRepository.findById(10L)).thenReturn(Optional.of(form));
+
+        assertThatThrownBy(() -> formService.publish(10L, 3L))
+                .isInstanceOf(FormException.class)
+                .hasMessage("폼을 관리할 권한이 없습니다.");
         verify(notificationService, never()).notifyAllStudents(any(), any(), any(), any(), any(), any());
     }
 

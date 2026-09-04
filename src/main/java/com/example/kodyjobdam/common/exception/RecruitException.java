@@ -16,6 +16,10 @@ public class RecruitException extends BusinessException {
         return new RecruitException(HttpStatus.NOT_FOUND, "RECRUIT_NOT_FOUND", message);
     }
 
+    public static RecruitException forbidden(String message) {
+        return new RecruitException(HttpStatus.FORBIDDEN, "RECRUIT_FORBIDDEN", message);
+    }
+
     public static RecruitException badGateway(String message) {
         return new RecruitException(HttpStatus.BAD_GATEWAY, "RECRUIT_BAD_GATEWAY", message);
     }

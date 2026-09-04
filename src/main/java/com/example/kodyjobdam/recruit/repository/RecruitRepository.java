@@ -15,4 +15,6 @@ public interface RecruitRepository extends JpaRepository<RecruitEntity, Long> {
 
     // 선생님 관리용: 초안 포함 전체 최신순
     List<RecruitEntity> findAllByOrderByCreatedAtDesc();
+
+    List<RecruitEntity> findByUserIdOrderByCreatedAtDesc(Long userId);
 }
