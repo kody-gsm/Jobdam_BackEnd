@@ -60,7 +60,7 @@ class RecruitServiceTest {
         when(notificationExpirationService.recruitExpiresAt("2026-09-10"))
                 .thenReturn(LocalDateTime.of(2026, 10, 10, 23, 59, 59));
 
-        recruitService.publish(10L);
+        recruitService.publish(10L, 2L);
 
         verify(notificationService).notifyAllStudents(
                 eq(NotificationType.RECRUIT_PUBLISHED),
@@ -82,8 +82,24 @@ class RecruitServiceTest {
                 .build();
         when(recruitRepository.findById(10L)).thenReturn(Optional.of(recruit));
 
-        assertThatThrownBy(() -> recruitService.publish(10L))
+        assertThatThrownBy(() -> recruitService.publish(10L, 2L))
                 .isInstanceOf(RecruitException.class);
+        verify(notificationService, never()).notifyAllStudents(any(), any(), any(), any(), any(), any());
+    }
+
+    @Test
+    void publishOtherTeachersRecruitThrowsForbidden() {
+        RecruitEntity recruit = RecruitEntity.builder()
+                .id(10L)
+                .user(user(2L))
+                .companyName("잡담")
+                .status(RecruitStatus.DRAFT)
+                .build();
+        when(recruitRepository.findById(10L)).thenReturn(Optional.of(recruit));
+
+        assertThatThrownBy(() -> recruitService.publish(10L, 3L))
+                .isInstanceOf(RecruitException.class)
+                .hasMessage("채용 공고를 관리할 권한이 없습니다.");
         verify(notificationService, never()).notifyAllStudents(any(), any(), any(), any(), any(), any());
     }
 
