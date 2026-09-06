@@ -39,44 +39,44 @@ public class FormController {
     @PatchMapping("/teacher/form/{id}")
     public ResponseEntity<FormResponseDTO> update(@PathVariable Long id,
                                                   @Valid @RequestBody FormUpdateDTO dto) {
-        return ResponseEntity.ok(formService.update(id, dto));
+        return ResponseEntity.ok(formService.update(id, dto, securityUtil.getCurrentUserId()));
     }
 
     /** 학생에게 공개 */
     @PostMapping("/teacher/form/{id}/publish")
     public ResponseEntity<FormResponseDTO> publish(@PathVariable Long id) {
-        return ResponseEntity.ok(formService.publish(id));
+        return ResponseEntity.ok(formService.publish(id, securityUtil.getCurrentUserId()));
     }
 
     /** 응답 마감 */
     @PostMapping("/teacher/form/{id}/close")
     public ResponseEntity<FormResponseDTO> close(@PathVariable Long id) {
-        return ResponseEntity.ok(formService.close(id));
+        return ResponseEntity.ok(formService.close(id, securityUtil.getCurrentUserId()));
     }
 
     /** 선생님 관리용 전체 목록 (초안 포함) */
     @GetMapping("/teacher/form")
     public List<FormSummaryResponseDTO> listForTeacher() {
-        return formService.listForTeacher();
+        return formService.listForTeacher(securityUtil.getCurrentUserId());
     }
 
     /** 선생님 관리용 폼 단건 (상태 무관) */
     @GetMapping("/teacher/form/{id}")
     public ResponseEntity<FormResponseDTO> getForTeacher(@PathVariable Long id) {
-        return ResponseEntity.ok(formService.getForTeacher(id));
+        return ResponseEntity.ok(formService.getForTeacher(id, securityUtil.getCurrentUserId()));
     }
 
     /** 폼별 제출 목록 */
     @GetMapping("/teacher/form/{id}/submission")
     public List<FormSubmissionSummaryResponseDTO> listSubmissions(@PathVariable Long id) {
-        return formSubmissionService.listSubmissions(id);
+        return formSubmissionService.listSubmissions(id, securityUtil.getCurrentUserId());
     }
 
     /** 제출 단건 상세 */
     @GetMapping("/teacher/form/{id}/submission/{submissionId}")
     public ResponseEntity<FormSubmissionResponseDTO> getSubmission(@PathVariable Long id,
                                                                    @PathVariable Long submissionId) {
-        return ResponseEntity.ok(formSubmissionService.getSubmission(id, submissionId));
+        return ResponseEntity.ok(formSubmissionService.getSubmission(id, submissionId, securityUtil.getCurrentUserId()));
     }
 
     // ===== 학생(STUDENT) 전용 =====

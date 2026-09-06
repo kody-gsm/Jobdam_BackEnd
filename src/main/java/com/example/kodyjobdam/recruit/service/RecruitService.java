@@ -76,18 +76,20 @@ public class RecruitService {
         return RecruitResponseDTO.from(entity);
     }
 
-    /** 선생님: 분석 결과 수정 (모든 선생님 가능) */
+    /** 선생님: 분석 결과 수정 */
     @Transactional
-    public RecruitResponseDTO update(Long recruitId, RecruitUpdateDTO dto) {
+    public RecruitResponseDTO update(Long recruitId, RecruitUpdateDTO dto, Long teacherId) {
         RecruitEntity entity = findOrThrow(recruitId);
+        validateOwner(entity, teacherId);
         entity.update(dto.getCompanyName(), dto.getInterviewDate(), dto.getDeadline(), dto.getSummary());
         return RecruitResponseDTO.from(entity);
     }
 
-    /** 선생님: 학생에게 공개 (모든 선생님 가능) */
+    /** 선생님: 학생에게 공개 */
     @Transactional
-    public RecruitResponseDTO publish(Long recruitId) {
+    public RecruitResponseDTO publish(Long recruitId, Long teacherId) {
         RecruitEntity entity = findOrThrow(recruitId);
+        validateOwner(entity, teacherId);
         if (entity.getStatus() != RecruitStatus.DRAFT) {
             throw RecruitException.badRequest("초안 상태의 채용 공고만 공개할 수 있습니다.");
         }
@@ -105,8 +107,8 @@ public class RecruitService {
     }
 
     /** 선생님 관리용: 초안 포함 전체 목록 */
-    public List<RecruitResponseDTO> listForTeacher() {
-        return recruitRepository.findAllByOrderByCreatedAtDesc().stream()
+    public List<RecruitResponseDTO> listForTeacher(Long teacherId) {
+        return recruitRepository.findByUserIdOrderByCreatedAtDesc(teacherId).stream()
                 .map(RecruitResponseDTO::from)
                 .toList();
     }
@@ -130,5 +132,11 @@ public class RecruitService {
     private RecruitEntity findOrThrow(Long recruitId) {
         return recruitRepository.findById(recruitId)
                 .orElseThrow(() -> RecruitException.notFound("채용 공고를 찾을 수 없습니다."));
+    }
+
+    private void validateOwner(RecruitEntity entity, Long teacherId) {
+        if (entity.getUser() == null || !entity.getUser().getId().equals(teacherId)) {
+            throw RecruitException.forbidden("채용 공고를 관리할 권한이 없습니다.");
+        }
     }
 }

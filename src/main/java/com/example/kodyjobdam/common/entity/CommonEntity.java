@@ -52,6 +52,7 @@ public class CommonEntity {
 
     @Column(nullable = false)
     @Enumerated(EnumType.STRING)
+    @Builder.Default
     private StateEnum state = StateEnum.WAITING;
 
     public void setDate(LocalDate date) {

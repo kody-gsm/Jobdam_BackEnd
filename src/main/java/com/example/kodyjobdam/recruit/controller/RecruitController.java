@@ -32,19 +32,19 @@ public class RecruitController {
     @PatchMapping("/teacher/recruit/{id}")
     public ResponseEntity<RecruitResponseDTO> update(@PathVariable Long id,
                                                      @RequestBody RecruitUpdateDTO dto) {
-        return ResponseEntity.ok(recruitService.update(id, dto));
+        return ResponseEntity.ok(recruitService.update(id, dto, securityUtil.getCurrentUserId()));
     }
 
     /** 학생에게 공개 */
     @PostMapping("/teacher/recruit/{id}/publish")
     public ResponseEntity<RecruitResponseDTO> publish(@PathVariable Long id) {
-        return ResponseEntity.ok(recruitService.publish(id));
+        return ResponseEntity.ok(recruitService.publish(id, securityUtil.getCurrentUserId()));
     }
 
     /** 선생님 관리용 전체 목록 (초안 포함) */
     @GetMapping("/teacher/recruit")
     public List<RecruitResponseDTO> listForTeacher() {
-        return recruitService.listForTeacher();
+        return recruitService.listForTeacher(securityUtil.getCurrentUserId());
     }
 
     // ===== 학생/공개용 =====

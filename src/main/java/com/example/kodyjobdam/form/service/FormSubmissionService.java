@@ -75,8 +75,9 @@ public class FormSubmissionService {
 
     /** 선생님: 폼별 제출 목록 */
     @Transactional(readOnly = true)
-    public List<FormSubmissionSummaryResponseDTO> listSubmissions(Long formId) {
-        findFormOrThrow(formId);
+    public List<FormSubmissionSummaryResponseDTO> listSubmissions(Long formId, Long teacherId) {
+        FormEntity form = findFormOrThrow(formId);
+        validateOwner(form, teacherId);
 
         return submissionRepository.findByFormIdOrderBySubmittedAtDesc(formId).stream()
                 .map(FormSubmissionSummaryResponseDTO::from)
@@ -85,7 +86,10 @@ public class FormSubmissionService {
 
     /** 선생님: 제출 단건 상세 */
     @Transactional(readOnly = true)
-    public FormSubmissionResponseDTO getSubmission(Long formId, Long submissionId) {
+    public FormSubmissionResponseDTO getSubmission(Long formId, Long submissionId, Long teacherId) {
+        FormEntity form = findFormOrThrow(formId);
+        validateOwner(form, teacherId);
+
         FormSubmissionEntity submission = submissionRepository.findById(submissionId)
                 .orElseThrow(() -> FormException.notFound("제출된 응답을 찾을 수 없습니다."));
 
@@ -205,5 +209,11 @@ public class FormSubmissionService {
     private FormEntity findFormOrThrow(Long formId) {
         return formRepository.findById(formId)
                 .orElseThrow(() -> FormException.notFound("폼을 찾을 수 없습니다."));
+    }
+
+    private void validateOwner(FormEntity form, Long teacherId) {
+        if (form.getUser() == null || !form.getUser().getId().equals(teacherId)) {
+            throw FormException.forbidden("폼 제출 내역을 조회할 권한이 없습니다.");
+        }
     }
 }
