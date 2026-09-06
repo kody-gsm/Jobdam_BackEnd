@@ -187,11 +187,15 @@ public class CourseService {
     }
 
     private User findTeacher(Long teacherId, Long studentId) {
+        if (teacherId != null && teacherId.equals(studentId)) {
+            throw ReservationException.badRequest("자기 자신을 선생님으로 지정할 수 없습니다.");
+        }
+        return findTeacher(teacherId);
+    }
+
+    private User findTeacher(Long teacherId) {
         if (teacherId == null) {
             throw ReservationException.badRequest("선생님을 선택해주세요.");
-        }
-        if (teacherId.equals(studentId)) {
-            throw ReservationException.badRequest("자기 자신을 선생님으로 지정할 수 없습니다.");
         }
 
         User teacher = userRepository.findById(teacherId)
