@@ -16,6 +16,8 @@ public interface CourseRepository extends JpaRepository<CourseEntity, Long> {
 
     List<CourseEntity> findAllByDateAndPeriodAndTeacher_Id(LocalDate date, String period, Long teacherId);
 
+    List<CourseEntity> findAllByDateAndTeacher_IdOrderByPeriodAsc(LocalDate date, Long teacherId);
+
     @EntityGraph(attributePaths = {"user", "teacher"})
     List<CourseEntity> findByUser_id(Long userId);
 

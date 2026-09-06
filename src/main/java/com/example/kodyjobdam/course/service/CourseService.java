@@ -4,6 +4,7 @@ import com.example.kodyjobdam.common.exception.ReservationException;
 import com.example.kodyjobdam.course.dto.request.CreateDTO;
 import com.example.kodyjobdam.course.dto.request.LockDTO;
 import com.example.kodyjobdam.course.dto.response.StudentReadDTO;
+import com.example.kodyjobdam.course.dto.response.SlotStatusDTO;
 import com.example.kodyjobdam.course.dto.response.TeacherReadDTO;
 import com.example.kodyjobdam.course.entity.CourseEntity;
 import com.example.kodyjobdam.course.entity.StateEnum;
@@ -19,7 +20,10 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.LocalDate;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 
 @Service
 @Slf4j
@@ -175,6 +179,42 @@ public class CourseService {
                         e.getPeriod()
                 ))
                 .toList();
+    }
+
+    @Transactional(readOnly = true)
+    public List<SlotStatusDTO> readSlotStatus(Long teacherId, LocalDate date, String period) {
+        if (date == null) {
+            throw ReservationException.badRequest("날짜를 선택해주세요.");
+        }
+        User teacher = findTeacher(teacherId);
+
+        List<CourseEntity> reservations = (period == null || period.isBlank())
+                ? courseRepository.findAllByDateAndTeacher_IdOrderByPeriodAsc(date, teacher.getId())
+                : courseRepository.findAllByDateAndPeriodAndTeacher_Id(date, period, teacher.getId());
+
+        Map<String, StateEnum> stateByPeriod = new LinkedHashMap<>();
+        for (CourseEntity entity : reservations) {
+            if (entity.getState() == StateEnum.CANCEL) {
+                continue;
+            }
+            StateEnum previous = stateByPeriod.get(entity.getPeriod());
+            if (previous == null || priority(entity.getState()) > priority(previous)) {
+                stateByPeriod.put(entity.getPeriod(), entity.getState());
+            }
+        }
+
+        return stateByPeriod.entrySet().stream()
+                .map(e -> new SlotStatusDTO(teacher.getId(), date, e.getKey(), e.getValue()))
+                .toList();
+    }
+
+    private int priority(StateEnum state) {
+        return switch (state) {
+            case LOCKED -> 4;
+            case RESERVED -> 3;
+            case AUTO -> 2;
+            default -> 1;
+        };
     }
 
     private TeacherReadDTO toTeacherDTO(CourseEntity e) {
