@@ -16,6 +16,8 @@ public interface CommonRepository extends JpaRepository<CommonEntity, Long> {
 
     List<CommonEntity> findAllByDateAndPeriodAndTeacher_Id(LocalDate date, String period, Long teacherId);
 
+    List<CommonEntity> findAllByDateAndTeacher_IdOrderByPeriodAsc(LocalDate date, Long teacherId);
+
     @EntityGraph(attributePaths = {"user", "teacher"})
     List<CommonEntity> findByUser_id(Long userId);
 

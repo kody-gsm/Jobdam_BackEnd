@@ -2,19 +2,23 @@ package com.example.kodyjobdam.course.controller;
 
 import com.example.kodyjobdam.course.dto.request.CreateDTO;
 import com.example.kodyjobdam.course.dto.request.LockDTO;
+import com.example.kodyjobdam.course.dto.response.SlotStatusDTO;
 import com.example.kodyjobdam.course.dto.response.StudentReadDTO;
 import com.example.kodyjobdam.course.dto.response.TeacherReadDTO;
 import com.example.kodyjobdam.course.service.CourseService;
 import com.example.kodyjobdam.user.security.SecurityUtil;
 import lombok.RequiredArgsConstructor;
+import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
+import java.time.LocalDate;
 import java.util.List;
 
 @RestController
@@ -68,5 +72,13 @@ public class CourseController {
     @GetMapping("/teacher/course/pending")
     public List<TeacherReadDTO> P_read() {
         return courseService.P_Read(securityUtil.getCurrentUserId());
+    }
+
+    @GetMapping({"/student/course/status", "/teacher/course/status"})
+    public List<SlotStatusDTO> readSlotStatus(
+            @RequestParam Long teacherId,
+            @RequestParam @DateTimeFormat(pattern = "yyyy-MM-dd") LocalDate date,
+            @RequestParam(required = false) String period) {
+        return courseService.readSlotStatus(teacherId, date, period);
     }
 }

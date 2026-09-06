@@ -3,6 +3,7 @@ package com.example.kodyjobdam.common.service;
 import com.example.kodyjobdam.common.dto.request.CreateDTO;
 import com.example.kodyjobdam.common.dto.request.LockDTO;
 import com.example.kodyjobdam.common.dto.response.StudentReadDTO;
+import com.example.kodyjobdam.common.dto.response.SlotStatusDTO;
 import com.example.kodyjobdam.common.dto.response.TeacherReadDTO;
 import com.example.kodyjobdam.common.entity.CommonEntity;
 import com.example.kodyjobdam.common.entity.StateEnum;
@@ -19,7 +20,10 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.LocalDate;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 
 @Service
 @Slf4j
@@ -177,6 +181,42 @@ public class CommonService {
                 .toList();
     }
 
+    @Transactional(readOnly = true)
+    public List<SlotStatusDTO> readSlotStatus(Long teacherId, LocalDate date, String period) {
+        if (date == null) {
+            throw ReservationException.badRequest("날짜를 선택해주세요.");
+        }
+        User teacher = findTeacher(teacherId);
+
+        List<CommonEntity> reservations = (period == null || period.isBlank())
+                ? commonRepository.findAllByDateAndTeacher_IdOrderByPeriodAsc(date, teacher.getId())
+                : commonRepository.findAllByDateAndPeriodAndTeacher_Id(date, period, teacher.getId());
+
+        Map<String, StateEnum> stateByPeriod = new LinkedHashMap<>();
+        for (CommonEntity entity : reservations) {
+            if (entity.getState() == StateEnum.CANCEL) {
+                continue;
+            }
+            StateEnum previous = stateByPeriod.get(entity.getPeriod());
+            if (previous == null || priority(entity.getState()) > priority(previous)) {
+                stateByPeriod.put(entity.getPeriod(), entity.getState());
+            }
+        }
+
+        return stateByPeriod.entrySet().stream()
+                .map(e -> new SlotStatusDTO(teacher.getId(), date, e.getKey(), e.getValue()))
+                .toList();
+    }
+
+    private int priority(StateEnum state) {
+        return switch (state) {
+            case LOCKED -> 4;
+            case RESERVED -> 3;
+            case AUTO -> 2;
+            default -> 1;
+        };
+    }
+
     private TeacherReadDTO toTeacherDTO(CommonEntity e) {
         return new TeacherReadDTO(
                 e.getReservation_id(),
@@ -187,11 +227,15 @@ public class CommonService {
     }
 
     private User findTeacher(Long teacherId, Long studentId) {
+        if (teacherId != null && teacherId.equals(studentId)) {
+            throw ReservationException.badRequest("자기 자신을 선생님으로 지정할 수 없습니다.");
+        }
+        return findTeacher(teacherId);
+    }
+
+    private User findTeacher(Long teacherId) {
         if (teacherId == null) {
             throw ReservationException.badRequest("선생님을 선택해주세요.");
-        }
-        if (teacherId.equals(studentId)) {
-            throw ReservationException.badRequest("자기 자신을 선생님으로 지정할 수 없습니다.");
         }
 
         User teacher = userRepository.findById(teacherId)
