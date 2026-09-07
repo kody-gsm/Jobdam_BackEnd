@@ -8,6 +8,7 @@ import com.example.kodyjobdam.common.exception.ReservationException;
 import com.example.kodyjobdam.common.repository.CommonRepository;
 import com.example.kodyjobdam.notification.entity.NotificationType;
 import com.example.kodyjobdam.notification.service.NotificationService;
+import com.example.kodyjobdam.schedule.service.ScheduleService;
 import com.example.kodyjobdam.user.UserRepository;
 import com.example.kodyjobdam.user.UserRole;
 import com.example.kodyjobdam.user.entity.User;
@@ -50,8 +51,12 @@ class CommonServiceTest {
     @Mock
     private CounselingReservationCryptoService cryptoService;
 
+    @Mock
+    private ScheduleService scheduleService;
+
     @InjectMocks
     private CommonService commonService;
+
 
     @Test
     void createReservationNotifiesOnlySelectedTeacher() {
@@ -199,6 +204,29 @@ class CommonServiceTest {
                 eq("/student/common/100"),
                 eq(LocalDateTime.of(2026, 12, 9, 0, 0))
         );
+    }
+
+    @Test
+    void createReservationOnHolidayIsRejected() {
+        CreateDTO dto = createDto(2L);
+        when(scheduleService.isHoliday(dto.getDate())).thenReturn(true);
+
+        assertThatThrownBy(() -> commonService.createReservation(dto, 1L))
+                .isInstanceOf(ReservationException.class)
+                .hasMessage("휴업일에는 상담을 예약할 수 없습니다.");
+
+        verify(commonRepository, never()).save(any(CommonEntity.class));
+        verify(notificationService, never()).notifyUser(any(), any(), any(), any(), any(), any(), any());
+    }
+
+    @Test
+    void readSlotStatusOnHolidayIsRejected() {
+        LocalDate holiday = LocalDate.of(2026, 9, 25);
+        when(scheduleService.isHoliday(holiday)).thenReturn(true);
+
+        assertThatThrownBy(() -> commonService.readSlotStatus(2L, holiday, null))
+                .isInstanceOf(ReservationException.class)
+                .hasMessage("휴업일에는 상담을 예약할 수 없습니다.");
     }
 
     private CreateDTO createDto(Long teacherId) {

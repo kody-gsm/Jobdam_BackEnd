@@ -14,6 +14,7 @@ import com.example.kodyjobdam.course.repository.CourseRepository;
 import com.example.kodyjobdam.notification.entity.NotificationType;
 import com.example.kodyjobdam.notification.service.NotificationExpirationService;
 import com.example.kodyjobdam.notification.service.NotificationService;
+import com.example.kodyjobdam.schedule.service.ScheduleService;
 import com.example.kodyjobdam.user.UserRepository;
 import com.example.kodyjobdam.user.UserRole;
 import com.example.kodyjobdam.user.entity.User;
@@ -37,6 +38,7 @@ public class CourseService {
     private final NotificationService notificationService;
     private final NotificationExpirationService notificationExpirationService;
     private final CounselingReservationCryptoService cryptoService;
+    private final ScheduleService scheduleService;
 
     public void courseSave(CourseEntity entity) {
         courseRepository.save(entity);
@@ -44,6 +46,8 @@ public class CourseService {
 
     @Transactional
     public void createReservation(CreateDTO dto, Long id) {
+        validateNotHoliday(dto.getDate());
+
         User user = userRepository.findById(id)
                 .orElseThrow(() -> ReservationException.notFound("회원이 없습니다."));
         User teacher = findTeacher(dto.getTeacherId(), id);
@@ -203,6 +207,8 @@ public class CourseService {
         if (date == null) {
             throw ReservationException.badRequest("날짜를 선택해주세요.");
         }
+        validateNotHoliday(date);
+
         User teacher = findTeacher(teacherId);
 
         List<CourseEntity> reservations = (period == null || period.isBlank())
@@ -223,6 +229,13 @@ public class CourseService {
         return stateByPeriod.entrySet().stream()
                 .map(e -> new SlotStatusDTO(teacher.getId(), date, e.getKey(), e.getValue()))
                 .toList();
+    }
+
+    /** 학사일정상 휴업일(공휴일 등)에는 상담을 잡을 수 없다. */
+    private void validateNotHoliday(LocalDate date) {
+        if (scheduleService.isHoliday(date)) {
+            throw ReservationException.locked("휴업일에는 상담을 예약할 수 없습니다.");
+        }
     }
 
     private int priority(StateEnum state) {
