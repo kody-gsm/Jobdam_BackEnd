@@ -6,6 +6,7 @@ import com.example.kodyjobdam.common.dto.response.SlotStatusDTO;
 import com.example.kodyjobdam.common.entity.CounselingCategoryEnum;
 import com.example.kodyjobdam.common.entity.StateEnum;
 import com.example.kodyjobdam.common.exception.ReservationException;
+import com.example.kodyjobdam.common.exception.ScheduleException;
 import com.example.kodyjobdam.common.repository.CommonRepository;
 import com.example.kodyjobdam.notification.entity.NotificationType;
 import com.example.kodyjobdam.notification.service.NotificationService;
@@ -236,6 +237,20 @@ class CommonServiceTest {
         assertThatThrownBy(() -> commonService.readSlotStatus(2L, holiday, null))
                 .isInstanceOf(ReservationException.class)
                 .hasMessage("휴업일에는 상담을 예약할 수 없습니다.");
+    }
+
+    @Test
+    void createReservationIsRejectedWhenScheduleLookupFails() {
+        CreateDTO dto = createDto(2L);
+        when(scheduleService.isHoliday(dto.getDate()))
+                .thenThrow(ScheduleException.badGateway("나이스 학사일정을 불러오지 못했습니다."));
+
+        assertThatThrownBy(() -> commonService.createReservation(dto, 1L))
+                .isInstanceOf(ReservationException.class)
+                .hasMessage("학사일정을 확인할 수 없어 예약을 처리할 수 없습니다. 잠시 후 다시 시도해주세요.");
+
+        verify(commonRepository, never()).save(any(CommonEntity.class));
+        verify(notificationService, never()).notifyUser(any(), any(), any(), any(), any(), any(), any());
     }
 
     @Test

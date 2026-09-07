@@ -61,8 +61,8 @@ public class ScheduleService {
     /**
      * 해당 날짜가 휴업일(공휴일, 토요휴업일, 학교장재량휴업일 등)인지 판단한다.
      *
-     * <p>예약 차단용 보조 판정이므로 나이스 조회에 실패하면 예약을 막지 않도록 false를 돌려준다.
-     * 나이스 장애가 예약 기능 전체를 멈추게 해서는 안 된다.</p>
+     * <p>나이스 조회에 실패하면 예외를 그대로 던진다. 휴업일인지 확인하지 못한 채 예약을
+     * 받으면 공휴일에 상담이 잡히므로, 판단할 수 없으면 호출한 쪽에서 막아야 한다.</p>
      */
     public boolean isHoliday(LocalDate date) {
         if (date == null) {
@@ -70,13 +70,8 @@ public class ScheduleService {
         }
 
         YearMonth yearMonth = YearMonth.from(date);
-        try {
-            return findCached(yearMonth.atDay(1), yearMonth.atEndOfMonth()).stream()
-                    .anyMatch(schedule -> date.equals(schedule.getDate()) && schedule.isHoliday());
-        } catch (RuntimeException e) {
-            log.warn("휴업일 판단에 실패해 예약을 허용합니다. date={}", date, e);
-            return false;
-        }
+        return findCached(yearMonth.atDay(1), yearMonth.atEndOfMonth()).stream()
+                .anyMatch(schedule -> date.equals(schedule.getDate()) && schedule.isHoliday());
     }
 
     public List<ScheduleReadDTO> readMonthlySchedules(int year, int month, Integer grade) {

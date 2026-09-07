@@ -8,6 +8,7 @@ import com.example.kodyjobdam.common.dto.response.TeacherReadDTO;
 import com.example.kodyjobdam.common.entity.CommonEntity;
 import com.example.kodyjobdam.common.entity.CounselingCategoryEnum;
 import com.example.kodyjobdam.common.entity.StateEnum;
+import com.example.kodyjobdam.common.exception.BusinessException;
 import com.example.kodyjobdam.common.exception.ReservationException;
 import com.example.kodyjobdam.common.repository.CommonRepository;
 import com.example.kodyjobdam.notification.entity.NotificationType;
@@ -247,9 +248,21 @@ public class CommonService {
                 .toList();
     }
 
-    /** 학사일정상 휴업일(공휴일 등)에는 상담을 잡을 수 없다. */
+    /**
+     * 학사일정상 휴업일(공휴일 등)에는 상담을 잡을 수 없다.
+     * 학사일정을 확인하지 못하면 휴업일일 수 있으므로 예약을 막는다.
+     */
     private void validateNotHoliday(LocalDate date) {
-        if (scheduleService.isHoliday(date)) {
+        boolean holiday;
+        try {
+            holiday = scheduleService.isHoliday(date);
+        } catch (BusinessException e) {
+            log.warn("학사일정을 확인하지 못해 예약을 막습니다. date={}", date, e);
+            throw ReservationException.badGateway(
+                    "학사일정을 확인할 수 없어 예약을 처리할 수 없습니다. 잠시 후 다시 시도해주세요.");
+        }
+
+        if (holiday) {
             throw ReservationException.locked("휴업일에는 상담을 예약할 수 없습니다.");
         }
     }
