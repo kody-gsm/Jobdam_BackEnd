@@ -31,19 +31,16 @@ public class NeisScheduleClient {
     private static final int PAGE_SIZE = 1000;
     private static final int MAX_PAGE = 10;
 
-    private final RestClient.Builder restClientBuilder;
+    private static final String BASE_URL = "https://open.neis.go.kr";
+    /** 시도교육청코드 - 광주 */
+    private static final String OFFICE_CODE = "F10";
+    /** 표준학교코드 - 광주소프트웨어마이스터고등학교 */
+    private static final String SCHOOL_CODE = "7140392";
 
-    @Value("${neis.api.base-url:https://open.neis.go.kr}")
-    private String baseUrl;
+    private final RestClient.Builder restClientBuilder;
 
     @Value("${neis.api.key:}")
     private String apiKey;
-
-    @Value("${neis.school.office-code:F10}")
-    private String officeCode;
-
-    @Value("${neis.school.code:7140392}")
-    private String schoolCode;
 
     public List<NeisScheduleRow> fetchSchedules(LocalDate from, LocalDate to) {
         if (apiKey == null || apiKey.isBlank()) {
@@ -63,14 +60,14 @@ public class NeisScheduleClient {
     }
 
     private List<NeisScheduleRow> fetchPage(LocalDate from, LocalDate to, int page) {
-        URI uri = UriComponentsBuilder.fromHttpUrl(baseUrl)
+        URI uri = UriComponentsBuilder.fromHttpUrl(BASE_URL)
                 .path("/hub/SchoolSchedule")
                 .queryParam("KEY", apiKey)
                 .queryParam("Type", "json")
                 .queryParam("pIndex", page)
                 .queryParam("pSize", PAGE_SIZE)
-                .queryParam("ATPT_OFCDC_SC_CODE", officeCode)
-                .queryParam("SD_SCHUL_CODE", schoolCode)
+                .queryParam("ATPT_OFCDC_SC_CODE", OFFICE_CODE)
+                .queryParam("SD_SCHUL_CODE", SCHOOL_CODE)
                 .queryParam("AA_FROM_YMD", from.format(YMD))
                 .queryParam("AA_TO_YMD", to.format(YMD))
                 .build()
