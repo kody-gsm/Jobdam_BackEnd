@@ -16,12 +16,14 @@ public interface CommonRepository extends JpaRepository<CommonEntity, Long> {
 
     List<CommonEntity> findAllByDateAndPeriodAndTeacher_Id(LocalDate date, String period, Long teacherId);
 
-    @EntityGraph(attributePaths = {"user", "teacher"})
-    List<CommonEntity> findByUser_id(Long userId);
+    List<CommonEntity> findAllByDateAndTeacher_IdOrderByPeriodAsc(LocalDate date, Long teacherId);
 
-    @EntityGraph(attributePaths = {"user", "teacher"})
+    @EntityGraph(attributePaths = {"teacher"})
+    List<CommonEntity> findBySubmitterHash(String submitterHash);
+
+    @EntityGraph(attributePaths = {"teacher"})
     List<CommonEntity> findByTeacher_Id(Long teacherId);
 
-    @EntityGraph(attributePaths = {"user", "teacher"})
+    @EntityGraph(attributePaths = {"teacher"})
     List<CommonEntity> findByTeacher_IdAndStateOrderByDateAscPeriodAsc(Long teacherId, StateEnum state);
 }

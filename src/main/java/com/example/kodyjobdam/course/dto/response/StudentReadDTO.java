@@ -1,5 +1,6 @@
 package com.example.kodyjobdam.course.dto.response;
 
+import com.example.kodyjobdam.common.entity.CounselingCategoryEnum;
 import lombok.Getter;
 
 import java.time.LocalDate;
@@ -15,10 +16,13 @@ public class StudentReadDTO {
 
     private String period;
 
-    public StudentReadDTO(Long id, String name, LocalDate date, String period) {
+    private CounselingCategoryEnum category;
+
+    public StudentReadDTO(Long id, String name, LocalDate date, String period, CounselingCategoryEnum category) {
         this.id = id;
         this.name = name;
         this.date = date;
         this.period = period;
+        this.category = category;
     }
 }

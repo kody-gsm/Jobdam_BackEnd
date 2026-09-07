@@ -20,6 +20,10 @@ public class RecruitException extends BusinessException {
         return new RecruitException(HttpStatus.FORBIDDEN, "RECRUIT_FORBIDDEN", message);
     }
 
+    public static RecruitException tooManyRequests(String message) {
+        return new RecruitException(HttpStatus.TOO_MANY_REQUESTS, "RECRUIT_TOO_MANY_REQUESTS", message);
+    }
+
     public static RecruitException badGateway(String message) {
         return new RecruitException(HttpStatus.BAD_GATEWAY, "RECRUIT_BAD_GATEWAY", message);
     }

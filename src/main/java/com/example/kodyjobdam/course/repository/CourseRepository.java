@@ -16,12 +16,14 @@ public interface CourseRepository extends JpaRepository<CourseEntity, Long> {
 
     List<CourseEntity> findAllByDateAndPeriodAndTeacher_Id(LocalDate date, String period, Long teacherId);
 
-    @EntityGraph(attributePaths = {"user", "teacher"})
-    List<CourseEntity> findByUser_id(Long userId);
+    List<CourseEntity> findAllByDateAndTeacher_IdOrderByPeriodAsc(LocalDate date, Long teacherId);
 
-    @EntityGraph(attributePaths = {"user", "teacher"})
+    @EntityGraph(attributePaths = {"teacher"})
+    List<CourseEntity> findBySubmitterHash(String submitterHash);
+
+    @EntityGraph(attributePaths = {"teacher"})
     List<CourseEntity> findByTeacher_Id(Long teacherId);
 
-    @EntityGraph(attributePaths = {"user", "teacher"})
+    @EntityGraph(attributePaths = {"teacher"})
     List<CourseEntity> findByTeacher_IdAndStateOrderByDateAscPeriodAsc(Long teacherId, StateEnum state);
 }

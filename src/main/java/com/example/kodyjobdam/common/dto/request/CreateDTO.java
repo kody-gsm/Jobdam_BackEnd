@@ -1,6 +1,7 @@
 package com.example.kodyjobdam.common.dto.request;
 
 import com.example.kodyjobdam.common.entity.CommonEntity;
+import com.example.kodyjobdam.common.entity.CounselingCategoryEnum;
 import com.example.kodyjobdam.common.entity.StateEnum;
 import com.example.kodyjobdam.user.entity.User;
 import lombok.Getter;
@@ -17,6 +18,8 @@ public class CreateDTO {
 
     private String content;
 
+    private CounselingCategoryEnum category;
+
     @DateTimeFormat(pattern = "yyyy-MM-dd")
     private LocalDate date;
 
@@ -24,15 +27,20 @@ public class CreateDTO {
 
     private Long teacherId;
 
-    public CommonEntity toEntity(User user, User teacher) {
+    public CommonEntity toEntity(User teacher, String submitterHash, String encryptedTitle, String encryptedContent,
+                                 String encryptedUserId, String encryptedUserName, String encryptedStudentNumber) {
         return CommonEntity.builder()
-                .title(title)
-                .content(content)
+                .submitterHash(submitterHash)
+                .encryptedTitle(encryptedTitle)
+                .encryptedContent(encryptedContent)
+                .category(category)
+                .encryptedUserId(encryptedUserId)
+                .encryptedUserName(encryptedUserName)
+                .encryptedStudentNumber(encryptedStudentNumber)
                 .date(date)
                 .period(period)
                 .state(StateEnum.WAITING)
                 .teacher(teacher)
-                .user(user)
                 .build();
     }
 }

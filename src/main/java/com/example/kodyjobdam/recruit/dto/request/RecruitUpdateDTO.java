@@ -1,5 +1,6 @@
 package com.example.kodyjobdam.recruit.dto.request;
 
+import com.example.kodyjobdam.recruit.dto.RecruitPeriodDTO;
 import lombok.Getter;
 
 @Getter
@@ -7,9 +8,15 @@ public class RecruitUpdateDTO {
 
     private String companyName;
 
-    private String interviewDate;
+    private RecruitPeriodDTO documentPeriod;
 
-    private String deadline;
+    private RecruitPeriodDTO writtenExamPeriod;
+
+    private RecruitPeriodDTO practicalExamPeriod;
+
+    private RecruitPeriodDTO codingTestPeriod;
+
+    private RecruitPeriodDTO interviewPeriod;
 
     private String summary;
 }

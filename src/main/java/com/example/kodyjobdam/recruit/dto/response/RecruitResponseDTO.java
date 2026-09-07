@@ -1,5 +1,6 @@
 package com.example.kodyjobdam.recruit.dto.response;
 
+import com.example.kodyjobdam.recruit.dto.RecruitPeriodDTO;
 import com.example.kodyjobdam.recruit.entity.RecruitEntity;
 import com.example.kodyjobdam.recruit.entity.RecruitStatus;
 import lombok.Builder;
@@ -15,9 +16,15 @@ public class RecruitResponseDTO {
 
     private String companyName;
 
-    private String interviewDate;
+    private RecruitPeriodDTO documentPeriod;
 
-    private String deadline;
+    private RecruitPeriodDTO writtenExamPeriod;
+
+    private RecruitPeriodDTO practicalExamPeriod;
+
+    private RecruitPeriodDTO codingTestPeriod;
+
+    private RecruitPeriodDTO interviewPeriod;
 
     private String summary;
 
@@ -31,8 +38,11 @@ public class RecruitResponseDTO {
         return RecruitResponseDTO.builder()
                 .id(entity.getId())
                 .companyName(entity.getCompanyName())
-                .interviewDate(entity.getInterviewDate())
-                .deadline(entity.getDeadline())
+                .documentPeriod(RecruitPeriodDTO.from(entity.getDocumentPeriod()))
+                .writtenExamPeriod(RecruitPeriodDTO.from(entity.getWrittenExamPeriod()))
+                .practicalExamPeriod(RecruitPeriodDTO.from(entity.getPracticalExamPeriod()))
+                .codingTestPeriod(RecruitPeriodDTO.from(entity.getCodingTestPeriod()))
+                .interviewPeriod(RecruitPeriodDTO.from(entity.getInterviewPeriod()))
                 .summary(entity.getSummary())
                 .status(entity.getStatus())
                 .createdAt(entity.getCreatedAt())
