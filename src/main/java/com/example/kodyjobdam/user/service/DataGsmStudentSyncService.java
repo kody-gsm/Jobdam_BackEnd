@@ -64,7 +64,9 @@ public class DataGsmStudentSyncService {
         user.setGrade(student.grade());
         user.setClassNum(student.classNum());
         user.setNumber(student.number());
-        user.setRole(UserRole.STUDENT);
+        if (user.getRole() == null) {
+            user.setRole(UserRole.STUDENT);
+        }
 
         return userRepository.save(user);
     }

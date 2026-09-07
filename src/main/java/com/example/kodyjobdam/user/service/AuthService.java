@@ -76,7 +76,9 @@ public class AuthService {
         }
 
         user.setPassword(passwordEncoder.encode(request.getPassword()));
-        user.setRole(UserRole.STUDENT);
+        if (user.getRole() == null) {
+            user.setRole(UserRole.STUDENT);
+        }
         user.setEmailVerified(true);
 
         User savedUser;
