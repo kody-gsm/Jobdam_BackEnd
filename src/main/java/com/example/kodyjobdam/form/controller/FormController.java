@@ -79,6 +79,22 @@ public class FormController {
         return ResponseEntity.ok(formSubmissionService.getSubmission(id, submissionId, securityUtil.getCurrentUserId()));
     }
 
+    /** 지원자 확정 */
+    @PostMapping("/teacher/form/{id}/submission/{submissionId}/confirm")
+    public ResponseEntity<FormSubmissionResponseDTO> confirmSubmission(@PathVariable Long id,
+                                                                       @PathVariable Long submissionId) {
+        return ResponseEntity.ok(
+                formSubmissionService.confirm(id, submissionId, securityUtil.getCurrentUserId()));
+    }
+
+    /** 지원자 확정 되돌리기 */
+    @DeleteMapping("/teacher/form/{id}/submission/{submissionId}/confirm")
+    public ResponseEntity<FormSubmissionResponseDTO> cancelConfirmSubmission(@PathVariable Long id,
+                                                                             @PathVariable Long submissionId) {
+        return ResponseEntity.ok(
+                formSubmissionService.cancelConfirm(id, submissionId, securityUtil.getCurrentUserId()));
+    }
+
     // ===== 학생(STUDENT) 전용 =====
 
     /** 응답 제출 (1인 1회) */
