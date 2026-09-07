@@ -8,6 +8,7 @@ import com.example.kodyjobdam.form.entity.FormQuestionEntity;
 import com.example.kodyjobdam.form.entity.FormStatus;
 import com.example.kodyjobdam.form.entity.QuestionType;
 import com.example.kodyjobdam.form.repository.FormRepository;
+import com.example.kodyjobdam.form.repository.FormSubmissionRepository;
 import com.example.kodyjobdam.notification.entity.NotificationType;
 import com.example.kodyjobdam.notification.service.NotificationService;
 import com.example.kodyjobdam.user.UserRepository;
@@ -38,6 +39,9 @@ class FormServiceTest {
     private FormRepository formRepository;
 
     @Mock
+    private FormSubmissionRepository submissionRepository;
+
+    @Mock
     private UserRepository userRepository;
 
     @Mock
@@ -48,6 +52,46 @@ class FormServiceTest {
 
     @InjectMocks
     private FormService formService;
+
+    @Test
+    void 응답이_없으면_폼을_삭제한다() {
+        FormEntity form = draftForm();
+        when(formRepository.findById(1L)).thenReturn(Optional.of(form));
+        when(submissionRepository.existsByFormId(1L)).thenReturn(false);
+
+        formService.delete(1L, 2L);
+
+        verify(formRepository).delete(form);
+    }
+
+    @Test
+    void 응답이_있으면_폼을_삭제할_수_없다() {
+        when(formRepository.findById(1L)).thenReturn(Optional.of(draftForm()));
+        when(submissionRepository.existsByFormId(1L)).thenReturn(true);
+
+        assertThatThrownBy(() -> formService.delete(1L, 2L))
+                .isInstanceOf(FormException.class)
+                .hasMessage("응답이 제출된 폼은 삭제할 수 없습니다.");
+        verify(formRepository, never()).delete(any(FormEntity.class));
+    }
+
+    @Test
+    void 다른_선생님은_폼을_삭제할_수_없다() {
+        when(formRepository.findById(1L)).thenReturn(Optional.of(draftForm()));
+
+        assertThatThrownBy(() -> formService.delete(1L, 99L))
+                .isInstanceOf(FormException.class);
+        verify(formRepository, never()).delete(any(FormEntity.class));
+    }
+
+    private FormEntity draftForm() {
+        return FormEntity.builder()
+                .id(1L)
+                .title("폼")
+                .user(user(2L))
+                .status(FormStatus.DRAFT)
+                .build();
+    }
 
     @Test
     void createDraftDoesNotCreateNotification() {

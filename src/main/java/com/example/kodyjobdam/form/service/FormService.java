@@ -11,6 +11,7 @@ import com.example.kodyjobdam.form.entity.FormQuestionEntity;
 import com.example.kodyjobdam.form.entity.FormQuestionOptionEntity;
 import com.example.kodyjobdam.form.entity.FormStatus;
 import com.example.kodyjobdam.form.repository.FormRepository;
+import com.example.kodyjobdam.form.repository.FormSubmissionRepository;
 import com.example.kodyjobdam.notification.entity.NotificationType;
 import com.example.kodyjobdam.notification.service.NotificationExpirationService;
 import com.example.kodyjobdam.notification.service.NotificationService;
@@ -27,6 +28,8 @@ import java.util.List;
 public class FormService {
 
     private final FormRepository formRepository;
+
+    private final FormSubmissionRepository submissionRepository;
 
     private final UserRepository userRepository;
 
@@ -71,6 +74,19 @@ public class FormService {
         applyQuestions(form, dto.getQuestions());
 
         return FormResponseDTO.from(form);
+    }
+
+    /** 선생님: 폼 삭제 (응답이 하나라도 있으면 지울 수 없다) */
+    @Transactional
+    public void delete(Long formId, Long teacherId) {
+        FormEntity form = findOrThrow(formId);
+        validateOwner(form, teacherId);
+
+        if (submissionRepository.existsByFormId(formId)) {
+            throw FormException.conflict("응답이 제출된 폼은 삭제할 수 없습니다.");
+        }
+
+        formRepository.delete(form);
     }
 
     /** 선생님: 학생에게 공개 */
