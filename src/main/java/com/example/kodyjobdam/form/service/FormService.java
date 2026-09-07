@@ -65,13 +65,20 @@ public class FormService {
         FormEntity form = findOrThrow(formId);
         validateOwner(form, teacherId);
 
-        if (!form.isEditable()) {
-            throw FormException.badRequest("이미 공개된 폼은 수정할 수 없습니다. 새 폼을 만들어주세요.");
-        }
-
         form.update(dto.getTitle(), dto.getDescription(), dto.getDeadline());
-        form.clearQuestions();
-        applyQuestions(form, dto.getQuestions());
+
+        if (dto.getQuestions() != null) {
+            if (dto.getQuestions().isEmpty()) {
+                throw FormException.badRequest("질문을 1개 이상 추가해주세요.");
+            }
+            // 답변이 질문을 참조하므로 응답이 들어온 뒤에는 질문을 갈아끼울 수 없다.
+            if (submissionRepository.existsByFormId(formId)) {
+                throw FormException.conflict("이미 응답이 제출된 폼은 질문을 바꿀 수 없습니다.");
+            }
+
+            form.clearQuestions();
+            applyQuestions(form, dto.getQuestions());
+        }
 
         return FormResponseDTO.from(form);
     }

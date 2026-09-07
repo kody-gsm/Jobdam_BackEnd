@@ -2,6 +2,7 @@ package com.example.kodyjobdam.form.service;
 
 import com.example.kodyjobdam.common.exception.FormException;
 import com.example.kodyjobdam.form.dto.request.FormCreateDTO;
+import com.example.kodyjobdam.form.dto.request.FormUpdateDTO;
 import com.example.kodyjobdam.form.dto.request.FormQuestionCreateDTO;
 import com.example.kodyjobdam.form.entity.FormEntity;
 import com.example.kodyjobdam.form.entity.FormQuestionEntity;
@@ -25,6 +26,7 @@ import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
@@ -82,6 +84,31 @@ class FormServiceTest {
         assertThatThrownBy(() -> formService.delete(1L, 99L))
                 .isInstanceOf(FormException.class);
         verify(formRepository, never()).delete(any(FormEntity.class));
+    }
+
+    @Test
+    void 공개된_폼도_수정할_수_있다() {
+        FormEntity form = FormEntity.builder()
+                .id(1L)
+                .title("이전 제목")
+                .user(user(2L))
+                .status(FormStatus.PUBLISHED)
+                .build();
+        when(formRepository.findById(1L)).thenReturn(Optional.of(form));
+
+        formService.update(1L, updateDtoWithoutQuestions("새 제목"), 2L);
+
+        assertThat(form.getTitle()).isEqualTo("새 제목");
+    }
+
+    @Test
+    void 응답이_있으면_질문을_바꿀_수_없다() {
+        when(formRepository.findById(1L)).thenReturn(Optional.of(draftForm()));
+        when(submissionRepository.existsByFormId(1L)).thenReturn(true);
+
+        assertThatThrownBy(() -> formService.update(1L, updateDtoWithQuestions(), 2L))
+                .isInstanceOf(FormException.class)
+                .hasMessage("이미 응답이 제출된 폼은 질문을 바꿀 수 없습니다.");
     }
 
     private FormEntity draftForm() {
@@ -164,6 +191,24 @@ class FormServiceTest {
                 .isInstanceOf(FormException.class)
                 .hasMessage("폼을 관리할 권한이 없습니다.");
         verify(notificationService, never()).notifyAllStudents(any(), any(), any(), any(), any(), any());
+    }
+
+    private FormUpdateDTO updateDtoWithoutQuestions(String title) {
+        FormUpdateDTO dto = new FormUpdateDTO();
+        ReflectionTestUtils.setField(dto, "title", title);
+        return dto;
+    }
+
+    private FormUpdateDTO updateDtoWithQuestions() {
+        FormQuestionCreateDTO question = new FormQuestionCreateDTO();
+        ReflectionTestUtils.setField(question, "type", QuestionType.SHORT_TEXT);
+        ReflectionTestUtils.setField(question, "title", "바뀐 질문");
+        ReflectionTestUtils.setField(question, "required", true);
+
+        FormUpdateDTO dto = new FormUpdateDTO();
+        ReflectionTestUtils.setField(dto, "title", "제목");
+        ReflectionTestUtils.setField(dto, "questions", List.of(question));
+        return dto;
     }
 
     private FormCreateDTO createDto() {
