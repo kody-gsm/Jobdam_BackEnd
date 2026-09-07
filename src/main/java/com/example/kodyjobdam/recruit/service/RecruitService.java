@@ -3,6 +3,7 @@ package com.example.kodyjobdam.recruit.service;
 import com.example.kodyjobdam.common.exception.RecruitException;
 import com.example.kodyjobdam.recruit.client.GeminiAnalysisResult;
 import com.example.kodyjobdam.recruit.client.GeminiClient;
+import com.example.kodyjobdam.recruit.dto.RecruitPeriodDTO;
 import com.example.kodyjobdam.recruit.dto.request.RecruitUpdateDTO;
 import com.example.kodyjobdam.recruit.dto.response.RecruitResponseDTO;
 import com.example.kodyjobdam.recruit.entity.RecruitEntity;
@@ -67,8 +68,11 @@ public class RecruitService {
         RecruitEntity entity = recruitRepository.save(RecruitEntity.builder()
                 .user(user)
                 .companyName(result.companyName())
-                .interviewDate(result.interviewDate())
-                .deadline(result.deadline())
+                .documentPeriod(result.documentPeriod())
+                .writtenExamPeriod(result.writtenExamPeriod())
+                .practicalExamPeriod(result.practicalExamPeriod())
+                .codingTestPeriod(result.codingTestPeriod())
+                .interviewPeriod(result.interviewPeriod())
                 .summary(result.summary())
                 .status(RecruitStatus.DRAFT)
                 .build());
@@ -81,7 +85,14 @@ public class RecruitService {
     public RecruitResponseDTO update(Long recruitId, RecruitUpdateDTO dto, Long teacherId) {
         RecruitEntity entity = findOrThrow(recruitId);
         validateOwner(entity, teacherId);
-        entity.update(dto.getCompanyName(), dto.getInterviewDate(), dto.getDeadline(), dto.getSummary());
+        entity.update(
+                dto.getCompanyName(),
+                RecruitPeriodDTO.toPeriod(dto.getDocumentPeriod()),
+                RecruitPeriodDTO.toPeriod(dto.getWrittenExamPeriod()),
+                RecruitPeriodDTO.toPeriod(dto.getPracticalExamPeriod()),
+                RecruitPeriodDTO.toPeriod(dto.getCodingTestPeriod()),
+                RecruitPeriodDTO.toPeriod(dto.getInterviewPeriod()),
+                dto.getSummary());
         return RecruitResponseDTO.from(entity);
     }
 

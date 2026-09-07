@@ -2,6 +2,7 @@ package com.example.kodyjobdam.recruit.client;
 
 import com.example.kodyjobdam.common.exception.ConfigException;
 import com.example.kodyjobdam.common.exception.RecruitException;
+import com.example.kodyjobdam.recruit.entity.RecruitPeriod;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ArrayNode;
@@ -17,6 +18,9 @@ import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClientException;
 import org.springframework.web.client.RestTemplate;
 
+import java.time.LocalDate;
+import java.time.format.DateTimeFormatter;
+import java.time.format.DateTimeParseException;
 import java.util.Base64;
 
 @Slf4j
@@ -32,12 +36,22 @@ public class GeminiClient {
             이미지에서 아래 항목을 추출해서 JSON으로만 응답하세요. 해당 정보가 없으면 null로 표기하세요.
 
             - companyName: 회사(기업) 이름
-            - interviewDate: 면접 일자 및 시간
-            - deadline: 지원서 접수/제출 마감 기한
-            - summary: 그 외 지원자가 꼭 알아야 할 중요 정보(전형 절차, 준비물, 장소 등)를 2~3문장으로 요약
+            - documentPeriod: 서류 접수 기간
+            - writtenExamPeriod: 필기 전형 기간
+            - practicalExamPeriod: 실기 전형 기간
+            - codingTestPeriod: 코딩테스트 전형 기간
+            - interviewPeriod: 면접 전형 기간
+            - summary: 그 외 지원자가 꼭 알아야 할 중요 정보(준비물, 장소, 상세 시각 등)를 2~3문장으로 요약
+
+            기간 항목은 {"startDate": "YYYY-MM-DD", "endDate": "YYYY-MM-DD"} 형태의 객체로만 작성하세요.
+            - 날짜는 반드시 YYYY-MM-DD 형식이어야 하며 다른 형식이나 설명을 덧붙이지 마세요.
+            - 하루만 진행하는 전형은 startDate와 endDate에 같은 날짜를 넣으세요.
+            - 연도가 적혀 있지 않으면 가장 가까운 미래 연도로 추정하세요.
+            - 공고에 없는 전형은 그 항목 전체를 null로 두세요.
+            - 시각(예: 14:00)은 기간에 넣지 말고 summary에 적으세요.
 
             반드시 아래 JSON 형식으로만 응답하세요.
-            {"companyName": string|null, "interviewDate": string|null, "deadline": string|null, "summary": string|null}
+            {"companyName": string|null, "documentPeriod": object|null, "writtenExamPeriod": object|null, "practicalExamPeriod": object|null, "codingTestPeriod": object|null, "interviewPeriod": object|null, "summary": string|null}
             """;
 
     private final RestTemplate restTemplate;
@@ -100,12 +114,60 @@ public class GeminiClient {
                 throw RecruitException.unprocessableEntity("이미지에서 정보를 추출하지 못했습니다.");
             }
 
-            return objectMapper.readValue(text, GeminiAnalysisResult.class);
+            JsonNode data = objectMapper.readTree(text);
+
+            return new GeminiAnalysisResult(
+                    readText(data, "companyName"),
+                    readPeriod(data, "documentPeriod"),
+                    readPeriod(data, "writtenExamPeriod"),
+                    readPeriod(data, "practicalExamPeriod"),
+                    readPeriod(data, "codingTestPeriod"),
+                    readPeriod(data, "interviewPeriod"),
+                    readText(data, "summary")
+            );
         } catch (RecruitException e) {
             throw e;
         } catch (Exception e) {
             log.error("Gemini 응답 파싱 실패: {}", body, e);
             throw RecruitException.internalServerError("분석 결과를 해석하지 못했습니다.");
         }
+    }
+
+    /** 날짜 형식이 어긋난 항목은 버리고 나머지는 살린다. */
+    private RecruitPeriod readPeriod(JsonNode data, String fieldName) {
+        JsonNode node = data.path(fieldName);
+        if (!node.isObject()) {
+            return null;
+        }
+
+        LocalDate startDate = readDate(node, "startDate");
+        LocalDate endDate = readDate(node, "endDate");
+        if (startDate == null && endDate == null) {
+            return null;
+        }
+
+        return new RecruitPeriod(startDate, endDate);
+    }
+
+    private LocalDate readDate(JsonNode node, String fieldName) {
+        String value = readText(node, fieldName);
+        if (value == null) {
+            return null;
+        }
+
+        try {
+            return LocalDate.parse(value, DateTimeFormatter.ISO_LOCAL_DATE);
+        } catch (DateTimeParseException e) {
+            log.warn("Gemini가 해석할 수 없는 날짜를 반환했습니다: {}={}", fieldName, value);
+            return null;
+        }
+    }
+
+    private String readText(JsonNode node, String fieldName) {
+        JsonNode value = node.path(fieldName);
+        if (!value.isTextual() || value.asText().isBlank()) {
+            return null;
+        }
+        return value.asText().trim();
     }
 }

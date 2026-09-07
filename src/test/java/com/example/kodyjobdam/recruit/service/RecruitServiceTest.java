@@ -5,6 +5,7 @@ import com.example.kodyjobdam.notification.entity.NotificationType;
 import com.example.kodyjobdam.notification.service.NotificationService;
 import com.example.kodyjobdam.recruit.client.GeminiClient;
 import com.example.kodyjobdam.recruit.entity.RecruitEntity;
+import com.example.kodyjobdam.recruit.entity.RecruitPeriod;
 import com.example.kodyjobdam.recruit.entity.RecruitStatus;
 import com.example.kodyjobdam.recruit.repository.RecruitRepository;
 import com.example.kodyjobdam.user.UserRepository;
@@ -16,6 +17,7 @@ import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.Optional;
 
@@ -53,7 +55,7 @@ class RecruitServiceTest {
                 .id(10L)
                 .user(user(2L))
                 .companyName("잡담")
-                .deadline("2026-09-10")
+                .documentPeriod(new RecruitPeriod(LocalDate.of(2026, 9, 1), LocalDate.of(2026, 9, 10)))
                 .status(RecruitStatus.DRAFT)
                 .build();
         when(recruitRepository.findById(10L)).thenReturn(Optional.of(recruit));
