@@ -1,6 +1,7 @@
 package com.example.kodyjobdam.course.service;
 
 import com.example.kodyjobdam.common.exception.ReservationException;
+import com.example.kodyjobdam.common.service.CounselingReservationCryptoService;
 import com.example.kodyjobdam.course.dto.request.CreateDTO;
 import com.example.kodyjobdam.course.dto.request.LockDTO;
 import com.example.kodyjobdam.course.dto.response.StudentReadDTO;
@@ -34,6 +35,7 @@ public class CourseService {
     private final UserRepository userRepository;
     private final NotificationService notificationService;
     private final NotificationExpirationService notificationExpirationService;
+    private final CounselingReservationCryptoService cryptoService;
 
     public void courseSave(CourseEntity entity) {
         courseRepository.save(entity);
@@ -44,10 +46,10 @@ public class CourseService {
         User user = userRepository.findById(id)
                 .orElseThrow(() -> ReservationException.notFound("회원이 없습니다."));
         User teacher = findTeacher(dto.getTeacherId(), id);
+        String submitterHash = cryptoService.submitterHash(id);
 
         for (CourseEntity entity : courseRepository.findAllByDateAndPeriod(dto.getDate(), dto.getPeriod())) {
-            if (entity.getUser() != null
-                    && entity.getUser().getId().equals(id)
+            if (submitterHash.equals(entity.getSubmitterHash())
                     && entity.getState() != StateEnum.CANCEL) {
                 throw ReservationException.conflict("이미 예약한 시간입니다.");
             }
@@ -63,12 +65,20 @@ public class CourseService {
             }
         }
 
-        CourseEntity reservation = courseRepository.save(dto.toEntity(user, teacher));
+        CourseEntity reservation = courseRepository.save(dto.toEntity(
+                teacher,
+                submitterHash,
+                cryptoService.encrypt(dto.getTitle()),
+                cryptoService.encrypt(dto.getContent()),
+                cryptoService.encrypt(String.valueOf(user.getId())),
+                cryptoService.encrypt(user.getName()),
+                cryptoService.encrypt(user.getStudent_number())
+        ));
         notificationService.notifyUser(
                 teacher,
                 NotificationType.COURSE_COUNSELING_REQUESTED,
                 "새로운 상담 신청",
-                user.getStudent_number() + " " + user.getName() + " 학생이 상담을 신청했습니다.",
+                "학생이 상담을 신청했습니다.",
                 reservation.getReservation_id(),
                 "/teacher/course/" + reservation.getReservation_id(),
                 notificationExpirationService.counselingExpiresAt(reservation.getDate())
@@ -80,7 +90,7 @@ public class CourseService {
         CourseEntity entity = courseRepository.findById(reservationId)
                 .orElseThrow(() -> ReservationException.notFound("취소 할 수 없습니다."));
 
-        if (!entity.getUser().getId().equals(userId)) {
+        if (!cryptoService.submitterHash(userId).equals(entity.getSubmitterHash())) {
             throw ReservationException.forbidden("권한이 없습니다.");
         }
 
@@ -103,8 +113,9 @@ public class CourseService {
         }
 
         entity.setState(StateEnum.RESERVED);
+        User submitter = findSubmitter(entity);
         notificationService.notifyUser(
-                entity.getUser(),
+                submitter,
                 NotificationType.COUNSELING_APPROVED,
                 "상담 신청 승인",
                 entity.getTeacher().getName() + " 선생님이 상담 신청을 승인했습니다.",
@@ -127,8 +138,9 @@ public class CourseService {
         }
 
         entity.setState(StateEnum.CANCEL);
+        User submitter = findSubmitter(entity);
         notificationService.notifyUser(
-                entity.getUser(),
+                submitter,
                 NotificationType.COUNSELING_REJECTED,
                 "상담 신청 거절",
                 entity.getTeacher().getName() + " 선생님이 상담 신청을 거절했습니다.",
@@ -171,10 +183,12 @@ public class CourseService {
 
     @Transactional(readOnly = true)
     public List<StudentReadDTO> S_Read(Long id) {
-        return courseRepository.findByUser_id(id).stream()
+        User user = userRepository.findById(id)
+                .orElseThrow(() -> ReservationException.notFound("회원이 없습니다."));
+        return courseRepository.findBySubmitterHash(cryptoService.submitterHash(id)).stream()
                 .map(e -> new StudentReadDTO(
                         e.getReservation_id(),
-                        e.getUser().getName(),
+                        user.getName(),
                         e.getDate(),
                         e.getPeriod()
                 ))
@@ -220,10 +234,16 @@ public class CourseService {
     private TeacherReadDTO toTeacherDTO(CourseEntity e) {
         return new TeacherReadDTO(
                 e.getReservation_id(),
-                e.getUser().getName(),
+                cryptoService.decrypt(e.getEncryptedUserName()),
                 e.getDate(),
                 e.getPeriod()
         );
+    }
+
+    private User findSubmitter(CourseEntity entity) {
+        Long submitterId = Long.valueOf(cryptoService.decrypt(entity.getEncryptedUserId()));
+        return userRepository.findById(submitterId)
+                .orElseThrow(() -> ReservationException.notFound("상담 신청 학생을 찾을 수 없습니다."));
     }
 
     private User findTeacher(Long teacherId, Long studentId) {

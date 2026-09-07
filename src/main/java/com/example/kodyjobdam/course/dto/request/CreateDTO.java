@@ -24,15 +24,19 @@ public class CreateDTO {
 
     private Long teacherId;
 
-    public CourseEntity toEntity(User user, User teacher) {
+    public CourseEntity toEntity(User teacher, String submitterHash, String encryptedTitle, String encryptedContent,
+                                 String encryptedUserId, String encryptedUserName, String encryptedStudentNumber) {
         return CourseEntity.builder()
-                .title(title)
-                .content(content)
+                .submitterHash(submitterHash)
+                .encryptedTitle(encryptedTitle)
+                .encryptedContent(encryptedContent)
+                .encryptedUserId(encryptedUserId)
+                .encryptedUserName(encryptedUserName)
+                .encryptedStudentNumber(encryptedStudentNumber)
                 .date(date)
                 .period(period)
                 .state(StateEnum.WAITING)
                 .teacher(teacher)
-                .user(user)
                 .build();
     }
 }

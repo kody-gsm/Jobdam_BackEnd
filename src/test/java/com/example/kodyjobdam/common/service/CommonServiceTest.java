@@ -12,6 +12,7 @@ import com.example.kodyjobdam.user.UserRole;
 import com.example.kodyjobdam.user.entity.User;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
@@ -21,8 +22,10 @@ import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -43,6 +46,9 @@ class CommonServiceTest {
     @Mock
     private com.example.kodyjobdam.notification.service.NotificationExpirationService notificationExpirationService;
 
+    @Mock
+    private CounselingReservationCryptoService cryptoService;
+
     @InjectMocks
     private CommonService commonService;
 
@@ -53,29 +59,49 @@ class CommonServiceTest {
         CreateDTO dto = createDto(2L);
         CommonEntity saved = CommonEntity.builder()
                 .reservation_id(100L)
-                .user(student)
                 .teacher(teacher)
                 .date(dto.getDate())
                 .period(dto.getPeriod())
-                .title(dto.getTitle())
-                .content(dto.getContent())
+                .submitterHash("student-hash")
+                .encryptedTitle("encrypted-title")
+                .encryptedContent("encrypted-content")
+                .encryptedUserId("encrypted-user-id")
+                .encryptedUserName("encrypted-user-name")
+                .encryptedStudentNumber("encrypted-student-number")
                 .state(StateEnum.WAITING)
                 .build();
 
         when(commonRepository.findAllByDateAndPeriod(dto.getDate(), dto.getPeriod())).thenReturn(List.of());
         when(userRepository.findById(1L)).thenReturn(Optional.of(student));
         when(userRepository.findById(2L)).thenReturn(Optional.of(teacher));
+        when(cryptoService.submitterHash(1L)).thenReturn("student-hash");
+        when(cryptoService.encrypt(anyString())).thenReturn("encrypted");
         when(commonRepository.save(any(CommonEntity.class))).thenReturn(saved);
         when(notificationExpirationService.counselingExpiresAt(dto.getDate()))
                 .thenReturn(LocalDateTime.of(2026, 12, 9, 0, 0));
 
         commonService.createReservation(dto, 1L);
 
+        ArgumentCaptor<CommonEntity> reservationCaptor = ArgumentCaptor.forClass(CommonEntity.class);
+        verify(commonRepository).save(reservationCaptor.capture());
+        CommonEntity savedReservation = reservationCaptor.getValue();
+        assertThat(savedReservation.getSubmitterHash()).isEqualTo("student-hash");
+        assertThat(savedReservation.getEncryptedTitle()).isEqualTo("encrypted");
+        assertThat(savedReservation.getEncryptedContent()).isEqualTo("encrypted");
+        assertThat(savedReservation.getEncryptedUserId()).isEqualTo("encrypted");
+        assertThat(savedReservation.getEncryptedUserName()).isEqualTo("encrypted");
+        assertThat(savedReservation.getEncryptedStudentNumber()).isEqualTo("encrypted");
+        verify(cryptoService).encrypt("상담");
+        verify(cryptoService).encrypt("내용");
+        verify(cryptoService).encrypt("1");
+        verify(cryptoService).encrypt("사용자1");
+        verify(cryptoService).encrypt("3001");
+
         verify(notificationService).notifyUser(
                 eq(teacher),
                 eq(NotificationType.COMMON_COUNSELING_REQUESTED),
                 eq("새로운 상담 신청"),
-                eq("3001 사용자1 학생이 상담을 신청했습니다."),
+                eq("학생이 상담을 신청했습니다."),
                 eq(100L),
                 eq("/teacher/common/100"),
                 eq(LocalDateTime.of(2026, 12, 9, 0, 0))
@@ -100,9 +126,9 @@ class CommonServiceTest {
     void otherTeacherCannotApproveReservation() {
         CommonEntity reservation = CommonEntity.builder()
                 .reservation_id(100L)
-                .user(user(1L, UserRole.STUDENT))
                 .teacher(user(2L, UserRole.TEACHER))
                 .date(LocalDate.of(2026, 9, 10))
+                .encryptedUserId("encrypted-user-id")
                 .state(StateEnum.WAITING)
                 .build();
         when(commonRepository.findById(100L)).thenReturn(Optional.of(reservation));
@@ -118,12 +144,14 @@ class CommonServiceTest {
         User teacher = user(2L, UserRole.TEACHER);
         CommonEntity reservation = CommonEntity.builder()
                 .reservation_id(100L)
-                .user(student)
                 .teacher(teacher)
                 .date(LocalDate.of(2026, 9, 10))
+                .encryptedUserId("encrypted-user-id")
                 .state(StateEnum.WAITING)
                 .build();
         when(commonRepository.findById(100L)).thenReturn(Optional.of(reservation));
+        when(cryptoService.decrypt("encrypted-user-id")).thenReturn("1");
+        when(userRepository.findById(1L)).thenReturn(Optional.of(student));
         when(notificationExpirationService.counselingExpiresAt(reservation.getDate()))
                 .thenReturn(LocalDateTime.of(2026, 12, 9, 0, 0));
 
@@ -146,12 +174,14 @@ class CommonServiceTest {
         User teacher = user(2L, UserRole.TEACHER);
         CommonEntity reservation = CommonEntity.builder()
                 .reservation_id(100L)
-                .user(student)
                 .teacher(teacher)
                 .date(LocalDate.of(2026, 9, 10))
+                .encryptedUserId("encrypted-user-id")
                 .state(StateEnum.WAITING)
                 .build();
         when(commonRepository.findById(100L)).thenReturn(Optional.of(reservation));
+        when(cryptoService.decrypt("encrypted-user-id")).thenReturn("1");
+        when(userRepository.findById(1L)).thenReturn(Optional.of(student));
         when(notificationExpirationService.counselingExpiresAt(reservation.getDate()))
                 .thenReturn(LocalDateTime.of(2026, 12, 9, 0, 0));
 
