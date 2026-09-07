@@ -12,9 +12,11 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpEntity;
 import org.springframework.http.HttpHeaders;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Component;
+import org.springframework.web.client.HttpStatusCodeException;
 import org.springframework.web.client.RestClientException;
 import org.springframework.web.client.RestTemplate;
 
@@ -82,6 +84,15 @@ public class GeminiClient {
         ResponseEntity<String> response;
         try {
             response = restTemplate.postForEntity(url, new HttpEntity<>(requestBody, headers), String.class);
+        } catch (HttpStatusCodeException e) {
+            if (e.getStatusCode().isSameCodeAs(HttpStatus.TOO_MANY_REQUESTS)) {
+                log.warn("Gemini API 호출량 제한 초과: {}", e.getResponseBodyAsString());
+                throw RecruitException.tooManyRequests(
+                        "이미지 분석 요청량이 한도를 넘었습니다. 잠시 후 다시 시도해주세요.");
+            }
+            log.error("Gemini API 호출 실패: url={}, status={}, body={}",
+                    url, e.getStatusCode(), e.getResponseBodyAsString(), e);
+            throw RecruitException.badGateway("이미지 분석 요청에 실패했습니다.");
         } catch (RestClientException e) {
             log.error("Gemini API 호출 실패: {}", url, e);
             throw RecruitException.badGateway("이미지 분석 요청에 실패했습니다.");
