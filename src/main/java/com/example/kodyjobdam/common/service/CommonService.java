@@ -6,6 +6,7 @@ import com.example.kodyjobdam.common.dto.response.StudentReadDTO;
 import com.example.kodyjobdam.common.dto.response.SlotStatusDTO;
 import com.example.kodyjobdam.common.dto.response.TeacherReadDTO;
 import com.example.kodyjobdam.common.entity.CommonEntity;
+import com.example.kodyjobdam.common.entity.CounselingCategoryEnum;
 import com.example.kodyjobdam.common.entity.StateEnum;
 import com.example.kodyjobdam.common.exception.ReservationException;
 import com.example.kodyjobdam.common.repository.CommonRepository;
@@ -45,6 +46,7 @@ public class CommonService {
         User user = userRepository.findById(id)
                 .orElseThrow(() -> ReservationException.notFound("회원이 없습니다."));
         User teacher = findTeacher(dto.getTeacherId(), id);
+        validateCategory(dto.getCategory());
         String submitterHash = cryptoService.submitterHash(id);
 
         for (CommonEntity entity : commonRepository.findAllByDateAndPeriod(dto.getDate(), dto.getPeriod())) {
@@ -189,7 +191,8 @@ public class CommonService {
                         e.getReservation_id(),
                         user.getName(),
                         e.getDate(),
-                        e.getPeriod()
+                        e.getPeriod(),
+                        e.getCategory()
                 ))
                 .toList();
     }
@@ -235,8 +238,15 @@ public class CommonService {
                 e.getReservation_id(),
                 cryptoService.decrypt(e.getEncryptedUserName()),
                 e.getDate(),
-                e.getPeriod()
+                e.getPeriod(),
+                e.getCategory()
         );
+    }
+
+    private void validateCategory(CounselingCategoryEnum category) {
+        if (category == null) {
+            throw ReservationException.badRequest("상담 분야를 선택해주세요.");
+        }
     }
 
     private User findSubmitter(CommonEntity entity) {

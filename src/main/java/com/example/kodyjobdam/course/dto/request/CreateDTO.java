@@ -1,5 +1,6 @@
 package com.example.kodyjobdam.course.dto.request;
 
+import com.example.kodyjobdam.common.entity.CounselingCategoryEnum;
 import com.example.kodyjobdam.course.entity.CourseEntity;
 import com.example.kodyjobdam.course.entity.StateEnum;
 import com.example.kodyjobdam.user.entity.User;
@@ -17,6 +18,8 @@ public class CreateDTO {
 
     private String content;
 
+    private CounselingCategoryEnum category;
+
     @DateTimeFormat(pattern = "yyyy-MM-dd")
     private LocalDate date;
 
@@ -30,6 +33,7 @@ public class CreateDTO {
                 .submitterHash(submitterHash)
                 .encryptedTitle(encryptedTitle)
                 .encryptedContent(encryptedContent)
+                .category(category)
                 .encryptedUserId(encryptedUserId)
                 .encryptedUserName(encryptedUserName)
                 .encryptedStudentNumber(encryptedStudentNumber)

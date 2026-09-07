@@ -4,6 +4,7 @@
 -- 운영 반영 시 기존 데이터를 백업 후 삭제하거나, 별도 스크립트로 encrypted_* 컬럼에 backfill한 뒤 원본 컬럼을 제거하세요.
 
 ALTER TABLE common
+    ADD COLUMN category VARCHAR(20) NULL,
     ADD COLUMN submitter_hash VARCHAR(64) NULL,
     ADD COLUMN encrypted_user_id TEXT NULL,
     ADD COLUMN encrypted_user_name TEXT NULL,
@@ -12,6 +13,7 @@ ALTER TABLE common
     ADD COLUMN encrypted_content TEXT NULL;
 
 ALTER TABLE course
+    ADD COLUMN category VARCHAR(20) NULL,
     ADD COLUMN submitter_hash VARCHAR(64) NULL,
     ADD COLUMN encrypted_user_id TEXT NULL,
     ADD COLUMN encrypted_user_name TEXT NULL,

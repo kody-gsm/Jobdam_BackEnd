@@ -55,6 +55,10 @@ public class CommonEntity {
     @Column(name = "encrypted_content", columnDefinition = "TEXT")
     private String encryptedContent;
 
+    @Column(name = "category")
+    @Enumerated(EnumType.STRING)
+    private CounselingCategoryEnum category;
+
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
     @JoinColumn(name = "teacher_id", nullable = false)
     private User teacher;

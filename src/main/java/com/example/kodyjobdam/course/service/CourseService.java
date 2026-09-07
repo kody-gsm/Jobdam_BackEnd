@@ -1,5 +1,6 @@
 package com.example.kodyjobdam.course.service;
 
+import com.example.kodyjobdam.common.entity.CounselingCategoryEnum;
 import com.example.kodyjobdam.common.exception.ReservationException;
 import com.example.kodyjobdam.common.service.CounselingReservationCryptoService;
 import com.example.kodyjobdam.course.dto.request.CreateDTO;
@@ -46,6 +47,7 @@ public class CourseService {
         User user = userRepository.findById(id)
                 .orElseThrow(() -> ReservationException.notFound("회원이 없습니다."));
         User teacher = findTeacher(dto.getTeacherId(), id);
+        validateCategory(dto.getCategory());
         String submitterHash = cryptoService.submitterHash(id);
 
         for (CourseEntity entity : courseRepository.findAllByDateAndPeriod(dto.getDate(), dto.getPeriod())) {
@@ -190,7 +192,8 @@ public class CourseService {
                         e.getReservation_id(),
                         user.getName(),
                         e.getDate(),
-                        e.getPeriod()
+                        e.getPeriod(),
+                        e.getCategory()
                 ))
                 .toList();
     }
@@ -236,8 +239,15 @@ public class CourseService {
                 e.getReservation_id(),
                 cryptoService.decrypt(e.getEncryptedUserName()),
                 e.getDate(),
-                e.getPeriod()
+                e.getPeriod(),
+                e.getCategory()
         );
+    }
+
+    private void validateCategory(CounselingCategoryEnum category) {
+        if (category == null) {
+            throw ReservationException.badRequest("상담 분야를 선택해주세요.");
+        }
     }
 
     private User findSubmitter(CourseEntity entity) {

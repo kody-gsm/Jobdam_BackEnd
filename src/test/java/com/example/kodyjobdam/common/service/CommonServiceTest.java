@@ -2,6 +2,7 @@ package com.example.kodyjobdam.common.service;
 
 import com.example.kodyjobdam.common.dto.request.CreateDTO;
 import com.example.kodyjobdam.common.entity.CommonEntity;
+import com.example.kodyjobdam.common.entity.CounselingCategoryEnum;
 import com.example.kodyjobdam.common.entity.StateEnum;
 import com.example.kodyjobdam.common.exception.ReservationException;
 import com.example.kodyjobdam.common.repository.CommonRepository;
@@ -62,6 +63,7 @@ class CommonServiceTest {
                 .teacher(teacher)
                 .date(dto.getDate())
                 .period(dto.getPeriod())
+                .category(dto.getCategory())
                 .submitterHash("student-hash")
                 .encryptedTitle("encrypted-title")
                 .encryptedContent("encrypted-content")
@@ -86,6 +88,7 @@ class CommonServiceTest {
         verify(commonRepository).save(reservationCaptor.capture());
         CommonEntity savedReservation = reservationCaptor.getValue();
         assertThat(savedReservation.getSubmitterHash()).isEqualTo("student-hash");
+        assertThat(savedReservation.getCategory()).isEqualTo(CounselingCategoryEnum.EMPLOYMENT);
         assertThat(savedReservation.getEncryptedTitle()).isEqualTo("encrypted");
         assertThat(savedReservation.getEncryptedContent()).isEqualTo("encrypted");
         assertThat(savedReservation.getEncryptedUserId()).isEqualTo("encrypted");
@@ -203,6 +206,7 @@ class CommonServiceTest {
         dto.setTeacherId(teacherId);
         dto.setTitle("상담");
         dto.setContent("내용");
+        dto.setCategory(CounselingCategoryEnum.EMPLOYMENT);
         dto.setDate(LocalDate.of(2026, 9, 10));
         dto.setPeriod("3");
         return dto;
