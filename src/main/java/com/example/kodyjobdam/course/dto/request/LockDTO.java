@@ -27,9 +27,6 @@ public class LockDTO {
                 .date(date)
                 .period(period)
                 .state(StateEnum.LOCKED)
-                .title("Locked")
-                .content("이 시간은 잠긴 시간입니다.")
-                .user(null)
                 .teacher(teacher)
                 .build();
     }

@@ -1,5 +1,6 @@
 package com.example.kodyjobdam.course.entity;
 
+import com.example.kodyjobdam.common.entity.CounselingCategoryEnum;
 import com.example.kodyjobdam.user.entity.User;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
@@ -37,14 +38,27 @@ public class CourseEntity {
     @Column(nullable = false)
     private String period;
 
-    @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "user_id")
-    private User user;
+    @Column(name = "submitter_hash", length = 64)
+    private String submitterHash;
 
-    @Column(nullable = false)
-    private String title;
+    @Column(name = "encrypted_user_id", columnDefinition = "TEXT")
+    private String encryptedUserId;
 
-    private String content;
+    @Column(name = "encrypted_user_name", columnDefinition = "TEXT")
+    private String encryptedUserName;
+
+    @Column(name = "encrypted_student_number", columnDefinition = "TEXT")
+    private String encryptedStudentNumber;
+
+    @Column(name = "encrypted_title", columnDefinition = "TEXT")
+    private String encryptedTitle;
+
+    @Column(name = "encrypted_content", columnDefinition = "TEXT")
+    private String encryptedContent;
+
+    @Column(name = "category")
+    @Enumerated(EnumType.STRING)
+    private CounselingCategoryEnum category;
 
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
     @JoinColumn(name = "teacher_id", nullable = false)

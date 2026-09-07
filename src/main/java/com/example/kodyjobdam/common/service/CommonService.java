@@ -6,6 +6,7 @@ import com.example.kodyjobdam.common.dto.response.StudentReadDTO;
 import com.example.kodyjobdam.common.dto.response.SlotStatusDTO;
 import com.example.kodyjobdam.common.dto.response.TeacherReadDTO;
 import com.example.kodyjobdam.common.entity.CommonEntity;
+import com.example.kodyjobdam.common.entity.CounselingCategoryEnum;
 import com.example.kodyjobdam.common.entity.StateEnum;
 import com.example.kodyjobdam.common.exception.ReservationException;
 import com.example.kodyjobdam.common.repository.CommonRepository;
@@ -34,6 +35,7 @@ public class CommonService {
     private final UserRepository userRepository;
     private final NotificationService notificationService;
     private final NotificationExpirationService notificationExpirationService;
+    private final CounselingReservationCryptoService cryptoService;
 
     public void commonSave(CommonEntity entity) {
         commonRepository.save(entity);
@@ -44,10 +46,11 @@ public class CommonService {
         User user = userRepository.findById(id)
                 .orElseThrow(() -> ReservationException.notFound("회원이 없습니다."));
         User teacher = findTeacher(dto.getTeacherId(), id);
+        validateCategory(dto.getCategory());
+        String submitterHash = cryptoService.submitterHash(id);
 
         for (CommonEntity entity : commonRepository.findAllByDateAndPeriod(dto.getDate(), dto.getPeriod())) {
-            if (entity.getUser() != null
-                    && entity.getUser().getId().equals(id)
+            if (submitterHash.equals(entity.getSubmitterHash())
                     && entity.getState() != StateEnum.CANCEL) {
                 throw ReservationException.conflict("이미 예약한 시간입니다.");
             }
@@ -63,12 +66,20 @@ public class CommonService {
             }
         }
 
-        CommonEntity reservation = commonRepository.save(dto.toEntity(user, teacher));
+        CommonEntity reservation = commonRepository.save(dto.toEntity(
+                teacher,
+                submitterHash,
+                cryptoService.encrypt(dto.getTitle()),
+                cryptoService.encrypt(dto.getContent()),
+                cryptoService.encrypt(String.valueOf(user.getId())),
+                cryptoService.encrypt(user.getName()),
+                cryptoService.encrypt(user.getStudent_number())
+        ));
         notificationService.notifyUser(
                 teacher,
                 NotificationType.COMMON_COUNSELING_REQUESTED,
                 "새로운 상담 신청",
-                user.getStudent_number() + " " + user.getName() + " 학생이 상담을 신청했습니다.",
+                "학생이 상담을 신청했습니다.",
                 reservation.getReservation_id(),
                 "/teacher/common/" + reservation.getReservation_id(),
                 notificationExpirationService.counselingExpiresAt(reservation.getDate())
@@ -80,7 +91,7 @@ public class CommonService {
         CommonEntity entity = commonRepository.findById(reservationId)
                 .orElseThrow(() -> ReservationException.notFound("취소 할 수 없습니다."));
 
-        if (!entity.getUser().getId().equals(userId)) {
+        if (!cryptoService.submitterHash(userId).equals(entity.getSubmitterHash())) {
             throw ReservationException.forbidden("권한이 없습니다.");
         }
 
@@ -103,8 +114,9 @@ public class CommonService {
         }
 
         entity.setState(StateEnum.RESERVED);
+        User submitter = findSubmitter(entity);
         notificationService.notifyUser(
-                entity.getUser(),
+                submitter,
                 NotificationType.COUNSELING_APPROVED,
                 "상담 신청 승인",
                 entity.getTeacher().getName() + " 선생님이 상담 신청을 승인했습니다.",
@@ -127,8 +139,9 @@ public class CommonService {
         }
 
         entity.setState(StateEnum.CANCEL);
+        User submitter = findSubmitter(entity);
         notificationService.notifyUser(
-                entity.getUser(),
+                submitter,
                 NotificationType.COUNSELING_REJECTED,
                 "상담 신청 거절",
                 entity.getTeacher().getName() + " 선생님이 상담 신청을 거절했습니다.",
@@ -171,12 +184,15 @@ public class CommonService {
 
     @Transactional(readOnly = true)
     public List<StudentReadDTO> S_Read(Long id) {
-        return commonRepository.findByUser_id(id).stream()
+        User user = userRepository.findById(id)
+                .orElseThrow(() -> ReservationException.notFound("회원이 없습니다."));
+        return commonRepository.findBySubmitterHash(cryptoService.submitterHash(id)).stream()
                 .map(e -> new StudentReadDTO(
                         e.getReservation_id(),
-                        e.getUser().getName(),
+                        user.getName(),
                         e.getDate(),
-                        e.getPeriod()
+                        e.getPeriod(),
+                        e.getCategory()
                 ))
                 .toList();
     }
@@ -220,10 +236,23 @@ public class CommonService {
     private TeacherReadDTO toTeacherDTO(CommonEntity e) {
         return new TeacherReadDTO(
                 e.getReservation_id(),
-                e.getUser().getName(),
+                cryptoService.decrypt(e.getEncryptedUserName()),
                 e.getDate(),
-                e.getPeriod()
+                e.getPeriod(),
+                e.getCategory()
         );
+    }
+
+    private void validateCategory(CounselingCategoryEnum category) {
+        if (category == null) {
+            throw ReservationException.badRequest("상담 분야를 선택해주세요.");
+        }
+    }
+
+    private User findSubmitter(CommonEntity entity) {
+        Long submitterId = Long.valueOf(cryptoService.decrypt(entity.getEncryptedUserId()));
+        return userRepository.findById(submitterId)
+                .orElseThrow(() -> ReservationException.notFound("상담 신청 학생을 찾을 수 없습니다."));
     }
 
     private User findTeacher(Long teacherId, Long studentId) {
