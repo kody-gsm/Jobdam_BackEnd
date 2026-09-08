@@ -13,6 +13,9 @@ public interface FormSubmissionRepository extends JpaRepository<FormSubmissionEn
     // 중복 제출 방지용
     boolean existsByFormIdAndUserId(Long formId, Long userId);
 
+    // 폼 삭제·질문 교체 가능 여부 판단용
+    boolean existsByFormId(Long formId);
+
     // 선생님: 폼별 제출 목록 최신순
     List<FormSubmissionEntity> findByFormIdOrderBySubmittedAtDesc(Long formId);
 

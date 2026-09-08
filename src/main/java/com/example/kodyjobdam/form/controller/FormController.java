@@ -43,6 +43,13 @@ public class FormController {
     }
 
     /** 학생에게 공개 */
+    /** 폼 삭제 */
+    @DeleteMapping("/teacher/form/{id}")
+    public ResponseEntity<Void> delete(@PathVariable Long id) {
+        formService.delete(id, securityUtil.getCurrentUserId());
+        return ResponseEntity.noContent().build();
+    }
+
     @PostMapping("/teacher/form/{id}/publish")
     public ResponseEntity<FormResponseDTO> publish(@PathVariable Long id) {
         return ResponseEntity.ok(formService.publish(id, securityUtil.getCurrentUserId()));
