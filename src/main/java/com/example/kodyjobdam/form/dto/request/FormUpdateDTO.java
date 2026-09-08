@@ -2,7 +2,6 @@ package com.example.kodyjobdam.form.dto.request;
 
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
-import jakarta.validation.constraints.NotEmpty;
 import lombok.Getter;
 
 import java.time.LocalDateTime;
@@ -18,8 +17,7 @@ public class FormUpdateDTO {
 
     private LocalDateTime deadline;
 
-    /** 질문은 부분 수정이 아니라 통째로 교체된다 */
+    /** 보내면 질문 전체가 교체되고, 생략하면 기존 질문을 그대로 둔다 */
     @Valid
-    @NotEmpty(message = "질문을 1개 이상 추가해주세요.")
     private List<FormQuestionCreateDTO> questions;
 }

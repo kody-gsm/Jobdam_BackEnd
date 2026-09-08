@@ -2,26 +2,32 @@ package com.example.kodyjobdam.common.service;
 
 import com.example.kodyjobdam.common.dto.request.CreateDTO;
 import com.example.kodyjobdam.common.entity.CommonEntity;
+import com.example.kodyjobdam.common.dto.response.SlotStatusDTO;
 import com.example.kodyjobdam.common.entity.CounselingCategoryEnum;
 import com.example.kodyjobdam.common.entity.StateEnum;
 import com.example.kodyjobdam.common.exception.ReservationException;
+import com.example.kodyjobdam.common.exception.ScheduleException;
 import com.example.kodyjobdam.common.repository.CommonRepository;
 import com.example.kodyjobdam.notification.entity.NotificationType;
 import com.example.kodyjobdam.notification.service.NotificationService;
+import com.example.kodyjobdam.schedule.service.ScheduleService;
 import com.example.kodyjobdam.user.UserRepository;
 import com.example.kodyjobdam.user.UserRole;
 import com.example.kodyjobdam.user.entity.User;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.test.util.ReflectionTestUtils;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -50,8 +56,17 @@ class CommonServiceTest {
     @Mock
     private CounselingReservationCryptoService cryptoService;
 
+    @Mock
+    private ScheduleService scheduleService;
+
     @InjectMocks
     private CommonService commonService;
+
+    @BeforeEach
+    void setUp() {
+        ReflectionTestUtils.setField(commonService, "lockedPeriods", Set.of("4"));
+    }
+
 
     @Test
     void createReservationNotifiesOnlySelectedTeacher() {
@@ -199,6 +214,70 @@ class CommonServiceTest {
                 eq("/student/common/100"),
                 eq(LocalDateTime.of(2026, 12, 9, 0, 0))
         );
+    }
+
+    @Test
+    void createReservationOnHolidayIsRejected() {
+        CreateDTO dto = createDto(2L);
+        when(scheduleService.isHoliday(dto.getDate())).thenReturn(true);
+
+        assertThatThrownBy(() -> commonService.createReservation(dto, 1L))
+                .isInstanceOf(ReservationException.class)
+                .hasMessage("휴업일에는 상담을 예약할 수 없습니다.");
+
+        verify(commonRepository, never()).save(any(CommonEntity.class));
+        verify(notificationService, never()).notifyUser(any(), any(), any(), any(), any(), any(), any());
+    }
+
+    @Test
+    void readSlotStatusOnHolidayIsRejected() {
+        LocalDate holiday = LocalDate.of(2026, 9, 25);
+        when(scheduleService.isHoliday(holiday)).thenReturn(true);
+
+        assertThatThrownBy(() -> commonService.readSlotStatus(2L, holiday, null))
+                .isInstanceOf(ReservationException.class)
+                .hasMessage("휴업일에는 상담을 예약할 수 없습니다.");
+    }
+
+    @Test
+    void createReservationIsRejectedWhenScheduleLookupFails() {
+        CreateDTO dto = createDto(2L);
+        when(scheduleService.isHoliday(dto.getDate()))
+                .thenThrow(ScheduleException.badGateway("나이스 학사일정을 불러오지 못했습니다."));
+
+        assertThatThrownBy(() -> commonService.createReservation(dto, 1L))
+                .isInstanceOf(ReservationException.class)
+                .hasMessage("학사일정을 확인할 수 없어 예약을 처리할 수 없습니다. 잠시 후 다시 시도해주세요.");
+
+        verify(commonRepository, never()).save(any(CommonEntity.class));
+        verify(notificationService, never()).notifyUser(any(), any(), any(), any(), any(), any(), any());
+    }
+
+    @Test
+    void createReservationOnLockedPeriodIsRejected() {
+        CreateDTO dto = createDto(2L);
+        dto.setPeriod("4");
+
+        assertThatThrownBy(() -> commonService.createReservation(dto, 1L))
+                .isInstanceOf(ReservationException.class)
+                .hasMessage("4교시에는 상담을 예약할 수 없습니다.");
+
+        verify(commonRepository, never()).save(any(CommonEntity.class));
+    }
+
+    @Test
+    void readSlotStatusMarksLockedPeriodEvenWithoutReservation() {
+        LocalDate date = LocalDate.of(2026, 9, 10);
+        User teacher = user(2L, UserRole.TEACHER);
+        when(userRepository.findById(2L)).thenReturn(Optional.of(teacher));
+        when(commonRepository.findAllByDateAndTeacher_IdOrderByPeriodAsc(date, 2L)).thenReturn(List.of());
+
+        List<SlotStatusDTO> result = commonService.readSlotStatus(2L, date, null);
+
+        assertThat(result).hasSize(1);
+        assertThat(result.get(0).getPeriod()).isEqualTo("4");
+        assertThat(result.get(0).getState()).isEqualTo(StateEnum.LOCKED);
+        assertThat(result.get(0).isAvailable()).isFalse();
     }
 
     private CreateDTO createDto(Long teacherId) {

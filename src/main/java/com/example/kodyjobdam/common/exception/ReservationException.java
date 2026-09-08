@@ -24,6 +24,10 @@ public class ReservationException extends BusinessException {
         return new ReservationException(HttpStatus.CONFLICT, "RESERVATION_CONFLICT", message);
     }
 
+    public static ReservationException badGateway(String message) {
+        return new ReservationException(HttpStatus.BAD_GATEWAY, "RESERVATION_BAD_GATEWAY", message);
+    }
+
     public static ReservationException locked(String message) {
         return new ReservationException(HttpStatus.LOCKED, "RESERVATION_LOCKED", message);
     }

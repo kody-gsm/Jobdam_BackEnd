@@ -8,16 +8,19 @@ import com.example.kodyjobdam.common.dto.response.TeacherReadDTO;
 import com.example.kodyjobdam.common.entity.CommonEntity;
 import com.example.kodyjobdam.common.entity.CounselingCategoryEnum;
 import com.example.kodyjobdam.common.entity.StateEnum;
+import com.example.kodyjobdam.common.exception.BusinessException;
 import com.example.kodyjobdam.common.exception.ReservationException;
 import com.example.kodyjobdam.common.repository.CommonRepository;
 import com.example.kodyjobdam.notification.entity.NotificationType;
 import com.example.kodyjobdam.notification.service.NotificationExpirationService;
 import com.example.kodyjobdam.notification.service.NotificationService;
+import com.example.kodyjobdam.schedule.service.ScheduleService;
 import com.example.kodyjobdam.user.UserRepository;
 import com.example.kodyjobdam.user.UserRole;
 import com.example.kodyjobdam.user.entity.User;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -25,6 +28,7 @@ import java.time.LocalDate;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 @Service
 @Slf4j
@@ -36,6 +40,11 @@ public class CommonService {
     private final NotificationService notificationService;
     private final NotificationExpirationService notificationExpirationService;
     private final CounselingReservationCryptoService cryptoService;
+    private final ScheduleService scheduleService;
+
+    /** 상시 잠금 교시(예: 점심시간). 쉼표로 여러 개를 지정할 수 있다. */
+    @Value("${reservation.locked-periods:}")
+    private Set<String> lockedPeriods;
 
     public void commonSave(CommonEntity entity) {
         commonRepository.save(entity);
@@ -43,6 +52,9 @@ public class CommonService {
 
     @Transactional
     public void createReservation(CreateDTO dto, Long id) {
+        validateNotHoliday(dto.getDate());
+        validateNotLockedPeriod(dto.getPeriod());
+
         User user = userRepository.findById(id)
                 .orElseThrow(() -> ReservationException.notFound("회원이 없습니다."));
         User teacher = findTeacher(dto.getTeacherId(), id);
@@ -202,6 +214,8 @@ public class CommonService {
         if (date == null) {
             throw ReservationException.badRequest("날짜를 선택해주세요.");
         }
+        validateNotHoliday(date);
+
         User teacher = findTeacher(teacherId);
 
         List<CommonEntity> reservations = (period == null || period.isBlank())
@@ -209,6 +223,15 @@ public class CommonService {
                 : commonRepository.findAllByDateAndPeriodAndTeacher_Id(date, period, teacher.getId());
 
         Map<String, StateEnum> stateByPeriod = new LinkedHashMap<>();
+        for (String lockedPeriod : lockedPeriods) {
+            if (lockedPeriod.isBlank()) {
+                continue;
+            }
+            if (period == null || period.isBlank() || lockedPeriod.equals(period.trim())) {
+                stateByPeriod.put(lockedPeriod, StateEnum.LOCKED);
+            }
+        }
+
         for (CommonEntity entity : reservations) {
             if (entity.getState() == StateEnum.CANCEL) {
                 continue;
@@ -220,8 +243,35 @@ public class CommonService {
         }
 
         return stateByPeriod.entrySet().stream()
+                .sorted(Map.Entry.comparingByKey())
                 .map(e -> new SlotStatusDTO(teacher.getId(), date, e.getKey(), e.getValue()))
                 .toList();
+    }
+
+    /**
+     * 학사일정상 휴업일(공휴일 등)에는 상담을 잡을 수 없다.
+     * 학사일정을 확인하지 못하면 휴업일일 수 있으므로 예약을 막는다.
+     */
+    private void validateNotHoliday(LocalDate date) {
+        boolean holiday;
+        try {
+            holiday = scheduleService.isHoliday(date);
+        } catch (BusinessException e) {
+            log.warn("학사일정을 확인하지 못해 예약을 막습니다. date={}", date, e);
+            throw ReservationException.badGateway(
+                    "학사일정을 확인할 수 없어 예약을 처리할 수 없습니다. 잠시 후 다시 시도해주세요.");
+        }
+
+        if (holiday) {
+            throw ReservationException.locked("휴업일에는 상담을 예약할 수 없습니다.");
+        }
+    }
+
+    /** 상시 잠금으로 지정된 교시에는 상담을 잡을 수 없다. */
+    private void validateNotLockedPeriod(String period) {
+        if (period != null && !period.isBlank() && lockedPeriods.contains(period.trim())) {
+            throw ReservationException.locked(period.trim() + "교시에는 상담을 예약할 수 없습니다.");
+        }
     }
 
     private int priority(StateEnum state) {

@@ -43,6 +43,13 @@ public class FormController {
     }
 
     /** 학생에게 공개 */
+    /** 폼 삭제 */
+    @DeleteMapping("/teacher/form/{id}")
+    public ResponseEntity<Void> delete(@PathVariable Long id) {
+        formService.delete(id, securityUtil.getCurrentUserId());
+        return ResponseEntity.noContent().build();
+    }
+
     @PostMapping("/teacher/form/{id}/publish")
     public ResponseEntity<FormResponseDTO> publish(@PathVariable Long id) {
         return ResponseEntity.ok(formService.publish(id, securityUtil.getCurrentUserId()));
@@ -77,6 +84,22 @@ public class FormController {
     public ResponseEntity<FormSubmissionResponseDTO> getSubmission(@PathVariable Long id,
                                                                    @PathVariable Long submissionId) {
         return ResponseEntity.ok(formSubmissionService.getSubmission(id, submissionId, securityUtil.getCurrentUserId()));
+    }
+
+    /** 지원자 확정 */
+    @PostMapping("/teacher/form/{id}/submission/{submissionId}/confirm")
+    public ResponseEntity<FormSubmissionResponseDTO> confirmSubmission(@PathVariable Long id,
+                                                                       @PathVariable Long submissionId) {
+        return ResponseEntity.ok(
+                formSubmissionService.confirm(id, submissionId, securityUtil.getCurrentUserId()));
+    }
+
+    /** 지원자 확정 되돌리기 */
+    @DeleteMapping("/teacher/form/{id}/submission/{submissionId}/confirm")
+    public ResponseEntity<FormSubmissionResponseDTO> cancelConfirmSubmission(@PathVariable Long id,
+                                                                             @PathVariable Long submissionId) {
+        return ResponseEntity.ok(
+                formSubmissionService.cancelConfirm(id, submissionId, securityUtil.getCurrentUserId()));
     }
 
     // ===== 학생(STUDENT) 전용 =====

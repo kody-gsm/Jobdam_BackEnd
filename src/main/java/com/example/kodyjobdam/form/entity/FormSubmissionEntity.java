@@ -45,8 +45,28 @@ public class FormSubmissionEntity {
     @Builder.Default
     private List<FormAnswerEntity> answers = new ArrayList<>();
 
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false)
+    @Builder.Default
+    private SubmissionStatus status = SubmissionStatus.SUBMITTED;
+
+    /** 확정 시각. 확정하지 않았거나 확정을 되돌리면 null */
+    private LocalDateTime confirmedAt;
+
     @CreationTimestamp
     private LocalDateTime submittedAt;
+
+    /** 선생님이 지원자로 확정 */
+    public void confirm() {
+        this.status = SubmissionStatus.CONFIRMED;
+        this.confirmedAt = LocalDateTime.now();
+    }
+
+    /** 확정 되돌리기 */
+    public void cancelConfirm() {
+        this.status = SubmissionStatus.SUBMITTED;
+        this.confirmedAt = null;
+    }
 
     /** 답변 추가 (양방향 연관관계 동기화) */
     public void addAnswer(FormAnswerEntity answer) {
