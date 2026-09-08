@@ -1,6 +1,7 @@
 package com.example.kodyjobdam.form.dto.response;
 
 import com.example.kodyjobdam.form.entity.FormSubmissionEntity;
+import com.example.kodyjobdam.form.entity.SubmissionStatus;
 import com.example.kodyjobdam.user.entity.User;
 import lombok.Builder;
 import lombok.Getter;
@@ -20,6 +21,10 @@ public class FormSubmissionSummaryResponseDTO {
 
     private String studentNumber;
 
+    private SubmissionStatus status;
+
+    private LocalDateTime confirmedAt;
+
     private LocalDateTime submittedAt;
 
     public static FormSubmissionSummaryResponseDTO from(FormSubmissionEntity entity) {
@@ -30,6 +35,8 @@ public class FormSubmissionSummaryResponseDTO {
                 .userId(user.getId())
                 .userName(user.getName())
                 .studentNumber(user.getStudent_number())
+                .status(entity.getStatus())
+                .confirmedAt(entity.getConfirmedAt())
                 .submittedAt(entity.getSubmittedAt())
                 .build();
     }

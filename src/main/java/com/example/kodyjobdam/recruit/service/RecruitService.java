@@ -96,6 +96,14 @@ public class RecruitService {
         return RecruitResponseDTO.from(entity);
     }
 
+    /** 선생님: 채용 공고 삭제 (공개된 공고도 지울 수 있다) */
+    @Transactional
+    public void delete(Long recruitId, Long teacherId) {
+        RecruitEntity entity = findOrThrow(recruitId);
+        validateOwner(entity, teacherId);
+        recruitRepository.delete(entity);
+    }
+
     /** 선생님: 학생에게 공개 */
     @Transactional
     public RecruitResponseDTO publish(Long recruitId, Long teacherId) {

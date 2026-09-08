@@ -35,6 +35,13 @@ public class RecruitController {
         return ResponseEntity.ok(recruitService.update(id, dto, securityUtil.getCurrentUserId()));
     }
 
+    /** 채용 공고 삭제 */
+    @DeleteMapping("/teacher/recruit/{id}")
+    public ResponseEntity<Void> delete(@PathVariable Long id) {
+        recruitService.delete(id, securityUtil.getCurrentUserId());
+        return ResponseEntity.noContent().build();
+    }
+
     /** 학생에게 공개 */
     @PostMapping("/teacher/recruit/{id}/publish")
     public ResponseEntity<RecruitResponseDTO> publish(@PathVariable Long id) {

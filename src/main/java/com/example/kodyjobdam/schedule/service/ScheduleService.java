@@ -58,6 +58,22 @@ public class ScheduleService {
                 .toList();
     }
 
+    /**
+     * 해당 날짜가 휴업일(공휴일, 토요휴업일, 학교장재량휴업일 등)인지 판단한다.
+     *
+     * <p>나이스 조회에 실패하면 예외를 그대로 던진다. 휴업일인지 확인하지 못한 채 예약을
+     * 받으면 공휴일에 상담이 잡히므로, 판단할 수 없으면 호출한 쪽에서 막아야 한다.</p>
+     */
+    public boolean isHoliday(LocalDate date) {
+        if (date == null) {
+            return false;
+        }
+
+        YearMonth yearMonth = YearMonth.from(date);
+        return findCached(yearMonth.atDay(1), yearMonth.atEndOfMonth()).stream()
+                .anyMatch(schedule -> date.equals(schedule.getDate()) && schedule.isHoliday());
+    }
+
     public List<ScheduleReadDTO> readMonthlySchedules(int year, int month, Integer grade) {
         if (month < 1 || month > 12) {
             throw ScheduleException.badRequest("월은 1에서 12 사이여야 합니다.");

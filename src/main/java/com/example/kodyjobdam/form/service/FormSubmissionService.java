@@ -17,6 +17,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.format.DateTimeParseException;
+import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -50,13 +51,38 @@ public class FormSubmissionService {
         User user = userRepository.findById(userId)
                 .orElseThrow(() -> FormException.notFound("회원이 없습니다."));
 
-        Map<Long, FormAnswerDTO> answerByQuestionId = groupByQuestionId(form, dto.getAnswers());
-
         FormSubmissionEntity submission = FormSubmissionEntity.builder()
                 .form(form)
                 .user(user)
                 .build();
 
+        buildAnswers(form, dto.getAnswers()).forEach(submission::addAnswer);
+
+        return FormSubmissionResponseDTO.from(submissionRepository.save(submission));
+    }
+
+    /** 학생: 이미 제출한 응답 수정 (재응답) */
+    @Transactional
+    public FormSubmissionResponseDTO resubmit(Long formId, FormSubmitDTO dto, Long userId) {
+        FormEntity form = findFormOrThrow(formId);
+
+        if (!form.isAcceptingSubmission()) {
+            throw FormException.badRequest("지금은 응답을 받지 않는 폼입니다.");
+        }
+
+        FormSubmissionEntity submission = submissionRepository.findByFormIdAndUserId(formId, userId)
+                .orElseThrow(() -> FormException.notFound("아직 제출한 응답이 없습니다."));
+
+        submission.replaceAnswers(buildAnswers(form, dto.getAnswers()));
+
+        return FormSubmissionResponseDTO.from(submission);
+    }
+
+    /** 요청 답변을 폼의 질문 순서대로 검증해 답변 엔티티로 만든다 */
+    private List<FormAnswerEntity> buildAnswers(FormEntity form, List<FormAnswerDTO> answers) {
+        Map<Long, FormAnswerDTO> answerByQuestionId = groupByQuestionId(form, answers);
+
+        List<FormAnswerEntity> built = new ArrayList<>();
         for (FormQuestionEntity question : form.getQuestions()) {
             FormAnswerDTO answerDTO = answerByQuestionId.get(question.getId());
 
@@ -67,10 +93,9 @@ public class FormSubmissionService {
                 continue;
             }
 
-            submission.addAnswer(buildAnswer(question, answerDTO));
+            built.add(buildAnswer(question, answerDTO));
         }
-
-        return FormSubmissionResponseDTO.from(submissionRepository.save(submission));
+        return built;
     }
 
     /** 선생님: 폼별 제출 목록 */
@@ -87,6 +112,11 @@ public class FormSubmissionService {
     /** 선생님: 제출 단건 상세 */
     @Transactional(readOnly = true)
     public FormSubmissionResponseDTO getSubmission(Long formId, Long submissionId, Long teacherId) {
+        return FormSubmissionResponseDTO.from(findSubmissionOrThrow(formId, submissionId, teacherId));
+    }
+
+    /** 폼 소유자 확인까지 마친 제출 단건 조회 */
+    private FormSubmissionEntity findSubmissionOrThrow(Long formId, Long submissionId, Long teacherId) {
         FormEntity form = findFormOrThrow(formId);
         validateOwner(form, teacherId);
 
@@ -97,6 +127,32 @@ public class FormSubmissionService {
             throw FormException.notFound("이 폼의 응답이 아닙니다.");
         }
 
+        return submission;
+    }
+
+    /** 선생님: 지원자 확정 */
+    @Transactional
+    public FormSubmissionResponseDTO confirm(Long formId, Long submissionId, Long teacherId) {
+        FormSubmissionEntity submission = findSubmissionOrThrow(formId, submissionId, teacherId);
+
+        if (submission.getStatus() == SubmissionStatus.CONFIRMED) {
+            throw FormException.conflict("이미 확정된 지원자입니다.");
+        }
+
+        submission.confirm();
+        return FormSubmissionResponseDTO.from(submission);
+    }
+
+    /** 선생님: 지원자 확정 되돌리기 */
+    @Transactional
+    public FormSubmissionResponseDTO cancelConfirm(Long formId, Long submissionId, Long teacherId) {
+        FormSubmissionEntity submission = findSubmissionOrThrow(formId, submissionId, teacherId);
+
+        if (submission.getStatus() != SubmissionStatus.CONFIRMED) {
+            throw FormException.conflict("확정되지 않은 지원자입니다.");
+        }
+
+        submission.cancelConfirm();
         return FormSubmissionResponseDTO.from(submission);
     }
 
@@ -213,7 +269,7 @@ public class FormSubmissionService {
 
     private void validateOwner(FormEntity form, Long teacherId) {
         if (form.getUser() == null || !form.getUser().getId().equals(teacherId)) {
-            throw FormException.forbidden("폼 제출 내역을 조회할 권한이 없습니다.");
+            throw FormException.forbidden("폼 제출 내역에 접근할 권한이 없습니다.");
         }
     }
 }
