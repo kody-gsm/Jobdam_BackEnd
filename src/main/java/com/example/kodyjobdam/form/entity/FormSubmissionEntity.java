@@ -53,4 +53,12 @@ public class FormSubmissionEntity {
         answer.assignSubmission(this);
         this.answers.add(answer);
     }
+
+    /** 재응답: 기존 답변을 모두 지우고 새 답변으로 교체한다 */
+    public void replaceAnswers(List<FormAnswerEntity> newAnswers) {
+        this.answers.clear();
+        for (FormAnswerEntity answer : newAnswers) {
+            addAnswer(answer);
+        }
+    }
 }
