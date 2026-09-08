@@ -21,7 +21,6 @@ import com.example.kodyjobdam.user.UserRole;
 import com.example.kodyjobdam.user.entity.User;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -29,7 +28,6 @@ import java.time.LocalDate;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 
 @Service
 @Slf4j
@@ -43,10 +41,6 @@ public class CourseService {
     private final CounselingReservationCryptoService cryptoService;
     private final ScheduleService scheduleService;
 
-    /** 상시 잠금 교시(예: 점심시간). 쉼표로 여러 개를 지정할 수 있다. */
-    @Value("${reservation.locked-periods:}")
-    private Set<String> lockedPeriods;
-
     public void courseSave(CourseEntity entity) {
         courseRepository.save(entity);
     }
@@ -54,7 +48,6 @@ public class CourseService {
     @Transactional
     public void createReservation(CreateDTO dto, Long id) {
         validateNotHoliday(dto.getDate());
-        validateNotLockedPeriod(dto.getPeriod());
 
         User user = userRepository.findById(id)
                 .orElseThrow(() -> ReservationException.notFound("회원이 없습니다."));
@@ -224,15 +217,6 @@ public class CourseService {
                 : courseRepository.findAllByDateAndPeriodAndTeacher_Id(date, period, teacher.getId());
 
         Map<String, StateEnum> stateByPeriod = new LinkedHashMap<>();
-        for (String lockedPeriod : lockedPeriods) {
-            if (lockedPeriod.isBlank()) {
-                continue;
-            }
-            if (period == null || period.isBlank() || lockedPeriod.equals(period.trim())) {
-                stateByPeriod.put(lockedPeriod, StateEnum.LOCKED);
-            }
-        }
-
         for (CourseEntity entity : reservations) {
             if (entity.getState() == StateEnum.CANCEL) {
                 continue;
@@ -244,7 +228,6 @@ public class CourseService {
         }
 
         return stateByPeriod.entrySet().stream()
-                .sorted(Map.Entry.comparingByKey())
                 .map(e -> new SlotStatusDTO(teacher.getId(), date, e.getKey(), e.getValue()))
                 .toList();
     }
@@ -265,13 +248,6 @@ public class CourseService {
 
         if (holiday) {
             throw ReservationException.locked("휴업일에는 상담을 예약할 수 없습니다.");
-        }
-    }
-
-    /** 상시 잠금으로 지정된 교시에는 상담을 잡을 수 없다. */
-    private void validateNotLockedPeriod(String period) {
-        if (period != null && !period.isBlank() && lockedPeriods.contains(period.trim())) {
-            throw ReservationException.locked(period.trim() + "교시에는 상담을 예약할 수 없습니다.");
         }
     }
 
