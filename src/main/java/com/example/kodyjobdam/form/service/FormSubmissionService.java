@@ -87,6 +87,11 @@ public class FormSubmissionService {
     /** 선생님: 제출 단건 상세 */
     @Transactional(readOnly = true)
     public FormSubmissionResponseDTO getSubmission(Long formId, Long submissionId, Long teacherId) {
+        return FormSubmissionResponseDTO.from(findSubmissionOrThrow(formId, submissionId, teacherId));
+    }
+
+    /** 폼 소유자 확인까지 마친 제출 단건 조회 */
+    private FormSubmissionEntity findSubmissionOrThrow(Long formId, Long submissionId, Long teacherId) {
         FormEntity form = findFormOrThrow(formId);
         validateOwner(form, teacherId);
 
@@ -97,6 +102,32 @@ public class FormSubmissionService {
             throw FormException.notFound("이 폼의 응답이 아닙니다.");
         }
 
+        return submission;
+    }
+
+    /** 선생님: 지원자 확정 */
+    @Transactional
+    public FormSubmissionResponseDTO confirm(Long formId, Long submissionId, Long teacherId) {
+        FormSubmissionEntity submission = findSubmissionOrThrow(formId, submissionId, teacherId);
+
+        if (submission.getStatus() == SubmissionStatus.CONFIRMED) {
+            throw FormException.conflict("이미 확정된 지원자입니다.");
+        }
+
+        submission.confirm();
+        return FormSubmissionResponseDTO.from(submission);
+    }
+
+    /** 선생님: 지원자 확정 되돌리기 */
+    @Transactional
+    public FormSubmissionResponseDTO cancelConfirm(Long formId, Long submissionId, Long teacherId) {
+        FormSubmissionEntity submission = findSubmissionOrThrow(formId, submissionId, teacherId);
+
+        if (submission.getStatus() != SubmissionStatus.CONFIRMED) {
+            throw FormException.conflict("확정되지 않은 지원자입니다.");
+        }
+
+        submission.cancelConfirm();
         return FormSubmissionResponseDTO.from(submission);
     }
 
@@ -213,7 +244,7 @@ public class FormSubmissionService {
 
     private void validateOwner(FormEntity form, Long teacherId) {
         if (form.getUser() == null || !form.getUser().getId().equals(teacherId)) {
-            throw FormException.forbidden("폼 제출 내역을 조회할 권한이 없습니다.");
+            throw FormException.forbidden("폼 제출 내역에 접근할 권한이 없습니다.");
         }
     }
 }
