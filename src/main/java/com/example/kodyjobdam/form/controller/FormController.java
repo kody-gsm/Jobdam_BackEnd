@@ -3,18 +3,27 @@ package com.example.kodyjobdam.form.controller;
 import com.example.kodyjobdam.form.dto.request.FormCreateDTO;
 import com.example.kodyjobdam.form.dto.request.FormSubmitDTO;
 import com.example.kodyjobdam.form.dto.request.FormUpdateDTO;
+import com.example.kodyjobdam.form.dto.response.FormFileDownloadDTO;
+import com.example.kodyjobdam.form.dto.response.FormFileResponseDTO;
 import com.example.kodyjobdam.form.dto.response.FormResponseDTO;
 import com.example.kodyjobdam.form.dto.response.FormSubmissionResponseDTO;
 import com.example.kodyjobdam.form.dto.response.FormSubmissionSummaryResponseDTO;
 import com.example.kodyjobdam.form.dto.response.FormSummaryResponseDTO;
+import com.example.kodyjobdam.form.service.FormFileService;
 import com.example.kodyjobdam.form.service.FormService;
 import com.example.kodyjobdam.form.service.FormSubmissionService;
 import com.example.kodyjobdam.user.security.SecurityUtil;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import org.springframework.core.io.Resource;
+import org.springframework.http.ContentDisposition;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.multipart.MultipartFile;
 
+import java.nio.charset.StandardCharsets;
 import java.util.List;
 
 @RestController
@@ -24,6 +33,8 @@ public class FormController {
     private final FormService formService;
 
     private final FormSubmissionService formSubmissionService;
+
+    private final FormFileService formFileService;
 
     private final SecurityUtil securityUtil;
 
@@ -118,6 +129,13 @@ public class FormController {
         return ResponseEntity.ok(formSubmissionService.resubmit(id, dto, securityUtil.getCurrentUserId()));
     }
 
+    /** 답변에 붙일 파일 업로드. 돌려받은 id를 답변의 fileId로 보내 제출한다. */
+    @PostMapping(value = "/student/form/{id}/file", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    public ResponseEntity<FormFileResponseDTO> uploadFile(@PathVariable Long id,
+                                                          @RequestParam("file") MultipartFile file) {
+        return ResponseEntity.ok(formFileService.upload(id, file, securityUtil.getCurrentUserId()));
+    }
+
     /** 내가 제출한 응답 조회 */
     @GetMapping("/student/form/{id}/submission")
     public ResponseEntity<FormSubmissionResponseDTO> getMySubmission(@PathVariable Long id) {
@@ -125,6 +143,21 @@ public class FormController {
     }
 
     // ===== 공개(로그인 사용자) =====
+
+    /** 첨부 파일 내려받기 (올린 학생 본인과 폼을 만든 선생님만) */
+    @GetMapping("/form/file/{fileId}")
+    public ResponseEntity<Resource> downloadFile(@PathVariable Long fileId) {
+        FormFileDownloadDTO download = formFileService.download(fileId, securityUtil.getCurrentUserId());
+
+        return ResponseEntity.ok()
+                .header(HttpHeaders.CONTENT_DISPOSITION, ContentDisposition.attachment()
+                        .filename(download.originalName(), StandardCharsets.UTF_8)
+                        .build()
+                        .toString())
+                .contentType(MediaType.parseMediaType(download.contentType()))
+                .contentLength(download.size())
+                .body(download.resource());
+    }
 
     /** 공개된 폼 목록 */
     @GetMapping("/form")

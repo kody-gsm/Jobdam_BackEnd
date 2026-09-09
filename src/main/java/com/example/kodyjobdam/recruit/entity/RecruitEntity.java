@@ -1,5 +1,6 @@
 package com.example.kodyjobdam.recruit.entity;
 
+import com.example.kodyjobdam.form.entity.FormEntity;
 import com.example.kodyjobdam.user.entity.User;
 import jakarta.persistence.*;
 import lombok.AllArgsConstructor;
@@ -70,6 +71,11 @@ public class RecruitEntity {
     })
     private RecruitPeriod interviewPeriod;
 
+    /** 공고와 함께 자동으로 만들어지는 지원 폼 */
+    @OneToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "form_id")
+    private FormEntity form;
+
     @Column(length = 1000)
     private String summary;
 
@@ -112,6 +118,11 @@ public class RecruitEntity {
     /** 면접 일정을 화면 표기 문자열로 돌려준다. 하루짜리 면접은 날짜 하나로 표기한다. */
     public String getInterviewDate() {
         return interviewPeriod == null ? null : interviewPeriod.toDisplay();
+    }
+
+    /** 지원 폼 식별자. 폼이 없으면 null. */
+    public Long getFormId() {
+        return form == null ? null : form.getId();
     }
 
     /** 학생에게 공개 */

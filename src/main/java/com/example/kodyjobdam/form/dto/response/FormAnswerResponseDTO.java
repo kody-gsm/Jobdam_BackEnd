@@ -2,6 +2,7 @@ package com.example.kodyjobdam.form.dto.response;
 
 import com.example.kodyjobdam.form.entity.FormAnswerEntity;
 import com.example.kodyjobdam.form.entity.FormAnswerOptionEntity;
+import com.example.kodyjobdam.form.entity.FormFileEntity;
 import com.example.kodyjobdam.form.entity.FormQuestionEntity;
 import com.example.kodyjobdam.form.entity.QuestionType;
 import lombok.Builder;
@@ -27,9 +28,19 @@ public class FormAnswerResponseDTO {
 
     private List<String> selectedOptionLabels;
 
+    /** 파일 답변 */
+    private Long fileId;
+
+    private String fileName;
+
+    private Long fileSize;
+
+    private String fileDownloadUrl;
+
     public static FormAnswerResponseDTO from(FormAnswerEntity entity) {
         FormQuestionEntity question = entity.getQuestion();
         List<FormAnswerOptionEntity> selected = entity.getSelectedOptions();
+        FormFileEntity file = entity.getFile();
 
         return FormAnswerResponseDTO.builder()
                 .questionId(question.getId())
@@ -42,6 +53,10 @@ public class FormAnswerResponseDTO {
                 .selectedOptionLabels(selected.stream()
                         .map(selectedOption -> selectedOption.getOption().getLabel())
                         .toList())
+                .fileId(file == null ? null : file.getId())
+                .fileName(file == null ? null : file.getOriginalName())
+                .fileSize(file == null ? null : file.getSize())
+                .fileDownloadUrl(file == null ? null : FormFileResponseDTO.downloadUrl(file.getId()))
                 .build();
     }
 }

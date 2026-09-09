@@ -209,6 +209,7 @@ public class AuthService {
         ProfileImageStorageService.StoredProfileImage storedImage = profileImageStorageService.store(image);
         user.setProfileImageUrl(storedImage.url());
         cleanupProfileImagesAfterTransaction(previousImageUrl, storedImage.url());
+        userRepository.saveAndFlush(user);
 
         return new UserProfileResponse(
                 user.getName(),

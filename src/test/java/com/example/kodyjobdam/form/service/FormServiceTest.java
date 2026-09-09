@@ -28,11 +28,13 @@ import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.assertj.core.api.Assertions.tuple;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
+import static org.mockito.AdditionalAnswers.returnsFirstArg;
 
 @ExtendWith(MockitoExtension.class)
 class FormServiceTest {
@@ -52,6 +54,9 @@ class FormServiceTest {
     @Mock
     private com.example.kodyjobdam.notification.service.NotificationExpirationService notificationExpirationService;
 
+    @Mock
+    private FormFileService formFileService;
+
     @InjectMocks
     private FormService formService;
 
@@ -63,6 +68,7 @@ class FormServiceTest {
 
         formService.delete(1L, 2L);
 
+        verify(formFileService).deleteAllByForm(1L);
         verify(formRepository).delete(form);
     }
 
@@ -191,6 +197,56 @@ class FormServiceTest {
                 .isInstanceOf(FormException.class)
                 .hasMessage("폼을 관리할 권한이 없습니다.");
         verify(notificationService, never()).notifyAllStudents(any(), any(), any(), any(), any(), any());
+    }
+
+    @Test
+    void 채용_공고용_기본_폼은_학번_이름_포트폴리오_질문으로_만들어진다() {
+        when(formRepository.save(any(FormEntity.class))).thenAnswer(returnsFirstArg());
+
+        FormEntity form = formService.createForRecruit(
+                user(2L), "잡담", LocalDateTime.of(2026, 9, 10, 23, 59, 59));
+
+        assertThat(form.getTitle()).isEqualTo("잡담 지원서");
+        assertThat(form.getStatus()).isEqualTo(FormStatus.DRAFT);
+        assertThat(form.getDeadline()).isEqualTo(LocalDateTime.of(2026, 9, 10, 23, 59, 59));
+        assertThat(form.getQuestions())
+                .extracting(FormQuestionEntity::getTitle, FormQuestionEntity::getType)
+                .containsExactly(
+                        tuple("학번", QuestionType.SHORT_TEXT),
+                        tuple("이름", QuestionType.SHORT_TEXT),
+                        tuple("포트폴리오", QuestionType.FILE));
+    }
+
+    @Test
+    void 공고_공개시_초안인_지원_폼은_알림_없이_공개된다() {
+        FormEntity form = draftForm();
+        when(formRepository.findById(1L)).thenReturn(Optional.of(form));
+
+        formService.publishForRecruit(1L);
+
+        assertThat(form.getStatus()).isEqualTo(FormStatus.PUBLISHED);
+        verify(notificationService, never()).notifyAllStudents(any(), any(), any(), any(), any(), any());
+    }
+
+    @Test
+    void 공고_삭제시_응답이_있는_지원_폼은_남긴다() {
+        when(formRepository.findById(1L)).thenReturn(Optional.of(draftForm()));
+        when(submissionRepository.existsByFormId(1L)).thenReturn(true);
+
+        formService.deleteForRecruit(1L);
+
+        verify(formRepository, never()).delete(any(FormEntity.class));
+    }
+
+    @Test
+    void 공고_삭제시_응답이_없는_지원_폼은_함께_지운다() {
+        FormEntity form = draftForm();
+        when(formRepository.findById(1L)).thenReturn(Optional.of(form));
+        when(submissionRepository.existsByFormId(1L)).thenReturn(false);
+
+        formService.deleteForRecruit(1L);
+
+        verify(formRepository).delete(form);
     }
 
     private FormUpdateDTO updateDtoWithoutQuestions(String title) {

@@ -30,9 +30,14 @@ public class FormAnswerEntity {
     @JoinColumn(name = "question_id")
     private FormQuestionEntity question;
 
-    /** 주관식·숫자·날짜 답변 (선택형 질문에서는 비어 있음) */
+    /** 주관식·숫자·날짜 답변 (선택형·파일 질문에서는 비어 있음) */
     @Column(columnDefinition = "TEXT")
     private String textValue;
+
+    /** 파일 질문에 첨부한 파일 */
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "file_id")
+    private FormFileEntity file;
 
     /** 선택형 질문에서 고른 선택지 (단일 선택은 1개, 다중 선택은 N개) */
     @OneToMany(mappedBy = "answer", cascade = CascadeType.ALL, orphanRemoval = true)
