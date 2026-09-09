@@ -34,6 +34,9 @@ public class RecruitResponseDTO {
 
     private String summary;
 
+    /** 공고와 함께 만들어진 지원 폼 식별자 */
+    private Long formId;
+
     private RecruitStatus status;
 
     private LocalDateTime createdAt;
@@ -52,6 +55,7 @@ public class RecruitResponseDTO {
                 .deadline(entity.getDeadline())
                 .interviewDate(entity.getInterviewDate())
                 .summary(entity.getSummary())
+                .formId(entity.getFormId())
                 .status(entity.getStatus())
                 .createdAt(entity.getCreatedAt())
                 .updatedAt(entity.getUpdatedAt())
