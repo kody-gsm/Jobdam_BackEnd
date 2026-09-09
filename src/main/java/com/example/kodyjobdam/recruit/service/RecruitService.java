@@ -7,6 +7,7 @@ import com.example.kodyjobdam.recruit.dto.RecruitPeriodDTO;
 import com.example.kodyjobdam.recruit.dto.request.RecruitUpdateDTO;
 import com.example.kodyjobdam.recruit.dto.response.RecruitResponseDTO;
 import com.example.kodyjobdam.recruit.entity.RecruitEntity;
+import com.example.kodyjobdam.recruit.entity.RecruitPeriod;
 import com.example.kodyjobdam.recruit.entity.RecruitStatus;
 import com.example.kodyjobdam.recruit.repository.RecruitRepository;
 import com.example.kodyjobdam.notification.entity.NotificationType;
@@ -21,6 +22,7 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.io.IOException;
+import java.time.LocalDate;
 import java.util.List;
 import java.util.Set;
 
@@ -80,20 +82,59 @@ public class RecruitService {
         return RecruitResponseDTO.from(entity);
     }
 
-    /** 선생님: 분석 결과 수정 */
+    /**
+     * 선생님: 분석 결과 수정.
+     * 요청에 담기지 않은(null) 항목은 기존 값을 유지한다. 값을 지울 때는 빈 문자열이나 빈 기간을 보낸다.
+     */
     @Transactional
     public RecruitResponseDTO update(Long recruitId, RecruitUpdateDTO dto, Long teacherId) {
         RecruitEntity entity = findOrThrow(recruitId);
         validateOwner(entity, teacherId);
         entity.update(
-                dto.getCompanyName(),
-                RecruitPeriodDTO.toPeriod(dto.getDocumentPeriod()),
-                RecruitPeriodDTO.toPeriod(dto.getWrittenExamPeriod()),
-                RecruitPeriodDTO.toPeriod(dto.getPracticalExamPeriod()),
-                RecruitPeriodDTO.toPeriod(dto.getCodingTestPeriod()),
-                RecruitPeriodDTO.toPeriod(dto.getInterviewPeriod()),
-                dto.getSummary());
+                dto.getCompanyName() == null ? entity.getCompanyName() : dto.getCompanyName(),
+                resolveDocumentPeriod(entity, dto),
+                resolvePeriod(dto.getWrittenExamPeriod(), entity.getWrittenExamPeriod()),
+                resolvePeriod(dto.getPracticalExamPeriod(), entity.getPracticalExamPeriod()),
+                resolvePeriod(dto.getCodingTestPeriod(), entity.getCodingTestPeriod()),
+                resolveInterviewPeriod(entity, dto),
+                dto.getSummary() == null ? entity.getSummary() : dto.getSummary());
         return RecruitResponseDTO.from(entity);
+    }
+
+    /** 요청에 없는 전형 기간은 기존 값을 그대로 둔다. */
+    private RecruitPeriod resolvePeriod(RecruitPeriodDTO requested, RecruitPeriod current) {
+        if (requested == null) {
+            return current;
+        }
+
+        RecruitPeriod period = RecruitPeriodDTO.toPeriod(requested);
+        return period.isEmpty() ? null : period;
+    }
+
+    /** 지원 마감(deadline)은 서류 접수 종료일만 바꾼다. documentPeriod를 함께 보내면 그쪽을 따른다. */
+    private RecruitPeriod resolveDocumentPeriod(RecruitEntity entity, RecruitUpdateDTO dto) {
+        RecruitPeriod current = entity.getDocumentPeriod();
+        if (dto.getDocumentPeriod() != null || dto.getDeadline() == null) {
+            return resolvePeriod(dto.getDocumentPeriod(), current);
+        }
+
+        RecruitPeriod deadline = RecruitPeriod.parse(dto.getDeadline());
+        LocalDate startDate = current == null ? null : current.getStartDate();
+        LocalDate endDate = deadline == null ? null : deadline.getEndDate();
+        if (startDate == null && endDate == null) {
+            return null;
+        }
+
+        return new RecruitPeriod(startDate, endDate);
+    }
+
+    /** 면접 일정(interviewDate)은 기간 전체를 바꾼다. interviewPeriod를 함께 보내면 그쪽을 따른다. */
+    private RecruitPeriod resolveInterviewPeriod(RecruitEntity entity, RecruitUpdateDTO dto) {
+        if (dto.getInterviewPeriod() != null || dto.getInterviewDate() == null) {
+            return resolvePeriod(dto.getInterviewPeriod(), entity.getInterviewPeriod());
+        }
+
+        return RecruitPeriod.parse(dto.getInterviewDate());
     }
 
     /** 선생님: 채용 공고 삭제 (공개된 공고도 지울 수 있다) */
