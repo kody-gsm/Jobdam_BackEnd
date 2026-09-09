@@ -42,6 +42,8 @@ public class FormService {
 
     private final NotificationExpirationService notificationExpirationService;
 
+    private final FormFileService formFileService;
+
     /**
      * 채용 공고에 딸린 기본 지원 폼을 만든다.
      * 기본 질문은 학번·이름·포트폴리오이며, 선생님이 초안 상태에서 자유롭게 고칠 수 있다.
@@ -60,7 +62,7 @@ public class FormService {
 
         form.addQuestion(shortTextQuestion(1, "학번", "예) 1101", true));
         form.addQuestion(shortTextQuestion(2, "이름", null, true));
-        form.addQuestion(shortTextQuestion(3, "포트폴리오", "포트폴리오 링크를 입력해주세요.", false));
+        form.addQuestion(fileQuestion(3, "포트폴리오", "포트폴리오 파일을 올려주세요.", false));
 
         return formRepository.save(form);
     }
@@ -84,7 +86,10 @@ public class FormService {
     public void deleteForRecruit(Long formId) {
         formRepository.findById(formId)
                 .filter(form -> !submissionRepository.existsByFormId(formId))
-                .ifPresent(formRepository::delete);
+                .ifPresent(form -> {
+                    formFileService.deleteAllByForm(formId);
+                    formRepository.delete(form);
+                });
     }
 
     /** 선생님: 폼 생성 (초안 상태로 저장) */
@@ -143,6 +148,8 @@ public class FormService {
             throw FormException.conflict("응답이 제출된 폼은 삭제할 수 없습니다.");
         }
 
+        // 답변에 붙지 않은 채 올라와 있는 첨부 파일이 폼을 참조하므로 먼저 정리한다.
+        formFileService.deleteAllByForm(formId);
         formRepository.delete(form);
     }
 
@@ -223,9 +230,19 @@ public class FormService {
 
     /** 기본 지원 폼에 쓰는 단답형 질문 */
     private FormQuestionEntity shortTextQuestion(int orderIndex, String title, String description, boolean required) {
+        return defaultQuestion(orderIndex, QuestionType.SHORT_TEXT, title, description, required);
+    }
+
+    /** 기본 지원 폼에 쓰는 파일 첨부 질문 */
+    private FormQuestionEntity fileQuestion(int orderIndex, String title, String description, boolean required) {
+        return defaultQuestion(orderIndex, QuestionType.FILE, title, description, required);
+    }
+
+    private FormQuestionEntity defaultQuestion(int orderIndex, QuestionType type, String title,
+                                               String description, boolean required) {
         return FormQuestionEntity.builder()
                 .orderIndex(orderIndex)
-                .type(QuestionType.SHORT_TEXT)
+                .type(type)
                 .title(title)
                 .description(description)
                 .required(required)

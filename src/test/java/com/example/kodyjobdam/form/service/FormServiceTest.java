@@ -28,6 +28,7 @@ import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.assertj.core.api.Assertions.tuple;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
@@ -53,6 +54,9 @@ class FormServiceTest {
     @Mock
     private com.example.kodyjobdam.notification.service.NotificationExpirationService notificationExpirationService;
 
+    @Mock
+    private FormFileService formFileService;
+
     @InjectMocks
     private FormService formService;
 
@@ -64,6 +68,7 @@ class FormServiceTest {
 
         formService.delete(1L, 2L);
 
+        verify(formFileService).deleteAllByForm(1L);
         verify(formRepository).delete(form);
     }
 
@@ -205,10 +210,11 @@ class FormServiceTest {
         assertThat(form.getStatus()).isEqualTo(FormStatus.DRAFT);
         assertThat(form.getDeadline()).isEqualTo(LocalDateTime.of(2026, 9, 10, 23, 59, 59));
         assertThat(form.getQuestions())
-                .extracting(FormQuestionEntity::getTitle)
-                .containsExactly("학번", "이름", "포트폴리오");
-        assertThat(form.getQuestions())
-                .allSatisfy(question -> assertThat(question.getType()).isEqualTo(QuestionType.SHORT_TEXT));
+                .extracting(FormQuestionEntity::getTitle, FormQuestionEntity::getType)
+                .containsExactly(
+                        tuple("학번", QuestionType.SHORT_TEXT),
+                        tuple("이름", QuestionType.SHORT_TEXT),
+                        tuple("포트폴리오", QuestionType.FILE));
     }
 
     @Test
