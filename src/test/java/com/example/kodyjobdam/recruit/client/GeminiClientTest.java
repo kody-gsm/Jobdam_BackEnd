@@ -78,6 +78,28 @@ class GeminiClientTest {
         assertThat(result.companyName()).isEqualTo("잡담");
     }
 
+    @Test
+    void readsDatesWrittenInNonIsoFormats() {
+        stubResponse("{\"documentPeriod\":{\"startDate\":\"2026.09.01\",\"endDate\":\"2026년 9월 10일\"},"
+                + "\"interviewPeriod\":{\"startDate\":\"2026-09-20 14:00\",\"endDate\":\"2026/09/20(금)\"}}");
+
+        GeminiAnalysisResult result = geminiClient.analyze(new byte[]{1}, "image/png");
+
+        assertThat(result.documentPeriod().getStartDate()).isEqualTo(LocalDate.of(2026, 9, 1));
+        assertThat(result.documentPeriod().getEndDate()).isEqualTo(LocalDate.of(2026, 9, 10));
+        assertThat(result.interviewPeriod().getStartDate()).isEqualTo(LocalDate.of(2026, 9, 20));
+        assertThat(result.interviewPeriod().getEndDate()).isEqualTo(LocalDate.of(2026, 9, 20));
+    }
+
+    @Test
+    void dropsDateWithoutYear() {
+        stubResponse("{\"documentPeriod\":{\"startDate\":\"9월 1일\",\"endDate\":\"9월 10일\"}}");
+
+        GeminiAnalysisResult result = geminiClient.analyze(new byte[]{1}, "image/png");
+
+        assertThat(result.documentPeriod()).isNull();
+    }
+
     /** 모델이 돌려준 JSON 문자열을 Gemini 응답 형태로 감싼다. */
     private void stubResponse(String modelText) {
         ObjectMapper objectMapper = new ObjectMapper();
