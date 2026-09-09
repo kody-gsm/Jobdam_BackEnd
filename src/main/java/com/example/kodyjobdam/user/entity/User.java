@@ -51,5 +51,7 @@ public class User {
 
     private LocalDateTime refreshTokenExpiresAt;
 
+    @Column(length = 512)
+    private String profileImageUrl;
 
 }
