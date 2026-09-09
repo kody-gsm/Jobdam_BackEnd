@@ -14,7 +14,27 @@ import java.time.LocalDate;
 @AllArgsConstructor
 public class RecruitPeriod {
 
+    private static final String RANGE_SEPARATOR = " ~ ";
+
     private LocalDate startDate;
 
     private LocalDate endDate;
+
+    public boolean isEmpty() {
+        return startDate == null && endDate == null;
+    }
+
+    /** 화면 표기용 문자열. 하루짜리는 "YYYY-MM-DD", 여러 날은 "YYYY-MM-DD ~ YYYY-MM-DD". */
+    public String toDisplay() {
+        if (isEmpty()) {
+            return null;
+        }
+        if (startDate == null) {
+            return endDate.toString();
+        }
+        if (endDate == null || startDate.equals(endDate)) {
+            return startDate.toString();
+        }
+        return startDate + RANGE_SEPARATOR + endDate;
+    }
 }
