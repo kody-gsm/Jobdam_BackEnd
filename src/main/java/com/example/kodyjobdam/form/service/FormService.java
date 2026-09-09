@@ -10,6 +10,7 @@ import com.example.kodyjobdam.form.entity.FormEntity;
 import com.example.kodyjobdam.form.entity.FormQuestionEntity;
 import com.example.kodyjobdam.form.entity.FormQuestionOptionEntity;
 import com.example.kodyjobdam.form.entity.FormStatus;
+import com.example.kodyjobdam.form.entity.QuestionType;
 import com.example.kodyjobdam.form.repository.FormRepository;
 import com.example.kodyjobdam.form.repository.FormSubmissionRepository;
 import com.example.kodyjobdam.notification.entity.NotificationType;
@@ -21,11 +22,15 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.LocalDateTime;
 import java.util.List;
 
 @Service
 @RequiredArgsConstructor
 public class FormService {
+
+    /** 채용 공고에 자동으로 붙는 지원 폼 제목 접미사 */
+    private static final String RECRUIT_FORM_TITLE_SUFFIX = " 지원서";
 
     private final FormRepository formRepository;
 
@@ -36,6 +41,51 @@ public class FormService {
     private final NotificationService notificationService;
 
     private final NotificationExpirationService notificationExpirationService;
+
+    /**
+     * 채용 공고에 딸린 기본 지원 폼을 만든다.
+     * 기본 질문은 학번·이름·포트폴리오이며, 선생님이 초안 상태에서 자유롭게 고칠 수 있다.
+     */
+    @Transactional
+    public FormEntity createForRecruit(User teacher, String companyName, LocalDateTime deadline) {
+        String company = (companyName == null || companyName.isBlank()) ? "채용" : companyName.trim();
+
+        FormEntity form = FormEntity.builder()
+                .user(teacher)
+                .title(company + RECRUIT_FORM_TITLE_SUFFIX)
+                .description(company + " 지원을 원하는 학생은 아래 항목을 작성해주세요.")
+                .deadline(deadline)
+                .status(FormStatus.DRAFT)
+                .build();
+
+        form.addQuestion(shortTextQuestion(1, "학번", "예) 1101", true));
+        form.addQuestion(shortTextQuestion(2, "이름", null, true));
+        form.addQuestion(shortTextQuestion(3, "포트폴리오", "포트폴리오 링크를 입력해주세요.", false));
+
+        return formRepository.save(form);
+    }
+
+    /**
+     * 채용 공고 공개에 맞춰 딸린 지원 폼도 함께 공개한다.
+     * 알림은 공고 쪽에서 한 번만 보내므로 여기서는 상태만 바꾼다.
+     */
+    @Transactional
+    public void publishForRecruit(Long formId) {
+        formRepository.findById(formId)
+                .filter(form -> form.getStatus() == FormStatus.DRAFT)
+                .ifPresent(FormEntity::publish);
+    }
+
+    /**
+     * 채용 공고 삭제에 맞춰 딸린 지원 폼도 정리한다.
+     * 이미 제출된 응답이 있으면 지원 기록이 사라지지 않도록 폼을 남겨둔다.
+     */
+    @Transactional
+    public void deleteForRecruit(Long formId) {
+        formRepository.findById(formId)
+                .filter(form -> !submissionRepository.existsByFormId(formId))
+                .ifPresent(formRepository::delete);
+    }
 
     /** 선생님: 폼 생성 (초안 상태로 저장) */
     @Transactional
@@ -169,6 +219,17 @@ public class FormService {
         }
 
         return FormResponseDTO.from(form);
+    }
+
+    /** 기본 지원 폼에 쓰는 단답형 질문 */
+    private FormQuestionEntity shortTextQuestion(int orderIndex, String title, String description, boolean required) {
+        return FormQuestionEntity.builder()
+                .orderIndex(orderIndex)
+                .type(QuestionType.SHORT_TEXT)
+                .title(title)
+                .description(description)
+                .required(required)
+                .build();
     }
 
     /** 요청으로 들어온 질문 목록을 폼에 반영한다 (순서는 배열 순서를 그대로 따른다) */
