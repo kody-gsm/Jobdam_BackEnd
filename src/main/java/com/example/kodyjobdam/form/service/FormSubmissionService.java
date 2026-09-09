@@ -6,6 +6,7 @@ import com.example.kodyjobdam.form.dto.request.FormSubmitDTO;
 import com.example.kodyjobdam.form.dto.response.FormSubmissionResponseDTO;
 import com.example.kodyjobdam.form.dto.response.FormSubmissionSummaryResponseDTO;
 import com.example.kodyjobdam.form.entity.*;
+import com.example.kodyjobdam.form.repository.FormFileRepository;
 import com.example.kodyjobdam.form.repository.FormRepository;
 import com.example.kodyjobdam.form.repository.FormSubmissionRepository;
 import com.example.kodyjobdam.user.UserRepository;
@@ -36,6 +37,8 @@ public class FormSubmissionService {
 
     private final UserRepository userRepository;
 
+    private final FormFileRepository fileRepository;
+
     /** 학생: 폼 응답 제출 (1인 1회) */
     @Transactional
     public FormSubmissionResponseDTO submit(Long formId, FormSubmitDTO dto, Long userId) {
@@ -56,7 +59,7 @@ public class FormSubmissionService {
                 .user(user)
                 .build();
 
-        buildAnswers(form, dto.getAnswers()).forEach(submission::addAnswer);
+        buildAnswers(form, dto.getAnswers(), userId).forEach(submission::addAnswer);
 
         return FormSubmissionResponseDTO.from(submissionRepository.save(submission));
     }
@@ -73,13 +76,13 @@ public class FormSubmissionService {
         FormSubmissionEntity submission = submissionRepository.findByFormIdAndUserId(formId, userId)
                 .orElseThrow(() -> FormException.notFound("아직 제출한 응답이 없습니다."));
 
-        submission.replaceAnswers(buildAnswers(form, dto.getAnswers()));
+        submission.replaceAnswers(buildAnswers(form, dto.getAnswers(), userId));
 
         return FormSubmissionResponseDTO.from(submission);
     }
 
     /** 요청 답변을 폼의 질문 순서대로 검증해 답변 엔티티로 만든다 */
-    private List<FormAnswerEntity> buildAnswers(FormEntity form, List<FormAnswerDTO> answers) {
+    private List<FormAnswerEntity> buildAnswers(FormEntity form, List<FormAnswerDTO> answers, Long userId) {
         Map<Long, FormAnswerDTO> answerByQuestionId = groupByQuestionId(form, answers);
 
         List<FormAnswerEntity> built = new ArrayList<>();
@@ -93,7 +96,7 @@ public class FormSubmissionService {
                 continue;
             }
 
-            built.add(buildAnswer(question, answerDTO));
+            built.add(buildAnswer(form, question, answerDTO, userId));
         }
         return built;
     }
@@ -182,24 +185,58 @@ public class FormSubmissionService {
         return grouped;
     }
 
-    /** 답변이 비어 있는지 (선택 안 함 / 빈 문자열) */
+    /** 답변이 비어 있는지 (선택 안 함 / 첨부 안 함 / 빈 문자열) */
     private boolean isBlankAnswer(FormQuestionEntity question, FormAnswerDTO dto) {
         if (question.getType().hasOptions()) {
             return dto.getOptionIds() == null || dto.getOptionIds().isEmpty();
         }
+        if (question.getType().isFile()) {
+            return dto.getFileId() == null;
+        }
         return dto.getTextValue() == null || dto.getTextValue().isBlank();
     }
 
-    private FormAnswerEntity buildAnswer(FormQuestionEntity question, FormAnswerDTO dto) {
+    private FormAnswerEntity buildAnswer(FormEntity form, FormQuestionEntity question, FormAnswerDTO dto, Long userId) {
+        if (question.getType().isFile()) {
+            return buildFileAnswer(form, question, dto, userId);
+        }
         return question.getType().hasOptions()
                 ? buildChoiceAnswer(question, dto)
                 : buildTextAnswer(question, dto);
+    }
+
+    /** 파일 답변: 이 폼에 본인이 올린 파일만 붙일 수 있다 */
+    private FormAnswerEntity buildFileAnswer(FormEntity form, FormQuestionEntity question, FormAnswerDTO dto, Long userId) {
+        if (dto.getTextValue() != null && !dto.getTextValue().isBlank()) {
+            throw FormException.badRequest("파일 질문에는 직접 입력할 수 없습니다: " + question.getTitle());
+        }
+        if (dto.getOptionIds() != null && !dto.getOptionIds().isEmpty()) {
+            throw FormException.badRequest("파일 질문에는 선택지를 보낼 수 없습니다: " + question.getTitle());
+        }
+
+        FormFileEntity file = fileRepository.findById(dto.getFileId())
+                .orElseThrow(() -> FormException.notFound("첨부한 파일을 찾을 수 없습니다: " + question.getTitle()));
+
+        if (file.getUser() == null || !file.getUser().getId().equals(userId)) {
+            throw FormException.forbidden("본인이 올린 파일만 첨부할 수 있습니다: " + question.getTitle());
+        }
+        if (file.getForm() == null || !file.getForm().getId().equals(form.getId())) {
+            throw FormException.badRequest("이 폼에 올린 파일이 아닙니다: " + question.getTitle());
+        }
+
+        return FormAnswerEntity.builder()
+                .question(question)
+                .file(file)
+                .build();
     }
 
     /** 선택형 답변: 고른 선택지가 이 질문의 것인지, 개수 제한을 지켰는지 검사한다 */
     private FormAnswerEntity buildChoiceAnswer(FormQuestionEntity question, FormAnswerDTO dto) {
         if (dto.getTextValue() != null && !dto.getTextValue().isBlank()) {
             throw FormException.badRequest("선택형 질문에는 직접 입력할 수 없습니다: " + question.getTitle());
+        }
+        if (dto.getFileId() != null) {
+            throw FormException.badRequest("선택형 질문에는 파일을 첨부할 수 없습니다: " + question.getTitle());
         }
 
         List<Long> optionIds = dto.getOptionIds();
@@ -235,6 +272,9 @@ public class FormSubmissionService {
     private FormAnswerEntity buildTextAnswer(FormQuestionEntity question, FormAnswerDTO dto) {
         if (dto.getOptionIds() != null && !dto.getOptionIds().isEmpty()) {
             throw FormException.badRequest("주관식 질문에는 선택지를 보낼 수 없습니다: " + question.getTitle());
+        }
+        if (dto.getFileId() != null) {
+            throw FormException.badRequest("주관식 질문에는 파일을 첨부할 수 없습니다: " + question.getTitle());
         }
 
         String text = dto.getTextValue().trim();

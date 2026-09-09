@@ -7,11 +7,17 @@ public enum QuestionType {
     MULTIPLE_CHOICE, // 체크박스 (여러 개 선택)
     DROPDOWN,        // 드롭다운 (하나만 선택)
     NUMBER,          // 숫자
-    DATE;            // 날짜 (YYYY-MM-DD)
+    DATE,            // 날짜 (YYYY-MM-DD)
+    FILE;            // 파일 첨부 (포트폴리오 등)
 
     /** 선택지를 갖는 유형인지 */
     public boolean hasOptions() {
         return this == SINGLE_CHOICE || this == MULTIPLE_CHOICE || this == DROPDOWN;
+    }
+
+    /** 파일을 첨부하는 유형인지 */
+    public boolean isFile() {
+        return this == FILE;
     }
 
     /** 선택지를 여러 개 고를 수 있는 유형인지 */

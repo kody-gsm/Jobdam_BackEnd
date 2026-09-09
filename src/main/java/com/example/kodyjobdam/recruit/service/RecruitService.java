@@ -1,6 +1,8 @@
 package com.example.kodyjobdam.recruit.service;
 
 import com.example.kodyjobdam.common.exception.RecruitException;
+import com.example.kodyjobdam.form.entity.FormEntity;
+import com.example.kodyjobdam.form.service.FormService;
 import com.example.kodyjobdam.recruit.client.GeminiAnalysisResult;
 import com.example.kodyjobdam.recruit.client.GeminiClient;
 import com.example.kodyjobdam.recruit.dto.RecruitPeriodDTO;
@@ -23,6 +25,8 @@ import org.springframework.web.multipart.MultipartFile;
 
 import java.io.IOException;
 import java.time.LocalDate;
+import java.time.LocalDateTime;
+import java.time.LocalTime;
 import java.util.List;
 import java.util.Set;
 
@@ -39,6 +43,8 @@ public class RecruitService {
     private final UserRepository userRepository;
 
     private final GeminiClient geminiClient;
+
+    private final FormService formService;
 
     private final NotificationService notificationService;
 
@@ -67,6 +73,10 @@ public class RecruitService {
 
         GeminiAnalysisResult result = geminiClient.analyze(imageBytes, contentType);
 
+        // 공고를 만들 때 학번·이름·포트폴리오로 이루어진 기본 지원 폼도 함께 만들어 붙인다.
+        FormEntity form = formService.createForRecruit(
+                user, result.companyName(), applicationDeadline(result.documentPeriod()));
+
         RecruitEntity entity = recruitRepository.save(RecruitEntity.builder()
                 .user(user)
                 .companyName(result.companyName())
@@ -75,6 +85,7 @@ public class RecruitService {
                 .practicalExamPeriod(result.practicalExamPeriod())
                 .codingTestPeriod(result.codingTestPeriod())
                 .interviewPeriod(result.interviewPeriod())
+                .form(form)
                 .summary(result.summary())
                 .status(RecruitStatus.DRAFT)
                 .build());
@@ -99,6 +110,12 @@ public class RecruitService {
                 resolveInterviewPeriod(entity, dto),
                 dto.getSummary() == null ? entity.getSummary() : dto.getSummary());
         return RecruitResponseDTO.from(entity);
+    }
+
+    /** 지원 폼 마감은 서류 접수 마지막 날 자정으로 잡는다. 접수 기간을 못 읽었으면 비워둔다. */
+    private LocalDateTime applicationDeadline(RecruitPeriod documentPeriod) {
+        LocalDate endDate = documentPeriod == null ? null : documentPeriod.getEndDate();
+        return endDate == null ? null : endDate.atTime(LocalTime.MAX);
     }
 
     /** 요청에 없는 전형 기간은 기존 값을 그대로 둔다. */
@@ -142,7 +159,14 @@ public class RecruitService {
     public void delete(Long recruitId, Long teacherId) {
         RecruitEntity entity = findOrThrow(recruitId);
         validateOwner(entity, teacherId);
+
+        Long formId = entity.getFormId();
+        // 공고가 폼을 참조하므로 공고를 먼저 지운 뒤에 폼을 정리한다.
         recruitRepository.delete(entity);
+        recruitRepository.flush();
+        if (formId != null) {
+            formService.deleteForRecruit(formId);
+        }
     }
 
     /** 선생님: 학생에게 공개 */
@@ -155,6 +179,10 @@ public class RecruitService {
         }
 
         entity.publish();
+        // 공고가 열리면 지원 폼도 함께 열어 학생이 바로 지원할 수 있게 한다.
+        if (entity.getFormId() != null) {
+            formService.publishForRecruit(entity.getFormId());
+        }
         notificationService.notifyAllStudents(
                 NotificationType.RECRUIT_PUBLISHED,
                 "새로운 취업 공지",
