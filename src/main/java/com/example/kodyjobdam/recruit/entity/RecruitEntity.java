@@ -109,6 +109,11 @@ public class RecruitEntity {
         return endDate == null ? null : endDate.toString();
     }
 
+    /** 면접 일정을 화면 표기 문자열로 돌려준다. 하루짜리 면접은 날짜 하나로 표기한다. */
+    public String getInterviewDate() {
+        return interviewPeriod == null ? null : interviewPeriod.toDisplay();
+    }
+
     /** 학생에게 공개 */
     public void publish() {
         this.status = RecruitStatus.PUBLISHED;

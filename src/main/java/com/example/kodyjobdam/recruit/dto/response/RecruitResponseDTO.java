@@ -26,6 +26,12 @@ public class RecruitResponseDTO {
 
     private RecruitPeriodDTO interviewPeriod;
 
+    /** 지원 마감일(서류 접수 종료일). documentPeriod에서 뽑아낸 표기용 값이다. */
+    private String deadline;
+
+    /** 면접 일정 표기용 값. interviewPeriod에서 뽑아낸다. */
+    private String interviewDate;
+
     private String summary;
 
     private RecruitStatus status;
@@ -43,6 +49,8 @@ public class RecruitResponseDTO {
                 .practicalExamPeriod(RecruitPeriodDTO.from(entity.getPracticalExamPeriod()))
                 .codingTestPeriod(RecruitPeriodDTO.from(entity.getCodingTestPeriod()))
                 .interviewPeriod(RecruitPeriodDTO.from(entity.getInterviewPeriod()))
+                .deadline(entity.getDeadline())
+                .interviewDate(entity.getInterviewDate())
                 .summary(entity.getSummary())
                 .status(entity.getStatus())
                 .createdAt(entity.getCreatedAt())

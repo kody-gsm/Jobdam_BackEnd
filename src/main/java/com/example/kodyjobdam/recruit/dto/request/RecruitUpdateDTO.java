@@ -18,5 +18,11 @@ public class RecruitUpdateDTO {
 
     private RecruitPeriodDTO interviewPeriod;
 
+    /** 지원 마감일 표기 문자열. documentPeriod를 함께 보내면 그쪽이 우선한다. */
+    private String deadline;
+
+    /** 면접 일정 표기 문자열. interviewPeriod를 함께 보내면 그쪽이 우선한다. */
+    private String interviewDate;
+
     private String summary;
 }
