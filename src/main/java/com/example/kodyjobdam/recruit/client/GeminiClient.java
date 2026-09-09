@@ -1,5 +1,6 @@
 package com.example.kodyjobdam.recruit.client;
 
+import com.example.kodyjobdam.common.exception.BusinessException;
 import com.example.kodyjobdam.common.exception.ConfigException;
 import com.example.kodyjobdam.common.exception.RecruitException;
 import com.example.kodyjobdam.recruit.entity.RecruitPeriod;
@@ -38,11 +39,11 @@ public class GeminiClient {
             이미지에서 아래 항목을 추출해서 JSON으로만 응답하세요. 해당 정보가 없으면 null로 표기하세요.
 
             - companyName: 회사(기업) 이름
-            - documentPeriod: 서류 접수 기간
+            - documentPeriod: 서류 접수 기간. "지원 기간", "모집 기간", "접수 기간", "지원 마감"은 모두 여기에 넣으세요.
             - writtenExamPeriod: 필기 전형 기간
             - practicalExamPeriod: 실기 전형 기간
             - codingTestPeriod: 코딩테스트 전형 기간
-            - interviewPeriod: 면접 전형 기간
+            - interviewPeriod: 면접 전형 기간. "면접 일정", "면접일"도 여기에 넣으세요.
             - summary: 그 외 지원자가 꼭 알아야 할 중요 정보(준비물, 장소, 상세 시각 등)를 2~3문장으로 요약
 
             기간 항목은 {"startDate": "YYYY-MM-DD", "endDate": "YYYY-MM-DD"} 형태의 객체로만 작성하세요.
@@ -50,6 +51,7 @@ public class GeminiClient {
             - 하루만 진행하는 전형은 startDate와 endDate에 같은 날짜를 넣으세요.
             - 연도가 적혀 있지 않으면 가장 가까운 미래 연도로 추정하세요.
             - 공고에 없는 전형은 그 항목 전체를 null로 두세요.
+            - 시작일 없이 마감일만 적혀 있으면 startDate는 null로 두고 endDate에 마감일을 넣으세요.
             - 시각(예: 14:00)은 기간에 넣지 말고 summary에 적으세요.
 
             반드시 아래 JSON 형식으로만 응답하세요.
@@ -119,7 +121,7 @@ public class GeminiClient {
     private GeminiAnalysisResult parseResponse(String body) {
         try {
             JsonNode root = objectMapper.readTree(body);
-            String text = root.path("candidates").path(0).path("content").path("parts").path(0).path("text").asText();
+            String text = extractText(root);
 
             if (text.isBlank()) {
                 throw RecruitException.unprocessableEntity("이미지에서 정보를 추출하지 못했습니다.");
@@ -127,7 +129,7 @@ public class GeminiClient {
 
             JsonNode data = objectMapper.readTree(text);
 
-            return new GeminiAnalysisResult(
+            GeminiAnalysisResult result = new GeminiAnalysisResult(
                     readText(data, "companyName"),
                     readPeriod(data, "documentPeriod"),
                     readPeriod(data, "writtenExamPeriod"),
@@ -136,6 +138,12 @@ public class GeminiClient {
                     readPeriod(data, "interviewPeriod"),
                     readText(data, "summary")
             );
+
+            if (hasNoPeriod(result)) {
+                log.warn("Gemini가 전형 기간을 하나도 채우지 않았습니다: {}", text);
+            }
+
+            return result;
         } catch (RecruitException e) {
             throw e;
         } catch (Exception e) {
@@ -144,9 +152,32 @@ public class GeminiClient {
         }
     }
 
+    /** 추론 과정 조각은 건너뛰고 응답 본문 조각만 이어붙인다. */
+    private String extractText(JsonNode root) {
+        StringBuilder text = new StringBuilder();
+        for (JsonNode part : root.path("candidates").path(0).path("content").path("parts")) {
+            if (part.path("thought").asBoolean(false)) {
+                continue;
+            }
+            text.append(part.path("text").asText(""));
+        }
+        return text.toString().trim();
+    }
+
+    private boolean hasNoPeriod(GeminiAnalysisResult result) {
+        return result.documentPeriod() == null
+                && result.writtenExamPeriod() == null
+                && result.practicalExamPeriod() == null
+                && result.codingTestPeriod() == null
+                && result.interviewPeriod() == null;
+    }
+
     /** 날짜 형식이 어긋난 항목은 버리고 나머지는 살린다. */
     private RecruitPeriod readPeriod(JsonNode data, String fieldName) {
         JsonNode node = data.path(fieldName);
+        if (node.isTextual()) {
+            return readTextPeriod(fieldName, node.asText());
+        }
         if (!node.isObject()) {
             return null;
         }
@@ -158,6 +189,16 @@ public class GeminiClient {
         }
 
         return new RecruitPeriod(startDate, endDate);
+    }
+
+    /** 객체 대신 "2026-09-01 ~ 2026-09-10"처럼 문자열로 돌아온 기간도 받아준다. */
+    private RecruitPeriod readTextPeriod(String fieldName, String value) {
+        try {
+            return RecruitPeriod.parse(value);
+        } catch (BusinessException e) {
+            log.warn("Gemini가 해석할 수 없는 기간을 반환했습니다: {}={}", fieldName, value);
+            return null;
+        }
     }
 
     private LocalDate readDate(JsonNode node, String fieldName) {
