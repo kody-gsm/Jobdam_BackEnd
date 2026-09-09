@@ -42,5 +42,5 @@ out/
 .env
 .claude
 
-### 폼 첨부 파일 저장소 ###
+### Uploads ###
 uploads/

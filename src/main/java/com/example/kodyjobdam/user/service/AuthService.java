@@ -17,12 +17,16 @@ import com.example.kodyjobdam.user.entity.User;
 import com.example.kodyjobdam.user.security.JwtTokenProvider;
 import com.example.kodyjobdam.user.security.SecurityUtil;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 import org.springframework.util.StringUtils;
+import org.springframework.web.multipart.MultipartFile;
 
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
@@ -34,6 +38,7 @@ import java.util.Base64;
 
 @Service
 @RequiredArgsConstructor
+@Slf4j
 @Transactional(readOnly = true)
 public class AuthService {
 
@@ -44,6 +49,7 @@ public class AuthService {
     private final EmailVerificationService emailVerificationService;
     private final DataGsmStudentSyncService dataGsmStudentSyncService;
     private final SecurityUtil securityUtil;
+    private final ProfileImageStorageService profileImageStorageService;
 
     @Value("${jwt.refresh-token-expiration}")
     private long refreshTokenExpiration;
@@ -188,8 +194,53 @@ public class AuthService {
         return new UserProfileResponse(
                 user.getName(),
                 user.getEmail(),
-                user.getStudent_number()
+                user.getStudent_number(),
+                user.getProfileImageUrl()
         );
+    }
+
+    @Transactional
+    public UserProfileResponse updateProfileImage(MultipartFile image) {
+        Long userId = securityUtil.getCurrentUserId();
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new IllegalArgumentException("User not found."));
+
+        String previousImageUrl = user.getProfileImageUrl();
+        ProfileImageStorageService.StoredProfileImage storedImage = profileImageStorageService.store(image);
+        user.setProfileImageUrl(storedImage.url());
+        cleanupProfileImagesAfterTransaction(previousImageUrl, storedImage.url());
+        userRepository.saveAndFlush(user);
+
+        return new UserProfileResponse(
+                user.getName(),
+                user.getEmail(),
+                user.getStudent_number(),
+                user.getProfileImageUrl()
+        );
+    }
+
+    private void cleanupProfileImagesAfterTransaction(String previousImageUrl, String newImageUrl) {
+        TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+            @Override
+            public void afterCommit() {
+                deleteProfileImageQuietly(previousImageUrl);
+            }
+
+            @Override
+            public void afterCompletion(int status) {
+                if (status == STATUS_ROLLED_BACK) {
+                    deleteProfileImageQuietly(newImageUrl);
+                }
+            }
+        });
+    }
+
+    private void deleteProfileImageQuietly(String imageUrl) {
+        try {
+            profileImageStorageService.delete(imageUrl);
+        } catch (RuntimeException e) {
+            log.warn("Failed to delete profile image. imageUrl={}", imageUrl, e);
+        }
     }
 
     private AuthResponse createAuthResponse(User user, String refreshToken) {
