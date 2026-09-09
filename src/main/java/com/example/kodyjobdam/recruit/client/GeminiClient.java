@@ -21,10 +21,11 @@ import org.springframework.web.client.HttpStatusCodeException;
 import org.springframework.web.client.RestClientException;
 import org.springframework.web.client.RestTemplate;
 
+import java.time.DateTimeException;
 import java.time.LocalDate;
-import java.time.format.DateTimeFormatter;
-import java.time.format.DateTimeParseException;
 import java.util.Base64;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 @Slf4j
 @Component
@@ -57,6 +58,9 @@ public class GeminiClient {
             반드시 아래 JSON 형식으로만 응답하세요.
             {"companyName": string|null, "documentPeriod": object|null, "writtenExamPeriod": object|null, "practicalExamPeriod": object|null, "codingTestPeriod": object|null, "interviewPeriod": object|null, "summary": string|null}
             """;
+
+    /** 연-월-일 사이에 무엇이 끼어 있어도 숫자만 뽑아낸다. */
+    private static final Pattern DATE_PATTERN = Pattern.compile("(\\d{4})\\D{1,3}(\\d{1,2})\\D{1,3}(\\d{1,2})");
 
     private final RestTemplate restTemplate;
 
@@ -139,8 +143,8 @@ public class GeminiClient {
                     readText(data, "summary")
             );
 
-            if (hasNoPeriod(result)) {
-                log.warn("Gemini가 전형 기간을 하나도 채우지 않았습니다: {}", text);
+            if (result.documentPeriod() == null || result.interviewPeriod() == null) {
+                log.warn("Gemini가 서류 접수/면접 기간을 채우지 않았습니다: model={}, 응답={}", model, text);
             }
 
             return result;
@@ -162,14 +166,6 @@ public class GeminiClient {
             text.append(part.path("text").asText(""));
         }
         return text.toString().trim();
-    }
-
-    private boolean hasNoPeriod(GeminiAnalysisResult result) {
-        return result.documentPeriod() == null
-                && result.writtenExamPeriod() == null
-                && result.practicalExamPeriod() == null
-                && result.codingTestPeriod() == null
-                && result.interviewPeriod() == null;
     }
 
     /** 날짜 형식이 어긋난 항목은 버리고 나머지는 살린다. */
@@ -207,10 +203,29 @@ public class GeminiClient {
             return null;
         }
 
-        try {
-            return LocalDate.parse(value, DateTimeFormatter.ISO_LOCAL_DATE);
-        } catch (DateTimeParseException e) {
+        LocalDate date = parseDate(value);
+        if (date == null) {
             log.warn("Gemini가 해석할 수 없는 날짜를 반환했습니다: {}={}", fieldName, value);
+        }
+        return date;
+    }
+
+    /**
+     * "2026-09-10" 외에 "2026.09.10", "2026년 9월 10일", 뒤에 시각이나 요일이 붙은 값도 받아준다.
+     * 형식만 어긋났을 뿐 날짜가 적혀 있는 응답을 통째로 버리지 않기 위한 처리다.
+     */
+    private LocalDate parseDate(String value) {
+        Matcher matcher = DATE_PATTERN.matcher(value);
+        if (!matcher.find()) {
+            return null;
+        }
+
+        try {
+            return LocalDate.of(
+                    Integer.parseInt(matcher.group(1)),
+                    Integer.parseInt(matcher.group(2)),
+                    Integer.parseInt(matcher.group(3)));
+        } catch (DateTimeException e) {
             return null;
         }
     }
