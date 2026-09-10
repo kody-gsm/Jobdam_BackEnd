@@ -322,8 +322,8 @@ public class CommonService {
 
         User teacher = userRepository.findById(teacherId)
                 .orElseThrow(() -> ReservationException.notFound("선생님을 찾을 수 없습니다."));
-        if (teacher.getRole() != UserRole.TEACHER) {
-            throw ReservationException.badRequest("선생님 계정만 선택할 수 있습니다.");
+        if (teacher.getRole() != UserRole.WEE_TEACHER) {
+            throw ReservationException.badRequest("일반 상담은 Wee 클래스 선생님만 선택할 수 있습니다.");
         }
         return teacher;
     }
