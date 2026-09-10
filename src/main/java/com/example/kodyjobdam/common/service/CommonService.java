@@ -146,7 +146,7 @@ public class CommonService {
         if (!entity.getTeacher().getId().equals(teacherId)) {
             throw ReservationException.forbidden("담당 선생님만 처리할 수 있습니다.");
         }
-        if (entity.getState() != StateEnum.WAITING) {
+        if (entity.getState() == StateEnum.CANCEL) {
             throw ReservationException.conflict("이미 처리된 예약입니다.");
         }
 
