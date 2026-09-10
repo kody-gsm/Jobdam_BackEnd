@@ -12,17 +12,27 @@ public class TeacherReadDTO {
 
     private String name;
 
+    private String student_number;
+
     private LocalDate date;
 
     private String period;
 
     private CounselingCategoryEnum category;
 
-    public TeacherReadDTO(Long reservation_id, String name, LocalDate date, String period, CounselingCategoryEnum category) {
+    private String title;
+
+    private String content;
+
+    public TeacherReadDTO(Long reservation_id, String name, String student_number, LocalDate date, String period,
+                          CounselingCategoryEnum category, String title, String content) {
         this.reservation_id = reservation_id;
         this.name = name;
+        this.student_number = student_number;
         this.date = date;
         this.period = period;
         this.category = category;
+        this.title = title;
+        this.content = content;
     }
 }

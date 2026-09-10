@@ -264,9 +264,12 @@ public class CourseService {
         return new TeacherReadDTO(
                 e.getReservation_id(),
                 cryptoService.decrypt(e.getEncryptedUserName()),
+                cryptoService.decrypt(e.getEncryptedStudentNumber()),
                 e.getDate(),
                 e.getPeriod(),
-                e.getCategory()
+                e.getCategory(),
+                cryptoService.decrypt(e.getEncryptedTitle()),
+                cryptoService.decrypt(e.getEncryptedContent())
         );
     }
 
