@@ -48,6 +48,9 @@ public class SecurityConfig {
                         .requestMatchers("/auth/profile/**").authenticated()
                         .requestMatchers("/auth/**").permitAll()
                         .requestMatchers("/admin/**").hasRole("ADMIN")
+                        // 일반 상담은 Wee 클래스 선생님이 담당한다. 역할 분리 이전에 쌓인 예약이
+                        // 일반 선생님에게 걸려 있으므로 두 역할 모두 처리할 수 있게 둔다.
+                        .requestMatchers("/teacher/common/**").hasAnyRole("TEACHER", "WEE_TEACHER")
                         .requestMatchers("/teacher/**").hasRole("TEACHER")
                         .requestMatchers("/student/**").hasRole("STUDENT")
                         .anyRequest().authenticated()
