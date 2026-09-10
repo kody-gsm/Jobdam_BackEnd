@@ -118,6 +118,7 @@ public class CourseService {
         if (entity.getState() != StateEnum.WAITING) {
             throw ReservationException.conflict("이미 처리된 예약입니다.");
         }
+        validateSlotNotTaken(entity, teacherId);
 
         entity.setState(StateEnum.RESERVED);
         User submitter = findSubmitter(entity);
@@ -301,6 +302,18 @@ public class CourseService {
     private void validateCategory(CounselingCategoryEnum category) {
         if (category == null) {
             throw ReservationException.badRequest("상담 분야를 선택해주세요.");
+        }
+    }
+
+    /** 한 선생님이 같은 날 같은 교시에 두 건을 수락하지 못하게 막는다. */
+    private void validateSlotNotTaken(CourseEntity target, Long teacherId) {
+        boolean taken = courseRepository
+                .findAllByDateAndPeriodAndTeacher_Id(target.getDate(), target.getPeriod(), teacherId).stream()
+                .filter(other -> !other.getReservation_id().equals(target.getReservation_id()))
+                .anyMatch(other -> other.getState() == StateEnum.RESERVED);
+
+        if (taken) {
+            throw ReservationException.conflict("같은 시간에 이미 수락한 상담이 있습니다.");
         }
     }
 

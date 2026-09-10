@@ -124,6 +124,7 @@ public class CommonService {
         if (entity.getState() != StateEnum.WAITING) {
             throw ReservationException.conflict("이미 처리된 예약입니다.");
         }
+        validateSlotNotTaken(entity, teacherId);
 
         entity.setState(StateEnum.RESERVED);
         User submitter = findSubmitter(entity);
@@ -309,6 +310,18 @@ public class CommonService {
         if (isAlwaysLockedPeriod(period)) {
             throw ReservationException.locked(
                     period.trim() + "는 설정으로 상시 잠겨 있어 해제할 수 없습니다.");
+        }
+    }
+
+    /** 한 선생님이 같은 날 같은 교시에 두 건을 수락하지 못하게 막는다. */
+    private void validateSlotNotTaken(CommonEntity target, Long teacherId) {
+        boolean taken = commonRepository
+                .findAllByDateAndPeriodAndTeacher_Id(target.getDate(), target.getPeriod(), teacherId).stream()
+                .filter(other -> !other.getReservation_id().equals(target.getReservation_id()))
+                .anyMatch(other -> other.getState() == StateEnum.RESERVED);
+
+        if (taken) {
+            throw ReservationException.conflict("같은 시간에 이미 수락한 상담이 있습니다.");
         }
     }
 

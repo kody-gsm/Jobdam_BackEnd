@@ -323,6 +323,35 @@ class CommonServiceTest {
         verify(commonRepository, never()).findAllByDateAndPeriodAndTeacher_Id(any(), anyString(), any());
     }
 
+    @Test
+    void allowRejectsSlotAlreadyTakenBySameTeacher() {
+        LocalDate date = LocalDate.of(2026, 9, 10);
+        CommonEntity target = CommonEntity.builder()
+                .reservation_id(100L)
+                .teacher(user(2L, UserRole.WEE_TEACHER))
+                .date(date)
+                .period("3교시")
+                .state(StateEnum.WAITING)
+                .build();
+        CommonEntity taken = CommonEntity.builder()
+                .reservation_id(101L)
+                .date(date)
+                .period("3교시")
+                .state(StateEnum.RESERVED)
+                .build();
+
+        when(commonRepository.findById(100L)).thenReturn(Optional.of(target));
+        when(commonRepository.findAllByDateAndPeriodAndTeacher_Id(date, "3교시", 2L))
+                .thenReturn(List.of(target, taken));
+
+        assertThatThrownBy(() -> commonService.allow(100L, 2L))
+                .isInstanceOf(ReservationException.class)
+                .hasMessage("같은 시간에 이미 수락한 상담이 있습니다.");
+
+        assertThat(target.getState()).isEqualTo(StateEnum.WAITING);
+        verify(notificationService, never()).notifyUser(any(), any(), any(), any(), any(), any(), any());
+    }
+
     private LockDTO lockDto(LocalDate date, String period) {
         LockDTO dto = new LockDTO();
         ReflectionTestUtils.setField(dto, "date", date);
