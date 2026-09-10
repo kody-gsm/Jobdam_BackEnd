@@ -180,6 +180,31 @@ public class CommonService {
         commonRepository.save(dto.toEntity(teacher));
     }
 
+    /**
+     * 잠가 둔 시간을 다시 예약 가능하게 되돌린다.
+     * 잠금과 함께 취소된 예약은 되살리지 않는다. 학생이 다시 신청해야 한다.
+     */
+    @Transactional
+    public void teacherUnlock(LockDTO dto, Long teacherId) {
+        validateNotAlwaysLockedPeriod(dto.getPeriod());
+
+        User teacher = userRepository.findById(teacherId)
+                .orElseThrow(() -> ReservationException.notFound("회원이 없습니다."));
+
+        List<CommonEntity> locked = commonRepository.findAllByDateAndPeriodAndTeacher_Id(
+                        dto.getDate(), dto.getPeriod(), teacher.getId()).stream()
+                .filter(entity -> entity.getState() == StateEnum.LOCKED)
+                .toList();
+
+        if (locked.isEmpty()) {
+            throw ReservationException.notFound("잠긴 시간이 아닙니다.");
+        }
+
+        for (CommonEntity entity : locked) {
+            entity.setState(StateEnum.CANCEL);
+        }
+    }
+
     @Transactional(readOnly = true)
     public List<TeacherReadDTO> T_Read(Long id) {
         return commonRepository.findByTeacher_IdAndStateOrderByDateAscPeriodAsc(id, StateEnum.RESERVED).stream()
@@ -269,9 +294,24 @@ public class CommonService {
 
     /** 상시 잠금으로 지정된 교시에는 상담을 잡을 수 없다. */
     private void validateNotLockedPeriod(String period) {
-        if (period != null && !period.isBlank() && lockedPeriods.contains(period.trim())) {
+        if (isAlwaysLockedPeriod(period)) {
             throw ReservationException.locked(period.trim() + "에는 상담을 예약할 수 없습니다.");
         }
+    }
+
+    /**
+     * 상시 잠금 교시는 설정값으로 막혀 있어서, 잠금을 풀어도 여전히 예약할 수 없다.
+     * 풀렸다고 오해하지 않도록 해제 자체를 막는다.
+     */
+    private void validateNotAlwaysLockedPeriod(String period) {
+        if (isAlwaysLockedPeriod(period)) {
+            throw ReservationException.locked(
+                    period.trim() + "는 설정으로 상시 잠겨 있어 해제할 수 없습니다.");
+        }
+    }
+
+    private boolean isAlwaysLockedPeriod(String period) {
+        return period != null && !period.isBlank() && lockedPeriods.contains(period.trim());
     }
 
     private int priority(StateEnum state) {

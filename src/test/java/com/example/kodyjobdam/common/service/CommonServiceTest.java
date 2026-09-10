@@ -1,6 +1,7 @@
 package com.example.kodyjobdam.common.service;
 
 import com.example.kodyjobdam.common.dto.request.CreateDTO;
+import com.example.kodyjobdam.common.dto.request.LockDTO;
 import com.example.kodyjobdam.common.dto.response.SlotStatusDTO;
 import com.example.kodyjobdam.common.entity.CommonEntity;
 import com.example.kodyjobdam.common.entity.CounselingCategoryEnum;
@@ -278,6 +279,55 @@ class CommonServiceTest {
         assertThat(result.get(0).getPeriod()).isEqualTo("4교시");
         assertThat(result.get(0).getState()).isEqualTo(StateEnum.LOCKED);
         assertThat(result.get(0).isAvailable()).isFalse();
+    }
+
+    @Test
+    void teacherUnlockCancelsOnlyLockedSlot() {
+        LocalDate date = LocalDate.of(2026, 9, 10);
+        User teacher = user(2L, UserRole.WEE_TEACHER);
+        CommonEntity locked = CommonEntity.builder().state(StateEnum.LOCKED).build();
+        CommonEntity reserved = CommonEntity.builder().state(StateEnum.RESERVED).build();
+
+        when(userRepository.findById(2L)).thenReturn(Optional.of(teacher));
+        when(commonRepository.findAllByDateAndPeriodAndTeacher_Id(date, "3교시", 2L))
+                .thenReturn(List.of(locked, reserved));
+
+        commonService.teacherUnlock(lockDto(date, "3교시"), 2L);
+
+        assertThat(locked.getState()).isEqualTo(StateEnum.CANCEL);
+        assertThat(reserved.getState()).isEqualTo(StateEnum.RESERVED);
+    }
+
+    @Test
+    void teacherUnlockWithoutLockedSlotIsRejected() {
+        LocalDate date = LocalDate.of(2026, 9, 10);
+        User teacher = user(2L, UserRole.WEE_TEACHER);
+
+        when(userRepository.findById(2L)).thenReturn(Optional.of(teacher));
+        when(commonRepository.findAllByDateAndPeriodAndTeacher_Id(date, "3교시", 2L))
+                .thenReturn(List.of());
+
+        assertThatThrownBy(() -> commonService.teacherUnlock(lockDto(date, "3교시"), 2L))
+                .isInstanceOf(ReservationException.class)
+                .hasMessage("잠긴 시간이 아닙니다.");
+    }
+
+    @Test
+    void teacherUnlockOnAlwaysLockedPeriodIsRejected() {
+        LocalDate date = LocalDate.of(2026, 9, 10);
+
+        assertThatThrownBy(() -> commonService.teacherUnlock(lockDto(date, "4교시"), 2L))
+                .isInstanceOf(ReservationException.class)
+                .hasMessage("4교시는 설정으로 상시 잠겨 있어 해제할 수 없습니다.");
+
+        verify(commonRepository, never()).findAllByDateAndPeriodAndTeacher_Id(any(), anyString(), any());
+    }
+
+    private LockDTO lockDto(LocalDate date, String period) {
+        LockDTO dto = new LockDTO();
+        ReflectionTestUtils.setField(dto, "date", date);
+        ReflectionTestUtils.setField(dto, "period", period);
+        return dto;
     }
 
     private CreateDTO createDto(Long teacherId) {

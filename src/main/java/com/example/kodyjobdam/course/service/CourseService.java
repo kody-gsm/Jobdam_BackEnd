@@ -174,6 +174,29 @@ public class CourseService {
         courseRepository.save(dto.toEntity(teacher));
     }
 
+    /**
+     * 잠가 둔 시간을 다시 예약 가능하게 되돌린다.
+     * 잠금과 함께 취소된 예약은 되살리지 않는다. 학생이 다시 신청해야 한다.
+     */
+    @Transactional
+    public void teacherUnlock(LockDTO dto, Long teacherId) {
+        User teacher = userRepository.findById(teacherId)
+                .orElseThrow(() -> ReservationException.notFound("회원이 없습니다."));
+
+        List<CourseEntity> locked = courseRepository.findAllByDateAndPeriodAndTeacher_Id(
+                        dto.getDate(), dto.getPeriod(), teacher.getId()).stream()
+                .filter(entity -> entity.getState() == StateEnum.LOCKED)
+                .toList();
+
+        if (locked.isEmpty()) {
+            throw ReservationException.notFound("잠긴 시간이 아닙니다.");
+        }
+
+        for (CourseEntity entity : locked) {
+            entity.setState(StateEnum.CANCEL);
+        }
+    }
+
     @Transactional(readOnly = true)
     public List<TeacherReadDTO> T_Read(Long id) {
         return courseRepository.findByTeacher_IdAndStateOrderByDateAscPeriodAsc(id, StateEnum.RESERVED).stream()
