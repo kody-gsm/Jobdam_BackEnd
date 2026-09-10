@@ -27,6 +27,8 @@ public class ProfileImageWebConfig implements WebMvcConfigurer {
     public void addResourceHandlers(ResourceHandlerRegistry registry) {
         registry.addResourceHandler(publicPath + "/**")
                 .addResourceLocations(toResourceLocation(uploadDir));
+        registry.addResourceHandler("/backend" + publicPath + "/**")
+                .addResourceLocations(toResourceLocation(uploadDir));
     }
 
     private String normalizePublicPath(String publicPath) {

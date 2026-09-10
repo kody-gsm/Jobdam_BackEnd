@@ -44,6 +44,7 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.POST, "/api/notices").hasRole("TEACHER")
                         .requestMatchers(HttpMethod.GET, "/api/notifications/subscribe").permitAll()
                         .requestMatchers(HttpMethod.GET, "/uploads/profile-images/**").permitAll()
+                        .requestMatchers(HttpMethod.GET, "/backend/uploads/profile-images/**").permitAll()
                         .requestMatchers("/auth/profile").authenticated()
                         .requestMatchers("/auth/profile/**").authenticated()
                         .requestMatchers("/auth/**").permitAll()
