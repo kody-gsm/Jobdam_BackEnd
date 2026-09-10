@@ -146,8 +146,9 @@ public class CommonService {
         if (!entity.getTeacher().getId().equals(teacherId)) {
             throw ReservationException.forbidden("담당 선생님만 처리할 수 있습니다.");
         }
-        if (entity.getState() == StateEnum.CANCEL) {
-            throw ReservationException.conflict("이미 처리된 예약입니다.");
+        // 잠금은 신청자가 없어 거절 알림을 보낼 수 없다. 해제는 unlock으로 처리한다.
+        if (entity.getState() == StateEnum.CANCEL || entity.getState() == StateEnum.LOCKED) {
+            throw ReservationException.conflict("거절할 수 없는 예약입니다.");
         }
 
         entity.setState(StateEnum.CANCEL);
