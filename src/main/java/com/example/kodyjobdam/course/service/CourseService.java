@@ -1,6 +1,7 @@
 package com.example.kodyjobdam.course.service;
 
 import com.example.kodyjobdam.common.entity.CounselingCategoryEnum;
+import com.example.kodyjobdam.common.entity.CounselingPeriod;
 import com.example.kodyjobdam.common.exception.BusinessException;
 import com.example.kodyjobdam.common.exception.ReservationException;
 import com.example.kodyjobdam.common.service.CounselingReservationCryptoService;
@@ -24,7 +25,11 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.Clock;
+import java.time.Duration;
 import java.time.LocalDate;
+import java.time.LocalDateTime;
+import java.time.ZoneId;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -34,12 +39,18 @@ import java.util.Map;
 @RequiredArgsConstructor
 public class CourseService {
 
+    /** 상담 시작 이 시간 전부터는 학생이 취소할 수 없다. */
+    private static final Duration CANCEL_DEADLINE = Duration.ofHours(1);
+
     private final CourseRepository courseRepository;
     private final UserRepository userRepository;
     private final NotificationService notificationService;
     private final NotificationExpirationService notificationExpirationService;
     private final CounselingReservationCryptoService cryptoService;
     private final ScheduleService scheduleService;
+
+    /** 취소 마감을 판단하는 기준 시계. 학사 일정과 같은 한국 시간으로 본다. */
+    private Clock clock = Clock.system(ZoneId.of("Asia/Seoul"));
 
     public void courseSave(CourseEntity entity) {
         courseRepository.save(entity);
@@ -100,6 +111,7 @@ public class CourseService {
         if (!cryptoService.submitterHash(userId).equals(entity.getSubmitterHash())) {
             throw ReservationException.forbidden("권한이 없습니다.");
         }
+        validateCancelDeadline(entity.getDate(), entity.getPeriod());
 
         entity.setState(StateEnum.CANCEL);
     }
@@ -314,6 +326,21 @@ public class CourseService {
 
         if (taken) {
             throw ReservationException.conflict("같은 시간에 이미 수락한 상담이 있습니다.");
+        }
+    }
+
+    /** 상담 시작이 임박하면 학생이 취소할 수 없다. */
+    private void validateCancelDeadline(LocalDate date, String period) {
+        CounselingPeriod schedule = CounselingPeriod.from(period).orElse(null);
+        if (schedule == null) {
+            // 시간표에 없는 교시는 시작 시각을 알 수 없다. 취소를 막지 않는다.
+            log.warn("시간표에 없는 교시라 취소 마감을 확인하지 못했습니다. period={}", period);
+            return;
+        }
+
+        LocalDateTime deadline = schedule.startsAt(date).minus(CANCEL_DEADLINE);
+        if (!LocalDateTime.now(clock).isBefore(deadline)) {
+            throw ReservationException.conflict("상담 시작 1시간 전부터는 취소할 수 없습니다.");
         }
     }
 

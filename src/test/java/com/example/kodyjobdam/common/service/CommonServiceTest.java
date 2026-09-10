@@ -24,8 +24,10 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.test.util.ReflectionTestUtils;
 
+import java.time.Clock;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.ZoneId;
 import java.util.List;
 import java.util.Optional;
 import java.util.Set;
@@ -350,6 +352,54 @@ class CommonServiceTest {
 
         assertThat(target.getState()).isEqualTo(StateEnum.WAITING);
         verify(notificationService, never()).notifyUser(any(), any(), any(), any(), any(), any(), any());
+    }
+
+    @Test
+    void cancelWithinOneHourOfStartIsRejected() {
+        LocalDate date = LocalDate.of(2026, 9, 10);
+        CommonEntity entity = CommonEntity.builder()
+                .reservation_id(100L)
+                .date(date)
+                .period("3교시")                       // 10:40 시작 → 09:40부터 취소 불가
+                .submitterHash("student-hash")
+                .state(StateEnum.WAITING)
+                .build();
+
+        fixClock(LocalDateTime.of(2026, 9, 10, 9, 41));
+        when(commonRepository.findById(100L)).thenReturn(Optional.of(entity));
+        when(cryptoService.submitterHash(1L)).thenReturn("student-hash");
+
+        assertThatThrownBy(() -> commonService.cancelReservation(100L, 1L))
+                .isInstanceOf(ReservationException.class)
+                .hasMessage("상담 시작 1시간 전부터는 취소할 수 없습니다.");
+
+        assertThat(entity.getState()).isEqualTo(StateEnum.WAITING);
+    }
+
+    @Test
+    void cancelBeforeDeadlineIsAllowed() {
+        LocalDate date = LocalDate.of(2026, 9, 10);
+        CommonEntity entity = CommonEntity.builder()
+                .reservation_id(100L)
+                .date(date)
+                .period("3교시")
+                .submitterHash("student-hash")
+                .state(StateEnum.WAITING)
+                .build();
+
+        fixClock(LocalDateTime.of(2026, 9, 10, 9, 39));
+        when(commonRepository.findById(100L)).thenReturn(Optional.of(entity));
+        when(cryptoService.submitterHash(1L)).thenReturn("student-hash");
+
+        commonService.cancelReservation(100L, 1L);
+
+        assertThat(entity.getState()).isEqualTo(StateEnum.CANCEL);
+    }
+
+    private void fixClock(LocalDateTime now) {
+        ZoneId zone = ZoneId.of("Asia/Seoul");
+        ReflectionTestUtils.setField(commonService, "clock",
+                Clock.fixed(now.atZone(zone).toInstant(), zone));
     }
 
     private LockDTO lockDto(LocalDate date, String period) {
