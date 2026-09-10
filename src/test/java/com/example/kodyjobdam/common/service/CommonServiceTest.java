@@ -1,6 +1,7 @@
 package com.example.kodyjobdam.common.service;
 
 import com.example.kodyjobdam.common.dto.request.CreateDTO;
+import com.example.kodyjobdam.common.dto.request.LockDTO;
 import com.example.kodyjobdam.common.dto.response.SlotStatusDTO;
 import com.example.kodyjobdam.common.entity.CommonEntity;
 import com.example.kodyjobdam.common.entity.CounselingCategoryEnum;
@@ -23,8 +24,10 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.test.util.ReflectionTestUtils;
 
+import java.time.Clock;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.ZoneId;
 import java.util.List;
 import java.util.Optional;
 import java.util.Set;
@@ -278,6 +281,132 @@ class CommonServiceTest {
         assertThat(result.get(0).getPeriod()).isEqualTo("4교시");
         assertThat(result.get(0).getState()).isEqualTo(StateEnum.LOCKED);
         assertThat(result.get(0).isAvailable()).isFalse();
+    }
+
+    @Test
+    void teacherUnlockCancelsOnlyLockedSlot() {
+        LocalDate date = LocalDate.of(2026, 9, 10);
+        User teacher = user(2L, UserRole.WEE_TEACHER);
+        CommonEntity locked = CommonEntity.builder().state(StateEnum.LOCKED).build();
+        CommonEntity reserved = CommonEntity.builder().state(StateEnum.RESERVED).build();
+
+        when(userRepository.findById(2L)).thenReturn(Optional.of(teacher));
+        when(commonRepository.findAllByDateAndPeriodAndTeacher_Id(date, "3교시", 2L))
+                .thenReturn(List.of(locked, reserved));
+
+        commonService.teacherUnlock(lockDto(date, "3교시"), 2L);
+
+        assertThat(locked.getState()).isEqualTo(StateEnum.CANCEL);
+        assertThat(reserved.getState()).isEqualTo(StateEnum.RESERVED);
+    }
+
+    @Test
+    void teacherUnlockWithoutLockedSlotIsRejected() {
+        LocalDate date = LocalDate.of(2026, 9, 10);
+        User teacher = user(2L, UserRole.WEE_TEACHER);
+
+        when(userRepository.findById(2L)).thenReturn(Optional.of(teacher));
+        when(commonRepository.findAllByDateAndPeriodAndTeacher_Id(date, "3교시", 2L))
+                .thenReturn(List.of());
+
+        assertThatThrownBy(() -> commonService.teacherUnlock(lockDto(date, "3교시"), 2L))
+                .isInstanceOf(ReservationException.class)
+                .hasMessage("잠긴 시간이 아닙니다.");
+    }
+
+    @Test
+    void teacherUnlockOnAlwaysLockedPeriodIsRejected() {
+        LocalDate date = LocalDate.of(2026, 9, 10);
+
+        assertThatThrownBy(() -> commonService.teacherUnlock(lockDto(date, "4교시"), 2L))
+                .isInstanceOf(ReservationException.class)
+                .hasMessage("4교시는 설정으로 상시 잠겨 있어 해제할 수 없습니다.");
+
+        verify(commonRepository, never()).findAllByDateAndPeriodAndTeacher_Id(any(), anyString(), any());
+    }
+
+    @Test
+    void allowRejectsSlotAlreadyTakenBySameTeacher() {
+        LocalDate date = LocalDate.of(2026, 9, 10);
+        CommonEntity target = CommonEntity.builder()
+                .reservation_id(100L)
+                .teacher(user(2L, UserRole.WEE_TEACHER))
+                .date(date)
+                .period("3교시")
+                .state(StateEnum.WAITING)
+                .build();
+        CommonEntity taken = CommonEntity.builder()
+                .reservation_id(101L)
+                .date(date)
+                .period("3교시")
+                .state(StateEnum.RESERVED)
+                .build();
+
+        when(commonRepository.findById(100L)).thenReturn(Optional.of(target));
+        when(commonRepository.findAllByDateAndPeriodAndTeacher_Id(date, "3교시", 2L))
+                .thenReturn(List.of(target, taken));
+
+        assertThatThrownBy(() -> commonService.allow(100L, 2L))
+                .isInstanceOf(ReservationException.class)
+                .hasMessage("같은 시간에 이미 수락한 상담이 있습니다.");
+
+        assertThat(target.getState()).isEqualTo(StateEnum.WAITING);
+        verify(notificationService, never()).notifyUser(any(), any(), any(), any(), any(), any(), any());
+    }
+
+    @Test
+    void cancelWithinOneHourOfStartIsRejected() {
+        LocalDate date = LocalDate.of(2026, 9, 10);
+        CommonEntity entity = CommonEntity.builder()
+                .reservation_id(100L)
+                .date(date)
+                .period("3교시")                       // 10:40 시작 → 09:40부터 취소 불가
+                .submitterHash("student-hash")
+                .state(StateEnum.WAITING)
+                .build();
+
+        fixClock(LocalDateTime.of(2026, 9, 10, 9, 41));
+        when(commonRepository.findById(100L)).thenReturn(Optional.of(entity));
+        when(cryptoService.submitterHash(1L)).thenReturn("student-hash");
+
+        assertThatThrownBy(() -> commonService.cancelReservation(100L, 1L))
+                .isInstanceOf(ReservationException.class)
+                .hasMessage("상담 시작 1시간 전부터는 취소할 수 없습니다.");
+
+        assertThat(entity.getState()).isEqualTo(StateEnum.WAITING);
+    }
+
+    @Test
+    void cancelBeforeDeadlineIsAllowed() {
+        LocalDate date = LocalDate.of(2026, 9, 10);
+        CommonEntity entity = CommonEntity.builder()
+                .reservation_id(100L)
+                .date(date)
+                .period("3교시")
+                .submitterHash("student-hash")
+                .state(StateEnum.WAITING)
+                .build();
+
+        fixClock(LocalDateTime.of(2026, 9, 10, 9, 39));
+        when(commonRepository.findById(100L)).thenReturn(Optional.of(entity));
+        when(cryptoService.submitterHash(1L)).thenReturn("student-hash");
+
+        commonService.cancelReservation(100L, 1L);
+
+        assertThat(entity.getState()).isEqualTo(StateEnum.CANCEL);
+    }
+
+    private void fixClock(LocalDateTime now) {
+        ZoneId zone = ZoneId.of("Asia/Seoul");
+        ReflectionTestUtils.setField(commonService, "clock",
+                Clock.fixed(now.atZone(zone).toInstant(), zone));
+    }
+
+    private LockDTO lockDto(LocalDate date, String period) {
+        LockDTO dto = new LockDTO();
+        ReflectionTestUtils.setField(dto, "date", date);
+        ReflectionTestUtils.setField(dto, "period", period);
+        return dto;
     }
 
     private CreateDTO createDto(Long teacherId) {
