@@ -222,7 +222,8 @@ public class CourseService {
                         user.getName(),
                         e.getDate(),
                         e.getPeriod(),
-                        e.getCategory()
+                        e.getCategory(),
+                        e.getState()
                 ))
                 .toList();
     }
