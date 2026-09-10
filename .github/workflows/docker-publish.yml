@@ -40,6 +40,19 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
+      - name: 코드 가져오기
+        uses: actions/checkout@v4
+
+      - name: 배포 설정 업로드
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.SSH_HOST }}
+          username: ${{ secrets.SSH_USER }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          port: ${{ secrets.SSH_PORT }}
+          source: docker-compose.prod.yml
+          target: ${{ secrets.APP_DIR }}
+
       - name: 서버 배포
         uses: appleboy/ssh-action@v1
         with:
