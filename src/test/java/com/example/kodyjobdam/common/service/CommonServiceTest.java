@@ -70,7 +70,7 @@ class CommonServiceTest {
     @Test
     void createReservationNotifiesOnlySelectedTeacher() {
         User student = user(1L, UserRole.STUDENT);
-        User teacher = user(2L, UserRole.TEACHER);
+        User teacher = user(2L, UserRole.WEE_TEACHER);
         CreateDTO dto = createDto(2L);
         CommonEntity saved = CommonEntity.builder()
                 .reservation_id(100L)
@@ -143,7 +143,7 @@ class CommonServiceTest {
     void otherTeacherCannotApproveReservation() {
         CommonEntity reservation = CommonEntity.builder()
                 .reservation_id(100L)
-                .teacher(user(2L, UserRole.TEACHER))
+                .teacher(user(2L, UserRole.WEE_TEACHER))
                 .date(LocalDate.of(2026, 9, 10))
                 .encryptedUserId("encrypted-user-id")
                 .state(StateEnum.WAITING)
@@ -158,7 +158,7 @@ class CommonServiceTest {
     @Test
     void approveNotifiesStudent() {
         User student = user(1L, UserRole.STUDENT);
-        User teacher = user(2L, UserRole.TEACHER);
+        User teacher = user(2L, UserRole.WEE_TEACHER);
         CommonEntity reservation = CommonEntity.builder()
                 .reservation_id(100L)
                 .teacher(teacher)
@@ -188,7 +188,7 @@ class CommonServiceTest {
     @Test
     void rejectNotifiesStudent() {
         User student = user(1L, UserRole.STUDENT);
-        User teacher = user(2L, UserRole.TEACHER);
+        User teacher = user(2L, UserRole.WEE_TEACHER);
         CommonEntity reservation = CommonEntity.builder()
                 .reservation_id(100L)
                 .teacher(teacher)
@@ -268,7 +268,7 @@ class CommonServiceTest {
     @Test
     void readSlotStatusMarksLockedPeriodEvenWithoutReservation() {
         LocalDate date = LocalDate.of(2026, 9, 10);
-        User teacher = user(2L, UserRole.TEACHER);
+        User teacher = user(2L, UserRole.WEE_TEACHER);
         when(userRepository.findById(2L)).thenReturn(Optional.of(teacher));
         when(commonRepository.findAllByDateAndTeacher_IdOrderByPeriodAsc(date, 2L)).thenReturn(List.of());
 

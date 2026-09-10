@@ -51,6 +51,7 @@ public class RecruitService {
     private final NotificationExpirationService notificationExpirationService;
 
     /** 선생님: 이미지 분석 → 초안(DRAFT)으로 저장 후 결과 반환 */
+    @Transactional
     public RecruitResponseDTO analyze(MultipartFile image, Long userId) {
         if (image == null || image.isEmpty()) {
             throw RecruitException.badRequest("이미지를 첨부해주세요.");
