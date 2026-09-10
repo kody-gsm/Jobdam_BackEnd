@@ -61,6 +61,14 @@ public class NotificationSseService {
         } catch (IOException | IllegalStateException e) {
             log.debug("SSE 전송에 실패하여 연결을 정리합니다. userId={}, event={}", userId, eventName);
             removeEmitter(userId, emitter);
+            completeEmitter(emitter);
+        }
+    }
+
+    private void completeEmitter(SseEmitter emitter) {
+        try {
+            emitter.complete();
+        } catch (RuntimeException ignored) {
         }
     }
 
