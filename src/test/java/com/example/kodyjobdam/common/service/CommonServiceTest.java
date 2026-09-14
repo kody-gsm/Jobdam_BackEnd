@@ -11,6 +11,7 @@ import com.example.kodyjobdam.common.entity.StateEnum;
 import com.example.kodyjobdam.common.exception.ReservationException;
 import com.example.kodyjobdam.common.exception.ScheduleException;
 import com.example.kodyjobdam.common.repository.CommonRepository;
+import com.example.kodyjobdam.common.repository.ReservationSlot;
 import com.example.kodyjobdam.notification.entity.NotificationType;
 import com.example.kodyjobdam.notification.service.NotificationService;
 import com.example.kodyjobdam.schedule.service.ScheduleService;
@@ -153,10 +154,13 @@ class CommonServiceTest {
                 .encryptedUserId("encrypted-user-id")
                 .state(StateEnum.WAITING)
                 .build();
-        when(commonRepository.findById(100L)).thenReturn(Optional.of(reservation));
+        when(commonRepository.findSlotByReservationId(100L))
+                .thenReturn(Optional.of(new ReservationSlot(reservation.getDate(), "3교시", 2L)));
 
         assertThatThrownBy(() -> commonService.allow(100L, 3L))
-                .isInstanceOf(ReservationException.class);
+                .isInstanceOf(ReservationException.class)
+                .hasMessage("담당 선생님만 처리할 수 있습니다.");
+        verify(commonRepository, never()).findAllForUpdateByDateAndPeriodAndTeacherId(any(), anyString(), any());
         verify(notificationService, never()).notifyUser(any(), any(), any(), any(), any(), any(), any());
     }
 
@@ -169,15 +173,21 @@ class CommonServiceTest {
                 .teacher(teacher)
                 .date(LocalDate.of(2026, 9, 10))
                 .encryptedUserId("encrypted-user-id")
+                .period("3교시")
                 .state(StateEnum.WAITING)
                 .build();
-        when(commonRepository.findById(100L)).thenReturn(Optional.of(reservation));
+        when(commonRepository.findSlotByReservationId(100L))
+                .thenReturn(Optional.of(new ReservationSlot(reservation.getDate(), "3교시", 2L)));
+        when(commonRepository.findAllForUpdateByDateAndPeriodAndTeacherId(reservation.getDate(), "3교시", 2L))
+                .thenReturn(List.of(reservation));
         when(cryptoService.decrypt("encrypted-user-id")).thenReturn("1");
         when(userRepository.findById(1L)).thenReturn(Optional.of(student));
         when(notificationExpirationService.counselingExpiresAt(reservation.getDate()))
                 .thenReturn(LocalDateTime.of(2026, 12, 9, 0, 0));
 
         commonService.allow(100L, 2L);
+
+        assertThat(reservation.getState()).isEqualTo(StateEnum.RESERVED);
 
         verify(notificationService).notifyUser(
                 eq(student),
@@ -344,8 +354,9 @@ class CommonServiceTest {
                 .state(StateEnum.RESERVED)
                 .build();
 
-        when(commonRepository.findById(100L)).thenReturn(Optional.of(target));
-        when(commonRepository.findAllByDateAndPeriodAndTeacher_Id(date, "3교시", 2L))
+        when(commonRepository.findSlotByReservationId(100L))
+                .thenReturn(Optional.of(new ReservationSlot(date, "3교시", 2L)));
+        when(commonRepository.findAllForUpdateByDateAndPeriodAndTeacherId(date, "3교시", 2L))
                 .thenReturn(List.of(target, taken));
 
         assertThatThrownBy(() -> commonService.allow(100L, 2L))
@@ -353,6 +364,30 @@ class CommonServiceTest {
                 .hasMessage("같은 시간에 이미 수락한 상담이 있습니다.");
 
         assertThat(target.getState()).isEqualTo(StateEnum.WAITING);
+        verify(notificationService, never()).notifyUser(any(), any(), any(), any(), any(), any(), any());
+    }
+
+    @Test
+    void allowRejectsReservationAlreadyHandledWhileWaitingForLock() {
+        // 같은 예약을 먼저 수락한 요청이 커밋한 뒤, 잠금 조회는 바뀐 상태를 읽는다.
+        LocalDate date = LocalDate.of(2026, 9, 10);
+        CommonEntity alreadyReserved = CommonEntity.builder()
+                .reservation_id(100L)
+                .teacher(user(2L, UserRole.WEE_TEACHER))
+                .date(date)
+                .period("3교시")
+                .state(StateEnum.RESERVED)
+                .build();
+
+        when(commonRepository.findSlotByReservationId(100L))
+                .thenReturn(Optional.of(new ReservationSlot(date, "3교시", 2L)));
+        when(commonRepository.findAllForUpdateByDateAndPeriodAndTeacherId(date, "3교시", 2L))
+                .thenReturn(List.of(alreadyReserved));
+
+        assertThatThrownBy(() -> commonService.allow(100L, 2L))
+                .isInstanceOf(ReservationException.class)
+                .hasMessage("이미 처리된 예약입니다.");
+        verify(commonRepository, never()).findById(any());
         verify(notificationService, never()).notifyUser(any(), any(), any(), any(), any(), any(), any());
     }
 
