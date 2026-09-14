@@ -12,6 +12,7 @@ import com.example.kodyjobdam.common.exception.ReservationException;
 import com.example.kodyjobdam.common.exception.ScheduleException;
 import com.example.kodyjobdam.common.repository.CommonRepository;
 import com.example.kodyjobdam.common.repository.ReservationSlot;
+import com.example.kodyjobdam.course.repository.CourseRepository;
 import com.example.kodyjobdam.notification.entity.NotificationType;
 import com.example.kodyjobdam.notification.service.NotificationService;
 import com.example.kodyjobdam.schedule.service.ScheduleService;
@@ -49,6 +50,9 @@ class CommonServiceTest {
 
     @Mock
     private CommonRepository commonRepository;
+
+    @Mock
+    private CourseRepository courseRepository;
 
     @Mock
     private UserRepository userRepository;
@@ -389,6 +393,23 @@ class CommonServiceTest {
                 .hasMessage("이미 처리된 예약입니다.");
         verify(commonRepository, never()).findById(any());
         verify(notificationService, never()).notifyUser(any(), any(), any(), any(), any(), any(), any());
+    }
+
+    @Test
+    void createReservationRejectsWhenCourseReservationExistsAtSameTime() {
+        CreateDTO dto = createDto(2L);
+
+        when(userRepository.findById(1L)).thenReturn(Optional.of(user(1L, UserRole.STUDENT)));
+        when(userRepository.findById(2L)).thenReturn(Optional.of(user(2L, UserRole.WEE_TEACHER)));
+        when(cryptoService.submitterHash(1L)).thenReturn("student-hash");
+        when(commonRepository.findAllByDateAndPeriod(dto.getDate(), dto.getPeriod())).thenReturn(List.of());
+        when(courseRepository.existsActiveReservation("student-hash", dto.getDate(), dto.getPeriod()))
+                .thenReturn(true);
+
+        assertThatThrownBy(() -> commonService.createReservation(dto, 1L))
+                .isInstanceOf(ReservationException.class)
+                .hasMessage("같은 시간에 신청한 진로 상담이 있습니다.");
+        verify(commonRepository, never()).save(any());
     }
 
     @Test

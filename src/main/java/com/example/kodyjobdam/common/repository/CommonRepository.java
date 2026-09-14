@@ -35,6 +35,14 @@ public interface CommonRepository extends JpaRepository<CommonEntity, Long> {
                                                                 @Param("period") String period,
                                                                 @Param("teacherId") Long teacherId);
 
+    boolean existsBySubmitterHashAndDateAndPeriodAndStateNot(String submitterHash, LocalDate date, String period,
+                                                            StateEnum state);
+
+    /** 학생이 이 시간에 취소하지 않은 상담 신청을 갖고 있는지 */
+    default boolean existsActiveReservation(String submitterHash, LocalDate date, String period) {
+        return existsBySubmitterHashAndDateAndPeriodAndStateNot(submitterHash, date, period, StateEnum.CANCEL);
+    }
+
     List<CommonEntity> findAllByDateAndTeacher_IdOrderByPeriodAsc(LocalDate date, Long teacherId);
 
     @EntityGraph(attributePaths = {"teacher"})

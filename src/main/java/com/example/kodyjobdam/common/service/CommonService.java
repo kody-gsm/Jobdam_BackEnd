@@ -14,6 +14,7 @@ import com.example.kodyjobdam.common.exception.BusinessException;
 import com.example.kodyjobdam.common.exception.ReservationException;
 import com.example.kodyjobdam.common.repository.CommonRepository;
 import com.example.kodyjobdam.common.repository.ReservationSlot;
+import com.example.kodyjobdam.course.repository.CourseRepository;
 import com.example.kodyjobdam.notification.entity.NotificationType;
 import com.example.kodyjobdam.notification.service.NotificationExpirationService;
 import com.example.kodyjobdam.notification.service.NotificationService;
@@ -43,6 +44,7 @@ import java.util.Set;
 public class CommonService {
 
     private final CommonRepository commonRepository;
+    private final CourseRepository courseRepository;
     private final UserRepository userRepository;
     private final NotificationService notificationService;
     private final NotificationExpirationService notificationExpirationService;
@@ -79,6 +81,9 @@ public class CommonService {
                     && entity.getState() != StateEnum.CANCEL) {
                 throw ReservationException.conflict("이미 예약한 시간입니다.");
             }
+        }
+        if (courseRepository.existsActiveReservation(submitterHash, dto.getDate(), dto.getPeriod())) {
+            throw ReservationException.conflict("같은 시간에 신청한 진로 상담이 있습니다.");
         }
 
         for (CommonEntity entity : commonRepository.findAllByDateAndPeriodAndTeacher_Id(

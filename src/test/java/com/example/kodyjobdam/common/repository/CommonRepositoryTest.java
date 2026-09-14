@@ -59,6 +59,18 @@ class CommonRepositoryTest {
                 .containsExactly(first.getReservation_id(), second.getReservation_id());
     }
 
+    @Test
+    void existsActiveReservationIgnoresCanceledReservation() {
+        User teacher = saveUser("teacher@test.com");
+        save(teacher, "3교시", "canceled-student", StateEnum.CANCEL);
+        save(teacher, "3교시", "waiting-student", StateEnum.WAITING);
+        entityManager.flush();
+
+        assertThat(commonRepository.existsActiveReservation("canceled-student", DATE, "3교시")).isFalse();
+        assertThat(commonRepository.existsActiveReservation("waiting-student", DATE, "3교시")).isTrue();
+        assertThat(commonRepository.existsActiveReservation("waiting-student", DATE, "4교시")).isFalse();
+    }
+
     private CommonEntity save(User teacher, String period, String submitterHash, StateEnum state) {
         CommonEntity entity = CommonEntity.builder()
                 .teacher(teacher)

@@ -5,6 +5,7 @@ import com.example.kodyjobdam.common.entity.CounselingCategoryEnum;
 import com.example.kodyjobdam.common.entity.CounselingPeriod;
 import com.example.kodyjobdam.common.exception.BusinessException;
 import com.example.kodyjobdam.common.exception.ReservationException;
+import com.example.kodyjobdam.common.repository.CommonRepository;
 import com.example.kodyjobdam.common.repository.ReservationSlot;
 import com.example.kodyjobdam.common.service.CounselingReservationCryptoService;
 import com.example.kodyjobdam.course.dto.request.CreateDTO;
@@ -45,6 +46,7 @@ public class CourseService {
     private static final Duration CANCEL_DEADLINE = Duration.ofHours(1);
 
     private final CourseRepository courseRepository;
+    private final CommonRepository commonRepository;
     private final UserRepository userRepository;
     private final NotificationService notificationService;
     private final NotificationExpirationService notificationExpirationService;
@@ -73,6 +75,9 @@ public class CourseService {
                     && entity.getState() != StateEnum.CANCEL) {
                 throw ReservationException.conflict("이미 예약한 시간입니다.");
             }
+        }
+        if (commonRepository.existsActiveReservation(submitterHash, dto.getDate(), dto.getPeriod())) {
+            throw ReservationException.conflict("같은 시간에 신청한 일반 상담이 있습니다.");
         }
 
         for (CourseEntity entity : courseRepository.findAllByDateAndPeriodAndTeacher_Id(
