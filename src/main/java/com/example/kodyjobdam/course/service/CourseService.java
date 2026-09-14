@@ -1,9 +1,12 @@
 package com.example.kodyjobdam.course.service;
 
+import com.example.kodyjobdam.common.dto.response.ReservationStatus;
 import com.example.kodyjobdam.common.entity.CounselingCategoryEnum;
 import com.example.kodyjobdam.common.entity.CounselingPeriod;
 import com.example.kodyjobdam.common.exception.BusinessException;
 import com.example.kodyjobdam.common.exception.ReservationException;
+import com.example.kodyjobdam.common.repository.CommonRepository;
+import com.example.kodyjobdam.common.repository.ReservationSlot;
 import com.example.kodyjobdam.common.service.CounselingReservationCryptoService;
 import com.example.kodyjobdam.course.dto.request.CreateDTO;
 import com.example.kodyjobdam.course.dto.request.LockDTO;
@@ -43,6 +46,7 @@ public class CourseService {
     private static final Duration CANCEL_DEADLINE = Duration.ofHours(1);
 
     private final CourseRepository courseRepository;
+    private final CommonRepository commonRepository;
     private final UserRepository userRepository;
     private final NotificationService notificationService;
     private final NotificationExpirationService notificationExpirationService;
@@ -71,6 +75,9 @@ public class CourseService {
                     && entity.getState() != StateEnum.CANCEL) {
                 throw ReservationException.conflict("이미 예약한 시간입니다.");
             }
+        }
+        if (commonRepository.existsActiveReservation(submitterHash, dto.getDate(), dto.getPeriod())) {
+            throw ReservationException.conflict("같은 시간에 신청한 일반 상담이 있습니다.");
         }
 
         for (CourseEntity entity : courseRepository.findAllByDateAndPeriodAndTeacher_Id(
@@ -118,19 +125,27 @@ public class CourseService {
 
     @Transactional
     public void allow(Long reservationId, Long teacherId) {
-        CourseEntity entity = courseRepository.findById(reservationId)
+        ReservationSlot slot = courseRepository.findSlotByReservationId(reservationId)
+                .orElseThrow(() -> ReservationException.notFound("값을 찾을 수 없습니다."));
+        if (!slot.teacherId().equals(teacherId)) {
+            throw ReservationException.forbidden("담당 선생님만 처리할 수 있습니다.");
+        }
+
+        // 같은 시간 예약을 잠근 뒤 상태를 봐야 동시에 들어온 수락이 둘 다 통과하지 않는다.
+        List<CourseEntity> slotReservations = courseRepository.findAllForUpdateByDateAndPeriodAndTeacherId(
+                slot.date(), slot.period(), teacherId);
+        CourseEntity entity = slotReservations.stream()
+                .filter(reservation -> reservation.getReservation_id().equals(reservationId))
+                .findFirst()
                 .orElseThrow(() -> ReservationException.notFound("값을 찾을 수 없습니다."));
 
         if (entity.getState() == StateEnum.CANCEL) {
             throw ReservationException.notFound("이미 취소된 에약입니다.");
         }
-        if (!entity.getTeacher().getId().equals(teacherId)) {
-            throw ReservationException.forbidden("담당 선생님만 처리할 수 있습니다.");
-        }
         if (entity.getState() != StateEnum.WAITING) {
             throw ReservationException.conflict("이미 처리된 예약입니다.");
         }
-        validateSlotNotTaken(entity, teacherId);
+        validateSlotNotTaken(entity, slotReservations);
 
         entity.setState(StateEnum.RESERVED);
         User submitter = findSubmitter(entity);
@@ -236,7 +251,7 @@ public class CourseService {
                         e.getDate(),
                         e.getPeriod(),
                         e.getCategory(),
-                        e.getState()
+                        ReservationStatus.from(e.getState())
                 ))
                 .toList();
     }
@@ -318,9 +333,8 @@ public class CourseService {
     }
 
     /** 한 선생님이 같은 날 같은 교시에 두 건을 수락하지 못하게 막는다. */
-    private void validateSlotNotTaken(CourseEntity target, Long teacherId) {
-        boolean taken = courseRepository
-                .findAllByDateAndPeriodAndTeacher_Id(target.getDate(), target.getPeriod(), teacherId).stream()
+    private void validateSlotNotTaken(CourseEntity target, List<CourseEntity> slotReservations) {
+        boolean taken = slotReservations.stream()
                 .filter(other -> !other.getReservation_id().equals(target.getReservation_id()))
                 .anyMatch(other -> other.getState() == StateEnum.RESERVED);
 

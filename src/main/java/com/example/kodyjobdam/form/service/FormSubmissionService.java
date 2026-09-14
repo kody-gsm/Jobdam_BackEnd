@@ -16,7 +16,10 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
+import java.time.Clock;
 import java.time.LocalDate;
+import java.time.LocalDateTime;
+import java.time.ZoneId;
 import java.time.format.DateTimeParseException;
 import java.util.ArrayList;
 import java.util.HashSet;
@@ -39,14 +42,15 @@ public class FormSubmissionService {
 
     private final FormFileRepository fileRepository;
 
+    /** 제출 기한을 판단하는 기준 시계. 기한은 한국 시간으로 저장된다. */
+    private Clock clock = Clock.system(ZoneId.of("Asia/Seoul"));
+
     /** 학생: 폼 응답 제출 (1인 1회) */
     @Transactional
     public FormSubmissionResponseDTO submit(Long formId, FormSubmitDTO dto, Long userId) {
         FormEntity form = findFormOrThrow(formId);
 
-        if (!form.isAcceptingSubmission()) {
-            throw FormException.badRequest("지금은 응답을 받지 않는 폼입니다.");
-        }
+        validateAcceptingSubmission(form);
         if (submissionRepository.existsByFormIdAndUserId(formId, userId)) {
             throw FormException.conflict("이미 응답을 제출한 폼입니다.");
         }
@@ -69,9 +73,7 @@ public class FormSubmissionService {
     public FormSubmissionResponseDTO resubmit(Long formId, FormSubmitDTO dto, Long userId) {
         FormEntity form = findFormOrThrow(formId);
 
-        if (!form.isAcceptingSubmission()) {
-            throw FormException.badRequest("지금은 응답을 받지 않는 폼입니다.");
-        }
+        validateAcceptingSubmission(form);
 
         FormSubmissionEntity submission = submissionRepository.findByFormIdAndUserId(formId, userId)
                 .orElseThrow(() -> FormException.notFound("아직 제출한 응답이 없습니다."));
@@ -79,6 +81,16 @@ public class FormSubmissionService {
         submission.replaceAnswers(buildAnswers(form, dto.getAnswers(), userId));
 
         return FormSubmissionResponseDTO.from(submission);
+    }
+
+    /** 공개 중이고 제출 기한이 지나지 않은 폼에만 응답을 받는다 */
+    private void validateAcceptingSubmission(FormEntity form) {
+        if (!form.isAcceptingSubmission()) {
+            throw FormException.badRequest("지금은 응답을 받지 않는 폼입니다.");
+        }
+        if (form.isPastDeadline(LocalDateTime.now(clock))) {
+            throw FormException.badRequest("제출 기한이 지난 폼입니다.");
+        }
     }
 
     /** 요청 답변을 폼의 질문 순서대로 검증해 답변 엔티티로 만든다 */
