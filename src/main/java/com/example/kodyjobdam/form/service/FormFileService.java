@@ -17,6 +17,9 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.nio.file.Paths;
+import java.time.Clock;
+import java.time.LocalDateTime;
+import java.time.ZoneId;
 import java.util.List;
 import java.util.Locale;
 
@@ -35,6 +38,9 @@ public class FormFileService {
 
     private final FormFileStorage storage;
 
+    /** 제출 기한을 판단하는 기준 시계. 기한은 한국 시간으로 저장된다. */
+    private Clock clock = Clock.system(ZoneId.of("Asia/Seoul"));
+
     @Value("${form.file.allowed-extensions:pdf,png,jpg,jpeg,webp,gif,zip,doc,docx,ppt,pptx,hwp,hwpx,txt,md}")
     private List<String> allowedExtensions;
 
@@ -47,9 +53,7 @@ public class FormFileService {
 
         FormEntity form = formRepository.findById(formId)
                 .orElseThrow(() -> FormException.notFound("폼을 찾을 수 없습니다."));
-        if (!form.isAcceptingSubmission()) {
-            throw FormException.badRequest("지금은 응답을 받지 않는 폼입니다.");
-        }
+        validateAcceptingSubmission(form);
         if (form.getQuestions().stream().noneMatch(question -> question.getType() == QuestionType.FILE)) {
             throw FormException.badRequest("이 폼에는 파일을 첨부할 질문이 없습니다.");
         }
@@ -73,6 +77,16 @@ public class FormFileService {
                 .build());
 
         return FormFileResponseDTO.from(saved);
+    }
+
+    /** 공개 중이고 제출 기한이 지나지 않은 폼에만 응답을 받는다 */
+    private void validateAcceptingSubmission(FormEntity form) {
+        if (!form.isAcceptingSubmission()) {
+            throw FormException.badRequest("지금은 응답을 받지 않는 폼입니다.");
+        }
+        if (form.isPastDeadline(LocalDateTime.now(clock))) {
+            throw FormException.badRequest("제출 기한이 지난 폼입니다.");
+        }
     }
 
     /** 파일을 올린 학생 본인과 폼을 만든 선생님만 내려받을 수 있다 */
