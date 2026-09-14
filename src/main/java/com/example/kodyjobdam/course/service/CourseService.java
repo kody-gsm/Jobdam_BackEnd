@@ -1,5 +1,6 @@
 package com.example.kodyjobdam.course.service;
 
+import com.example.kodyjobdam.common.dto.response.ReservationStatus;
 import com.example.kodyjobdam.common.entity.CounselingCategoryEnum;
 import com.example.kodyjobdam.common.entity.CounselingPeriod;
 import com.example.kodyjobdam.common.exception.BusinessException;
@@ -236,7 +237,7 @@ public class CourseService {
                         e.getDate(),
                         e.getPeriod(),
                         e.getCategory(),
-                        e.getState()
+                        ReservationStatus.from(e.getState())
                 ))
                 .toList();
     }

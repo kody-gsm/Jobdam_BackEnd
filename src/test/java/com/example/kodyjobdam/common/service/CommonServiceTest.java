@@ -2,7 +2,9 @@ package com.example.kodyjobdam.common.service;
 
 import com.example.kodyjobdam.common.dto.request.CreateDTO;
 import com.example.kodyjobdam.common.dto.request.LockDTO;
+import com.example.kodyjobdam.common.dto.response.ReservationStatus;
 import com.example.kodyjobdam.common.dto.response.SlotStatusDTO;
+import com.example.kodyjobdam.common.dto.response.StudentReadDTO;
 import com.example.kodyjobdam.common.entity.CommonEntity;
 import com.example.kodyjobdam.common.entity.CounselingCategoryEnum;
 import com.example.kodyjobdam.common.entity.StateEnum;
@@ -394,6 +396,28 @@ class CommonServiceTest {
         commonService.cancelReservation(100L, 1L);
 
         assertThat(entity.getState()).isEqualTo(StateEnum.CANCEL);
+    }
+
+    @Test
+    void studentReadReturnsStatusInFrontendFormat() {
+        CommonEntity waiting = CommonEntity.builder()
+                .reservation_id(1L).date(LocalDate.of(2026, 9, 10)).period("1교시")
+                .submitterHash("student-hash").state(StateEnum.WAITING).build();
+        CommonEntity reserved = CommonEntity.builder()
+                .reservation_id(2L).date(LocalDate.of(2026, 9, 10)).period("2교시")
+                .submitterHash("student-hash").state(StateEnum.RESERVED).build();
+        CommonEntity canceled = CommonEntity.builder()
+                .reservation_id(3L).date(LocalDate.of(2026, 9, 10)).period("3교시")
+                .submitterHash("student-hash").state(StateEnum.CANCEL).build();
+
+        when(userRepository.findById(1L)).thenReturn(Optional.of(user(1L, UserRole.STUDENT)));
+        when(cryptoService.submitterHash(1L)).thenReturn("student-hash");
+        when(commonRepository.findBySubmitterHash("student-hash")).thenReturn(List.of(waiting, reserved, canceled));
+
+        List<StudentReadDTO> result = commonService.S_Read(1L);
+
+        assertThat(result).extracting(StudentReadDTO::getStatus)
+                .containsExactly(ReservationStatus.WAITING, ReservationStatus.RESERVED, ReservationStatus.CANCELED);
     }
 
     private void fixClock(LocalDateTime now) {

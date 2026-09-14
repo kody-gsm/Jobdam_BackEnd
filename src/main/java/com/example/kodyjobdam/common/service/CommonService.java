@@ -2,6 +2,7 @@ package com.example.kodyjobdam.common.service;
 
 import com.example.kodyjobdam.common.dto.request.CreateDTO;
 import com.example.kodyjobdam.common.dto.request.LockDTO;
+import com.example.kodyjobdam.common.dto.response.ReservationStatus;
 import com.example.kodyjobdam.common.dto.response.StudentReadDTO;
 import com.example.kodyjobdam.common.dto.response.SlotStatusDTO;
 import com.example.kodyjobdam.common.dto.response.TeacherReadDTO;
@@ -244,7 +245,7 @@ public class CommonService {
                         e.getDate(),
                         e.getPeriod(),
                         e.getCategory(),
-                        e.getState()
+                        ReservationStatus.from(e.getState())
                 ))
                 .toList();
     }
