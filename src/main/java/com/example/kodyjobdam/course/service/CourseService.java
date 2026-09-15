@@ -33,9 +33,12 @@ import java.time.Duration;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
+import java.util.ArrayList;
+import java.util.Collection;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
 
 @Service
 @Slf4j
@@ -201,6 +204,49 @@ public class CourseService {
         }
 
         courseRepository.save(dto.toEntity(teacher));
+    }
+
+    /**
+     * 휴업일의 모든 교시를 진로 선생님마다 잠근다. 이미 잠긴 시간은 건너뛴다.
+     * 잠그는 시간에 걸린 신청은 선생님이 직접 잠글 때처럼 취소한다.
+     *
+     * @return 새로 잠근 시간 수
+     */
+    @Transactional
+    public int lockHolidays(Collection<LocalDate> holidays) {
+        List<User> teachers = userRepository.findByRole(UserRole.TEACHER);
+        if (holidays.isEmpty() || teachers.isEmpty()) {
+            return 0;
+        }
+
+        Map<ReservationSlot, List<CourseEntity>> reservationsBySlot = courseRepository
+                .findAllByDateInAndTeacher_IdIn(holidays, teachers.stream().map(User::getId).toList()).stream()
+                .collect(Collectors.groupingBy(entity -> new ReservationSlot(
+                        entity.getDate(), entity.getPeriod(), entity.getTeacher().getId())));
+
+        List<CourseEntity> locks = new ArrayList<>();
+        for (LocalDate date : holidays) {
+            for (User teacher : teachers) {
+                for (CounselingPeriod period : CounselingPeriod.values()) {
+                    List<CourseEntity> reservations = reservationsBySlot.getOrDefault(
+                            new ReservationSlot(date, period.getLabel(), teacher.getId()), List.of());
+                    if (reservations.stream().anyMatch(entity -> entity.getState() == StateEnum.LOCKED)) {
+                        continue;
+                    }
+
+                    reservations.forEach(entity -> entity.setState(StateEnum.CANCEL));
+                    locks.add(CourseEntity.builder()
+                            .teacher(teacher)
+                            .date(date)
+                            .period(period.getLabel())
+                            .state(StateEnum.LOCKED)
+                            .build());
+                }
+            }
+        }
+
+        courseRepository.saveAll(locks);
+        return locks.size();
     }
 
     /**

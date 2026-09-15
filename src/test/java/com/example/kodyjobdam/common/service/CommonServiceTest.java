@@ -7,6 +7,7 @@ import com.example.kodyjobdam.common.dto.response.SlotStatusDTO;
 import com.example.kodyjobdam.common.dto.response.StudentReadDTO;
 import com.example.kodyjobdam.common.entity.CommonEntity;
 import com.example.kodyjobdam.common.entity.CounselingCategoryEnum;
+import com.example.kodyjobdam.common.entity.CounselingPeriod;
 import com.example.kodyjobdam.common.entity.StateEnum;
 import com.example.kodyjobdam.common.exception.ReservationException;
 import com.example.kodyjobdam.common.exception.ScheduleException;
@@ -255,6 +256,35 @@ class CommonServiceTest {
         assertThatThrownBy(() -> commonService.readSlotStatus(2L, holiday, null))
                 .isInstanceOf(ReservationException.class)
                 .hasMessage("휴업일에는 상담을 예약할 수 없습니다.");
+    }
+
+    @Test
+    void lockHolidaysLocksEveryPeriodForEachWeeTeacher() {
+        LocalDate holiday = LocalDate.of(2026, 10, 9);
+        User teacher = user(2L, UserRole.WEE_TEACHER);
+        CommonEntity alreadyLocked = CommonEntity.builder()
+                .reservation_id(100L).teacher(teacher).date(holiday).period("1교시").state(StateEnum.LOCKED).build();
+        CommonEntity waiting = CommonEntity.builder()
+                .reservation_id(101L).teacher(teacher).date(holiday).period("2교시").state(StateEnum.WAITING).build();
+
+        when(userRepository.findByRole(UserRole.WEE_TEACHER)).thenReturn(List.of(teacher));
+        when(commonRepository.findAllByDateInAndTeacher_IdIn(List.of(holiday), List.of(2L)))
+                .thenReturn(List.of(alreadyLocked, waiting));
+
+        int created = commonService.lockHolidays(List.of(holiday));
+
+        @SuppressWarnings("unchecked")
+        ArgumentCaptor<List<CommonEntity>> locksCaptor = ArgumentCaptor.forClass(List.class);
+        verify(commonRepository).saveAll(locksCaptor.capture());
+        List<CommonEntity> locks = locksCaptor.getValue();
+
+        assertThat(created).isEqualTo(CounselingPeriod.values().length - 1);
+        assertThat(locks).hasSize(created);
+        assertThat(locks).extracting(CommonEntity::getPeriod).doesNotContain("1교시").contains("2교시", "점심시간");
+        assertThat(locks).allMatch(lock -> lock.getState() == StateEnum.LOCKED
+                && lock.getTeacher() == teacher
+                && lock.getDate().equals(holiday));
+        assertThat(waiting.getState()).isEqualTo(StateEnum.CANCEL);
     }
 
     @Test
