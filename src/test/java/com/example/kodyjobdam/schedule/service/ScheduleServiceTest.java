@@ -143,6 +143,20 @@ class ScheduleServiceTest {
     }
 
     @Test
+    void 휴업일_날짜만_골라낸다() {
+        when(neisScheduleClient.fetchSchedules(LocalDate.of(2026, 10, 1), LocalDate.of(2026, 10, 31)))
+                .thenReturn(List.of(
+                        row("20261003", "개천절", "", "공휴일", "Y", "Y", "Y"),
+                        row("20261007", "체육대회", "", "", "Y", "Y", "Y"),
+                        row("20261009", "한글날", "", "공휴일", "Y", "Y", "Y")
+                ));
+
+        List<LocalDate> holidays = scheduleService.findHolidays(LocalDate.of(2026, 10, 1), LocalDate.of(2026, 10, 31));
+
+        assertThat(holidays).containsExactly(LocalDate.of(2026, 10, 3), LocalDate.of(2026, 10, 9));
+    }
+
+    @Test
     void 월이_범위를_벗어나면_예외가_발생한다() {
         assertThatThrownBy(() -> scheduleService.readMonthlySchedules(2026, 13, null))
                 .isInstanceOf(ScheduleException.class)

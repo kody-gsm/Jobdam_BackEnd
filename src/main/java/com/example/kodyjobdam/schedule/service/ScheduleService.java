@@ -74,6 +74,15 @@ public class ScheduleService {
                 .anyMatch(schedule -> date.equals(schedule.getDate()) && schedule.isHoliday());
     }
 
+    /** 기간 안의 휴업일 날짜. 나이스 조회에 실패하면 예외를 그대로 던진다. */
+    public List<LocalDate> findHolidays(LocalDate from, LocalDate to) {
+        return findCached(from, to).stream()
+                .filter(ScheduleReadDTO::isHoliday)
+                .map(ScheduleReadDTO::getDate)
+                .distinct()
+                .toList();
+    }
+
     public List<ScheduleReadDTO> readMonthlySchedules(int year, int month, Integer grade) {
         if (month < 1 || month > 12) {
             throw ScheduleException.badRequest("월은 1에서 12 사이여야 합니다.");

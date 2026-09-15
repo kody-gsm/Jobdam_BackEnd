@@ -33,9 +33,12 @@ import java.time.Duration;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
+import java.util.ArrayList;
+import java.util.Collection;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
 
 @Service
 @Slf4j
@@ -204,11 +207,56 @@ public class CourseService {
     }
 
     /**
+     * 휴업일의 모든 교시를 진로 선생님마다 잠근다. 이미 잠긴 시간은 건너뛴다.
+     * 잠그는 시간에 걸린 신청은 선생님이 직접 잠글 때처럼 취소한다.
+     *
+     * @return 새로 잠근 시간 수
+     */
+    @Transactional
+    public int lockHolidays(Collection<LocalDate> holidays) {
+        List<User> teachers = userRepository.findByRole(UserRole.TEACHER);
+        if (holidays.isEmpty() || teachers.isEmpty()) {
+            return 0;
+        }
+
+        Map<ReservationSlot, List<CourseEntity>> reservationsBySlot = courseRepository
+                .findAllByDateInAndTeacher_IdIn(holidays, teachers.stream().map(User::getId).toList()).stream()
+                .collect(Collectors.groupingBy(entity -> new ReservationSlot(
+                        entity.getDate(), entity.getPeriod(), entity.getTeacher().getId())));
+
+        List<CourseEntity> locks = new ArrayList<>();
+        for (LocalDate date : holidays) {
+            for (User teacher : teachers) {
+                for (CounselingPeriod period : CounselingPeriod.values()) {
+                    List<CourseEntity> reservations = reservationsBySlot.getOrDefault(
+                            new ReservationSlot(date, period.getLabel(), teacher.getId()), List.of());
+                    if (reservations.stream().anyMatch(entity -> entity.getState() == StateEnum.LOCKED)) {
+                        continue;
+                    }
+
+                    reservations.forEach(entity -> entity.setState(StateEnum.CANCEL));
+                    locks.add(CourseEntity.builder()
+                            .teacher(teacher)
+                            .date(date)
+                            .period(period.getLabel())
+                            .state(StateEnum.LOCKED)
+                            .build());
+                }
+            }
+        }
+
+        courseRepository.saveAll(locks);
+        return locks.size();
+    }
+
+    /**
      * 잠가 둔 시간을 다시 예약 가능하게 되돌린다.
      * 잠금과 함께 취소된 예약은 되살리지 않는다. 학생이 다시 신청해야 한다.
      */
     @Transactional
     public void teacherUnlock(LockDTO dto, Long teacherId) {
+        validateNotHolidayLock(dto.getDate());
+
         User teacher = userRepository.findById(teacherId)
                 .orElseThrow(() -> ReservationException.notFound("회원이 없습니다."));
 
@@ -261,7 +309,7 @@ public class CourseService {
         if (date == null) {
             throw ReservationException.badRequest("날짜를 선택해주세요.");
         }
-        validateNotHoliday(date);
+        // 휴업일은 스케줄러가 LOCKED 행으로 잠가 두므로 조회할 때는 나이스를 부르지 않는다.
 
         User teacher = findTeacher(teacherId);
 
@@ -329,6 +377,24 @@ public class CourseService {
     private void validateCategory(CounselingCategoryEnum category) {
         if (category == null) {
             throw ReservationException.badRequest("상담 분야를 선택해주세요.");
+        }
+    }
+
+    /**
+     * 휴업일 잠금은 매일 다시 만들어지고 예약 신청도 계속 막히므로, 풀렸다고 오해하지 않도록 해제를 막는다.
+     * 학사일정을 확인하지 못하면 해제는 허용한다. 예약 신청이 휴업일을 따로 다시 확인한다.
+     */
+    private void validateNotHolidayLock(LocalDate date) {
+        boolean holiday;
+        try {
+            holiday = scheduleService.isHoliday(date);
+        } catch (BusinessException e) {
+            log.warn("학사일정을 확인하지 못해 휴업일 여부를 보지 않고 잠금을 해제합니다. date={}", date, e);
+            return;
+        }
+
+        if (holiday) {
+            throw ReservationException.locked("휴업일은 잠금을 해제할 수 없습니다.");
         }
     }
 
