@@ -255,6 +255,8 @@ public class CourseService {
      */
     @Transactional
     public void teacherUnlock(LockDTO dto, Long teacherId) {
+        validateNotHolidayLock(dto.getDate());
+
         User teacher = userRepository.findById(teacherId)
                 .orElseThrow(() -> ReservationException.notFound("회원이 없습니다."));
 
@@ -307,7 +309,7 @@ public class CourseService {
         if (date == null) {
             throw ReservationException.badRequest("날짜를 선택해주세요.");
         }
-        validateNotHoliday(date);
+        // 휴업일은 스케줄러가 LOCKED 행으로 잠가 두므로 조회할 때는 나이스를 부르지 않는다.
 
         User teacher = findTeacher(teacherId);
 
@@ -375,6 +377,24 @@ public class CourseService {
     private void validateCategory(CounselingCategoryEnum category) {
         if (category == null) {
             throw ReservationException.badRequest("상담 분야를 선택해주세요.");
+        }
+    }
+
+    /**
+     * 휴업일 잠금은 매일 다시 만들어지고 예약 신청도 계속 막히므로, 풀렸다고 오해하지 않도록 해제를 막는다.
+     * 학사일정을 확인하지 못하면 해제는 허용한다. 예약 신청이 휴업일을 따로 다시 확인한다.
+     */
+    private void validateNotHolidayLock(LocalDate date) {
+        boolean holiday;
+        try {
+            holiday = scheduleService.isHoliday(date);
+        } catch (BusinessException e) {
+            log.warn("학사일정을 확인하지 못해 휴업일 여부를 보지 않고 잠금을 해제합니다. date={}", date, e);
+            return;
+        }
+
+        if (holiday) {
+            throw ReservationException.locked("휴업일은 잠금을 해제할 수 없습니다.");
         }
     }
 

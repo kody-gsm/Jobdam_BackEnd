@@ -249,13 +249,22 @@ class CommonServiceTest {
     }
 
     @Test
-    void readSlotStatusOnHolidayIsRejected() {
+    void readSlotStatusShowsHolidayLockWithoutCallingSchedule() {
         LocalDate holiday = LocalDate.of(2026, 9, 25);
-        when(scheduleService.isHoliday(holiday)).thenReturn(true);
+        CommonEntity holidayLock = CommonEntity.builder()
+                .reservation_id(100L)
+                .date(holiday)
+                .period("1교시")
+                .state(StateEnum.LOCKED)
+                .build();
+        when(userRepository.findById(2L)).thenReturn(Optional.of(user(2L, UserRole.WEE_TEACHER)));
+        when(commonRepository.findAllByDateAndTeacher_IdOrderByPeriodAsc(holiday, 2L)).thenReturn(List.of(holidayLock));
 
-        assertThatThrownBy(() -> commonService.readSlotStatus(2L, holiday, null))
-                .isInstanceOf(ReservationException.class)
-                .hasMessage("휴업일에는 상담을 예약할 수 없습니다.");
+        List<SlotStatusDTO> result = commonService.readSlotStatus(2L, holiday, null);
+
+        assertThat(result).extracting(SlotStatusDTO::getPeriod).containsExactly("1교시", "4교시");
+        assertThat(result).allMatch(slot -> slot.getState() == StateEnum.LOCKED);
+        verify(scheduleService, never()).isHoliday(any());
     }
 
     @Test
@@ -285,6 +294,31 @@ class CommonServiceTest {
                 && lock.getTeacher() == teacher
                 && lock.getDate().equals(holiday));
         assertThat(waiting.getState()).isEqualTo(StateEnum.CANCEL);
+    }
+
+    @Test
+    void teacherUnlockOnHolidayIsRejected() {
+        LocalDate holiday = LocalDate.of(2026, 10, 9);
+        when(scheduleService.isHoliday(holiday)).thenReturn(true);
+
+        assertThatThrownBy(() -> commonService.teacherUnlock(lockDto(holiday, "3교시"), 2L))
+                .isInstanceOf(ReservationException.class)
+                .hasMessage("휴업일은 잠금을 해제할 수 없습니다.");
+        verify(commonRepository, never()).findAllByDateAndPeriodAndTeacher_Id(any(), anyString(), any());
+    }
+
+    @Test
+    void teacherUnlockProceedsWhenScheduleLookupFails() {
+        LocalDate date = LocalDate.of(2026, 9, 10);
+        CommonEntity locked = CommonEntity.builder().state(StateEnum.LOCKED).build();
+        when(scheduleService.isHoliday(date))
+                .thenThrow(ScheduleException.badGateway("나이스 학사일정을 불러오지 못했습니다."));
+        when(userRepository.findById(2L)).thenReturn(Optional.of(user(2L, UserRole.WEE_TEACHER)));
+        when(commonRepository.findAllByDateAndPeriodAndTeacher_Id(date, "3교시", 2L)).thenReturn(List.of(locked));
+
+        commonService.teacherUnlock(lockDto(date, "3교시"), 2L);
+
+        assertThat(locked.getState()).isEqualTo(StateEnum.CANCEL);
     }
 
     @Test
