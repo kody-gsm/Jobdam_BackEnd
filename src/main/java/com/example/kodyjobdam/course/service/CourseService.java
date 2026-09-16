@@ -136,7 +136,8 @@ public class CourseService {
             throw ReservationException.conflict("같은 시간에 신청한 일반 상담이 있습니다.");
         }
 
-        for (CourseEntity entity : courseRepository.findAllByDateAndPeriodAndTeacher_Id(
+        // 같은 시간 예약을 잠근 뒤 상태를 봐야 학생 신청 수락과 동시에 들어와도 둘 다 통과하지 않는다.
+        for (CourseEntity entity : courseRepository.findAllForUpdateByDateAndPeriodAndTeacherId(
                 dto.getDate(), dto.getPeriod(), teacher.getId())) {
             if (entity.getState() == StateEnum.LOCKED) {
                 throw ReservationException.locked("잠긴 날짜 입니다.");
