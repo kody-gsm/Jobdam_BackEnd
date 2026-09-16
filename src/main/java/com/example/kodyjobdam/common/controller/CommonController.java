@@ -2,6 +2,7 @@ package com.example.kodyjobdam.common.controller;
 
 import com.example.kodyjobdam.common.dto.request.CreateDTO;
 import com.example.kodyjobdam.common.dto.request.LockDTO;
+import com.example.kodyjobdam.common.dto.request.TeacherCreateDTO;
 import com.example.kodyjobdam.common.dto.response.SlotStatusDTO;
 import com.example.kodyjobdam.common.dto.response.StudentReadDTO;
 import com.example.kodyjobdam.common.dto.response.TeacherReadDTO;
@@ -33,6 +34,12 @@ public class CommonController {
     public ResponseEntity<?> createReservation(@RequestBody CreateDTO dto) {
         commonService.createReservation(dto, securityUtil.getCurrentUserId());
         return ResponseEntity.ok().body("선생님께서 요청 검토중 입니다.");
+    }
+
+    @PostMapping("/teacher/common/force")
+    public ResponseEntity<?> createReservationByTeacher(@RequestBody TeacherCreateDTO dto) {
+        commonService.createReservationByTeacher(dto, securityUtil.getCurrentUserId());
+        return ResponseEntity.ok().body("상담 신청이 완료되었습니다.");
     }
 
     @PatchMapping("/student/common/cancel/{reservation_id}")
