@@ -36,9 +36,12 @@ import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 @Service
 @Slf4j
@@ -305,7 +308,7 @@ public class CourseService {
     }
 
     @Transactional(readOnly = true)
-    public List<SlotStatusDTO> readSlotStatus(Long teacherId, LocalDate date, String period) {
+    public List<SlotStatusDTO> readSlotStatus(Long teacherId, LocalDate date, String period, Long viewerId) {
         if (date == null) {
             throw ReservationException.badRequest("날짜를 선택해주세요.");
         }
@@ -328,9 +331,36 @@ public class CourseService {
             }
         }
 
-        return stateByPeriod.entrySet().stream()
-                .map(e -> new SlotStatusDTO(teacher.getId(), date, e.getKey(), e.getValue()))
+        Set<String> minePeriods = findMinePeriods(date, period, viewerId);
+
+        return Stream.concat(stateByPeriod.keySet().stream(), minePeriods.stream())
+                .distinct()
+                .sorted()
+                .map(slot -> new SlotStatusDTO(
+                        teacher.getId(), date, slot, stateByPeriod.get(slot), minePeriods.contains(slot)))
                 .toList();
+    }
+
+    /**
+     * 보는 학생이 그날 이미 신청해 둔 교시.
+     *
+     * <p>같은 시간에는 선생님을 바꿔도, 일반 상담이어도 다시 신청할 수 없다.
+     * 신청 화면에서 미리 막으려면 이 교시도 함께 내려줘야 한다.
+     * 선생님이 조회하면 신청 기록이 없어 비어 있다.</p>
+     */
+    private Set<String> findMinePeriods(LocalDate date, String period, Long viewerId) {
+        if (viewerId == null) {
+            return Set.of();
+        }
+
+        String submitterHash = cryptoService.submitterHash(viewerId);
+        Set<String> periods = new LinkedHashSet<>(courseRepository.findActivePeriods(submitterHash, date));
+        periods.addAll(commonRepository.findActivePeriods(submitterHash, date));
+
+        if (period != null && !period.isBlank()) {
+            periods.retainAll(Set.of(period.trim()));
+        }
+        return periods;
     }
 
     /**

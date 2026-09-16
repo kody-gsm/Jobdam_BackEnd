@@ -85,6 +85,6 @@ public class CommonController {
             @RequestParam Long teacherId,
             @RequestParam @DateTimeFormat(pattern = "yyyy-MM-dd") LocalDate date,
             @RequestParam(required = false) String period) {
-        return commonService.readSlotStatus(teacherId, date, period);
+        return commonService.readSlotStatus(teacherId, date, period, securityUtil.getCurrentUserId());
     }
 }

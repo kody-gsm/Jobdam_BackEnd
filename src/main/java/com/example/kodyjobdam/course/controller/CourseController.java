@@ -85,6 +85,6 @@ public class CourseController {
             @RequestParam Long teacherId,
             @RequestParam @DateTimeFormat(pattern = "yyyy-MM-dd") LocalDate date,
             @RequestParam(required = false) String period) {
-        return courseService.readSlotStatus(teacherId, date, period);
+        return courseService.readSlotStatus(teacherId, date, period, securityUtil.getCurrentUserId());
     }
 }
