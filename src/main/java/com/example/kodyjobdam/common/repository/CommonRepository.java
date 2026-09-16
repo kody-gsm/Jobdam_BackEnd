@@ -44,6 +44,17 @@ public interface CommonRepository extends JpaRepository<CommonEntity, Long> {
         return existsBySubmitterHashAndDateAndPeriodAndStateNot(submitterHash, date, period, StateEnum.CANCEL);
     }
 
+    @Query("select c.period from CommonEntity c "
+            + "where c.date = :date and c.submitterHash = :submitterHash and c.state <> :excluded")
+    List<String> findPeriodsBySubmitterHashAndDateAndStateNot(@Param("date") LocalDate date,
+                                                             @Param("submitterHash") String submitterHash,
+                                                             @Param("excluded") StateEnum excluded);
+
+    /** 학생이 그날 신청해 둔 교시. 선생님이 달라도 같은 시간에는 다시 신청할 수 없다. */
+    default List<String> findActivePeriods(String submitterHash, LocalDate date) {
+        return findPeriodsBySubmitterHashAndDateAndStateNot(date, submitterHash, StateEnum.CANCEL);
+    }
+
     List<CommonEntity> findAllByDateInAndTeacher_IdIn(Collection<LocalDate> dates, Collection<Long> teacherIds);
 
     List<CommonEntity> findAllByDateAndTeacher_IdOrderByPeriodAsc(LocalDate date, Long teacherId);
