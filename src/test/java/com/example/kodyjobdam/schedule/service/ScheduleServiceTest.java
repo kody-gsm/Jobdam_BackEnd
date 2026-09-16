@@ -61,6 +61,20 @@ class ScheduleServiceTest {
     }
 
     @Test
+    void 휴업일_구분이_해당없음이면_수업일로_본다() {
+        when(neisScheduleClient.fetchSchedules(any(), any())).thenReturn(List.of(
+                row("20260916", "입학설명회", "", "해당없음", "Y", "Y", "Y")
+        ));
+
+        List<ScheduleReadDTO> result = scheduleService.readSchedules(
+                LocalDate.of(2026, 9, 1), LocalDate.of(2026, 9, 30), null);
+
+        assertThat(result.get(0).isHoliday()).isFalse();
+        assertThat(result.get(0).getHolidayType()).isNull();
+        assertThat(scheduleService.isHoliday(LocalDate.of(2026, 9, 16))).isFalse();
+    }
+
+    @Test
     void 학년으로_일정을_거른다() {
         when(neisScheduleClient.fetchSchedules(any(), any())).thenReturn(List.of(
                 row("20260302", "입학식", "", "", "Y", "*", "*"),
