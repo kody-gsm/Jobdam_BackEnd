@@ -1,8 +1,12 @@
 package com.example.kodyjobdam.course.service;
 
+import com.example.kodyjobdam.common.dto.response.ReservationStatus;
 import com.example.kodyjobdam.common.entity.CounselingCategoryEnum;
+import com.example.kodyjobdam.common.entity.CounselingPeriod;
 import com.example.kodyjobdam.common.exception.BusinessException;
 import com.example.kodyjobdam.common.exception.ReservationException;
+import com.example.kodyjobdam.common.repository.CommonRepository;
+import com.example.kodyjobdam.common.repository.ReservationSlot;
 import com.example.kodyjobdam.common.service.CounselingReservationCryptoService;
 import com.example.kodyjobdam.course.dto.request.CreateDTO;
 import com.example.kodyjobdam.course.dto.request.LockDTO;
@@ -24,7 +28,11 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.Clock;
+import java.time.Duration;
 import java.time.LocalDate;
+import java.time.LocalDateTime;
+import java.time.ZoneId;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -34,12 +42,19 @@ import java.util.Map;
 @RequiredArgsConstructor
 public class CourseService {
 
+    /** 상담 시작 이 시간 전부터는 학생이 취소할 수 없다. */
+    private static final Duration CANCEL_DEADLINE = Duration.ofHours(1);
+
     private final CourseRepository courseRepository;
+    private final CommonRepository commonRepository;
     private final UserRepository userRepository;
     private final NotificationService notificationService;
     private final NotificationExpirationService notificationExpirationService;
     private final CounselingReservationCryptoService cryptoService;
     private final ScheduleService scheduleService;
+
+    /** 취소 마감을 판단하는 기준 시계. 학사 일정과 같은 한국 시간으로 본다. */
+    private Clock clock = Clock.system(ZoneId.of("Asia/Seoul"));
 
     public void courseSave(CourseEntity entity) {
         courseRepository.save(entity);
@@ -60,6 +75,9 @@ public class CourseService {
                     && entity.getState() != StateEnum.CANCEL) {
                 throw ReservationException.conflict("이미 예약한 시간입니다.");
             }
+        }
+        if (commonRepository.existsActiveReservation(submitterHash, dto.getDate(), dto.getPeriod())) {
+            throw ReservationException.conflict("같은 시간에 신청한 일반 상담이 있습니다.");
         }
 
         for (CourseEntity entity : courseRepository.findAllByDateAndPeriodAndTeacher_Id(
@@ -100,24 +118,34 @@ public class CourseService {
         if (!cryptoService.submitterHash(userId).equals(entity.getSubmitterHash())) {
             throw ReservationException.forbidden("권한이 없습니다.");
         }
+        validateCancelDeadline(entity.getDate(), entity.getPeriod());
 
         entity.setState(StateEnum.CANCEL);
     }
 
     @Transactional
     public void allow(Long reservationId, Long teacherId) {
-        CourseEntity entity = courseRepository.findById(reservationId)
+        ReservationSlot slot = courseRepository.findSlotByReservationId(reservationId)
+                .orElseThrow(() -> ReservationException.notFound("값을 찾을 수 없습니다."));
+        if (!slot.teacherId().equals(teacherId)) {
+            throw ReservationException.forbidden("담당 선생님만 처리할 수 있습니다.");
+        }
+
+        // 같은 시간 예약을 잠근 뒤 상태를 봐야 동시에 들어온 수락이 둘 다 통과하지 않는다.
+        List<CourseEntity> slotReservations = courseRepository.findAllForUpdateByDateAndPeriodAndTeacherId(
+                slot.date(), slot.period(), teacherId);
+        CourseEntity entity = slotReservations.stream()
+                .filter(reservation -> reservation.getReservation_id().equals(reservationId))
+                .findFirst()
                 .orElseThrow(() -> ReservationException.notFound("값을 찾을 수 없습니다."));
 
         if (entity.getState() == StateEnum.CANCEL) {
             throw ReservationException.notFound("이미 취소된 에약입니다.");
         }
-        if (!entity.getTeacher().getId().equals(teacherId)) {
-            throw ReservationException.forbidden("담당 선생님만 처리할 수 있습니다.");
-        }
         if (entity.getState() != StateEnum.WAITING) {
             throw ReservationException.conflict("이미 처리된 예약입니다.");
         }
+        validateSlotNotTaken(entity, slotReservations);
 
         entity.setState(StateEnum.RESERVED);
         User submitter = findSubmitter(entity);
@@ -140,8 +168,9 @@ public class CourseService {
         if (!entity.getTeacher().getId().equals(teacherId)) {
             throw ReservationException.forbidden("담당 선생님만 처리할 수 있습니다.");
         }
-        if (entity.getState() != StateEnum.WAITING) {
-            throw ReservationException.conflict("이미 처리된 예약입니다.");
+        // 잠금은 신청자가 없어 거절 알림을 보낼 수 없다. 해제는 unlock으로 처리한다.
+        if (entity.getState() == StateEnum.CANCEL || entity.getState() == StateEnum.LOCKED) {
+            throw ReservationException.conflict("거절할 수 없는 예약입니다.");
         }
 
         entity.setState(StateEnum.CANCEL);
@@ -174,6 +203,29 @@ public class CourseService {
         courseRepository.save(dto.toEntity(teacher));
     }
 
+    /**
+     * 잠가 둔 시간을 다시 예약 가능하게 되돌린다.
+     * 잠금과 함께 취소된 예약은 되살리지 않는다. 학생이 다시 신청해야 한다.
+     */
+    @Transactional
+    public void teacherUnlock(LockDTO dto, Long teacherId) {
+        User teacher = userRepository.findById(teacherId)
+                .orElseThrow(() -> ReservationException.notFound("회원이 없습니다."));
+
+        List<CourseEntity> locked = courseRepository.findAllByDateAndPeriodAndTeacher_Id(
+                        dto.getDate(), dto.getPeriod(), teacher.getId()).stream()
+                .filter(entity -> entity.getState() == StateEnum.LOCKED)
+                .toList();
+
+        if (locked.isEmpty()) {
+            throw ReservationException.notFound("잠긴 시간이 아닙니다.");
+        }
+
+        for (CourseEntity entity : locked) {
+            entity.setState(StateEnum.CANCEL);
+        }
+    }
+
     @Transactional(readOnly = true)
     public List<TeacherReadDTO> T_Read(Long id) {
         return courseRepository.findByTeacher_IdAndStateOrderByDateAscPeriodAsc(id, StateEnum.RESERVED).stream()
@@ -198,7 +250,8 @@ public class CourseService {
                         user.getName(),
                         e.getDate(),
                         e.getPeriod(),
-                        e.getCategory()
+                        e.getCategory(),
+                        ReservationStatus.from(e.getState())
                 ))
                 .toList();
     }
@@ -264,15 +317,44 @@ public class CourseService {
         return new TeacherReadDTO(
                 e.getReservation_id(),
                 cryptoService.decrypt(e.getEncryptedUserName()),
+                cryptoService.decrypt(e.getEncryptedStudentNumber()),
                 e.getDate(),
                 e.getPeriod(),
-                e.getCategory()
+                e.getCategory(),
+                cryptoService.decrypt(e.getEncryptedTitle()),
+                cryptoService.decrypt(e.getEncryptedContent())
         );
     }
 
     private void validateCategory(CounselingCategoryEnum category) {
         if (category == null) {
             throw ReservationException.badRequest("상담 분야를 선택해주세요.");
+        }
+    }
+
+    /** 한 선생님이 같은 날 같은 교시에 두 건을 수락하지 못하게 막는다. */
+    private void validateSlotNotTaken(CourseEntity target, List<CourseEntity> slotReservations) {
+        boolean taken = slotReservations.stream()
+                .filter(other -> !other.getReservation_id().equals(target.getReservation_id()))
+                .anyMatch(other -> other.getState() == StateEnum.RESERVED);
+
+        if (taken) {
+            throw ReservationException.conflict("같은 시간에 이미 수락한 상담이 있습니다.");
+        }
+    }
+
+    /** 상담 시작이 임박하면 학생이 취소할 수 없다. */
+    private void validateCancelDeadline(LocalDate date, String period) {
+        CounselingPeriod schedule = CounselingPeriod.from(period).orElse(null);
+        if (schedule == null) {
+            // 시간표에 없는 교시는 시작 시각을 알 수 없다. 취소를 막지 않는다.
+            log.warn("시간표에 없는 교시라 취소 마감을 확인하지 못했습니다. period={}", period);
+            return;
+        }
+
+        LocalDateTime deadline = schedule.startsAt(date).minus(CANCEL_DEADLINE);
+        if (!LocalDateTime.now(clock).isBefore(deadline)) {
+            throw ReservationException.conflict("상담 시작 1시간 전부터는 취소할 수 없습니다.");
         }
     }
 

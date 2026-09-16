@@ -59,6 +59,12 @@ public class CourseController {
         return ResponseEntity.ok().body("해당 시간을 잠궜습니다.");
     }
 
+    @PostMapping("/teacher/course/unlock")
+    public ResponseEntity<?> teacherUnlock(@RequestBody LockDTO dto) {
+        courseService.teacherUnlock(dto, securityUtil.getCurrentUserId());
+        return ResponseEntity.ok().body("해당 시간의 잠금을 해제했습니다.");
+    }
+
     @GetMapping("/student/course")
     public List<StudentReadDTO> S_read() {
         return courseService.S_Read(securityUtil.getCurrentUserId());

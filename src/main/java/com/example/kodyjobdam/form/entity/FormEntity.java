@@ -91,4 +91,9 @@ public class FormEntity {
     public boolean isAcceptingSubmission() {
         return this.status == FormStatus.PUBLISHED;
     }
+
+    /** 제출 기한이 지났는지. 기한이 없는 폼은 지나지 않은 것으로 본다. */
+    public boolean isPastDeadline(LocalDateTime now) {
+        return this.deadline != null && now.isAfter(this.deadline);
+    }
 }

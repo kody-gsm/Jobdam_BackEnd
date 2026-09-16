@@ -23,11 +23,17 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.test.util.ReflectionTestUtils;
 
+import java.time.Clock;
+import java.time.LocalDateTime;
+import java.time.ZoneId;
 import java.util.List;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
@@ -81,6 +87,47 @@ class FormSubmissionServiceTest {
         assertThatThrownBy(() -> formSubmissionService.resubmit(1L, submitDto("새 답변"), 3L))
                 .isInstanceOf(FormException.class)
                 .hasMessage("지금은 응답을 받지 않는 폼입니다.");
+    }
+
+    @Test
+    void 제출_기한이_지난_폼은_응답을_제출할_수_없다() {
+        FormEntity form = publishedForm();
+        form.update(form.getTitle(), form.getDescription(), LocalDateTime.of(2026, 9, 10, 23, 59, 59));
+        fixClock(LocalDateTime.of(2026, 9, 11, 0, 0));
+        when(formRepository.findById(1L)).thenReturn(Optional.of(form));
+
+        assertThatThrownBy(() -> formSubmissionService.submit(1L, submitDto("답변"), 3L))
+                .isInstanceOf(FormException.class)
+                .hasMessage("제출 기한이 지난 폼입니다.");
+        verify(submissionRepository, never()).save(any());
+    }
+
+    @Test
+    void 제출_기한이_지난_폼은_응답을_수정할_수_없다() {
+        FormEntity form = publishedForm();
+        FormSubmissionEntity submission = submissionOf(form, "이전 답변");
+        form.update(form.getTitle(), form.getDescription(), LocalDateTime.of(2026, 9, 10, 23, 59, 59));
+        fixClock(LocalDateTime.of(2026, 9, 11, 0, 0));
+        when(formRepository.findById(1L)).thenReturn(Optional.of(form));
+
+        assertThatThrownBy(() -> formSubmissionService.resubmit(1L, submitDto("새 답변"), 3L))
+                .isInstanceOf(FormException.class)
+                .hasMessage("제출 기한이 지난 폼입니다.");
+        assertThat(submission.getAnswers().get(0).getTextValue()).isEqualTo("이전 답변");
+    }
+
+    @Test
+    void 제출_기한_전에는_응답을_수정할_수_있다() {
+        FormEntity form = publishedForm();
+        FormSubmissionEntity submission = submissionOf(form, "이전 답변");
+        form.update(form.getTitle(), form.getDescription(), LocalDateTime.of(2026, 9, 10, 23, 59, 59));
+        fixClock(LocalDateTime.of(2026, 9, 10, 23, 59));
+        when(formRepository.findById(1L)).thenReturn(Optional.of(form));
+        when(submissionRepository.findByFormIdAndUserId(1L, 3L)).thenReturn(Optional.of(submission));
+
+        formSubmissionService.resubmit(1L, submitDto("새 답변"), 3L);
+
+        assertThat(submission.getAnswers().get(0).getTextValue()).isEqualTo("새 답변");
     }
 
     @Test
@@ -151,6 +198,12 @@ class FormSubmissionServiceTest {
         assertThatThrownBy(() -> formSubmissionService.resubmit(1L, fileSubmitDto(null), 3L))
                 .isInstanceOf(FormException.class)
                 .hasMessage("필수 질문에 답변해주세요: 포트폴리오");
+    }
+
+    private void fixClock(LocalDateTime now) {
+        ZoneId zone = ZoneId.of("Asia/Seoul");
+        ReflectionTestUtils.setField(formSubmissionService, "clock",
+                Clock.fixed(now.atZone(zone).toInstant(), zone));
     }
 
     private FormEntity formWithFileQuestion() {

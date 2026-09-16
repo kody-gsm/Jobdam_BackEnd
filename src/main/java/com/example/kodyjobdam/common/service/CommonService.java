@@ -2,15 +2,19 @@ package com.example.kodyjobdam.common.service;
 
 import com.example.kodyjobdam.common.dto.request.CreateDTO;
 import com.example.kodyjobdam.common.dto.request.LockDTO;
+import com.example.kodyjobdam.common.dto.response.ReservationStatus;
 import com.example.kodyjobdam.common.dto.response.StudentReadDTO;
 import com.example.kodyjobdam.common.dto.response.SlotStatusDTO;
 import com.example.kodyjobdam.common.dto.response.TeacherReadDTO;
 import com.example.kodyjobdam.common.entity.CommonEntity;
 import com.example.kodyjobdam.common.entity.CounselingCategoryEnum;
+import com.example.kodyjobdam.common.entity.CounselingPeriod;
 import com.example.kodyjobdam.common.entity.StateEnum;
 import com.example.kodyjobdam.common.exception.BusinessException;
 import com.example.kodyjobdam.common.exception.ReservationException;
 import com.example.kodyjobdam.common.repository.CommonRepository;
+import com.example.kodyjobdam.common.repository.ReservationSlot;
+import com.example.kodyjobdam.course.repository.CourseRepository;
 import com.example.kodyjobdam.notification.entity.NotificationType;
 import com.example.kodyjobdam.notification.service.NotificationExpirationService;
 import com.example.kodyjobdam.notification.service.NotificationService;
@@ -24,7 +28,11 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.Clock;
+import java.time.Duration;
 import java.time.LocalDate;
+import java.time.LocalDateTime;
+import java.time.ZoneId;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -36,15 +44,22 @@ import java.util.Set;
 public class CommonService {
 
     private final CommonRepository commonRepository;
+    private final CourseRepository courseRepository;
     private final UserRepository userRepository;
     private final NotificationService notificationService;
     private final NotificationExpirationService notificationExpirationService;
     private final CounselingReservationCryptoService cryptoService;
     private final ScheduleService scheduleService;
 
+    /** 상담 시작 이 시간 전부터는 학생이 취소할 수 없다. */
+    private static final Duration CANCEL_DEADLINE = Duration.ofHours(1);
+
     /** 상시 잠금 교시. 클라이언트가 쓰는 교시 라벨("4교시", "점심시간")로 적는다. 쉼표로 여러 개를 지정할 수 있다. */
     @Value("${reservation.locked-periods:}")
     private Set<String> lockedPeriods;
+
+    /** 취소 마감을 판단하는 기준 시계. 학사 일정과 같은 한국 시간으로 본다. */
+    private Clock clock = Clock.system(ZoneId.of("Asia/Seoul"));
 
     public void commonSave(CommonEntity entity) {
         commonRepository.save(entity);
@@ -66,6 +81,9 @@ public class CommonService {
                     && entity.getState() != StateEnum.CANCEL) {
                 throw ReservationException.conflict("이미 예약한 시간입니다.");
             }
+        }
+        if (courseRepository.existsActiveReservation(submitterHash, dto.getDate(), dto.getPeriod())) {
+            throw ReservationException.conflict("같은 시간에 신청한 진로 상담이 있습니다.");
         }
 
         for (CommonEntity entity : commonRepository.findAllByDateAndPeriodAndTeacher_Id(
@@ -106,24 +124,34 @@ public class CommonService {
         if (!cryptoService.submitterHash(userId).equals(entity.getSubmitterHash())) {
             throw ReservationException.forbidden("권한이 없습니다.");
         }
+        validateCancelDeadline(entity.getDate(), entity.getPeriod());
 
         entity.setState(StateEnum.CANCEL);
     }
 
     @Transactional
     public void allow(Long reservationId, Long teacherId) {
-        CommonEntity entity = commonRepository.findById(reservationId)
+        ReservationSlot slot = commonRepository.findSlotByReservationId(reservationId)
+                .orElseThrow(() -> ReservationException.notFound("값을 찾을 수 없습니다."));
+        if (!slot.teacherId().equals(teacherId)) {
+            throw ReservationException.forbidden("담당 선생님만 처리할 수 있습니다.");
+        }
+
+        // 같은 시간 예약을 잠근 뒤 상태를 봐야 동시에 들어온 수락이 둘 다 통과하지 않는다.
+        List<CommonEntity> slotReservations = commonRepository.findAllForUpdateByDateAndPeriodAndTeacherId(
+                slot.date(), slot.period(), teacherId);
+        CommonEntity entity = slotReservations.stream()
+                .filter(reservation -> reservation.getReservation_id().equals(reservationId))
+                .findFirst()
                 .orElseThrow(() -> ReservationException.notFound("값을 찾을 수 없습니다."));
 
         if (entity.getState() == StateEnum.CANCEL) {
             throw ReservationException.notFound("이미 취소된 에약입니다.");
         }
-        if (!entity.getTeacher().getId().equals(teacherId)) {
-            throw ReservationException.forbidden("담당 선생님만 처리할 수 있습니다.");
-        }
         if (entity.getState() != StateEnum.WAITING) {
             throw ReservationException.conflict("이미 처리된 예약입니다.");
         }
+        validateSlotNotTaken(entity, slotReservations);
 
         entity.setState(StateEnum.RESERVED);
         User submitter = findSubmitter(entity);
@@ -146,8 +174,9 @@ public class CommonService {
         if (!entity.getTeacher().getId().equals(teacherId)) {
             throw ReservationException.forbidden("담당 선생님만 처리할 수 있습니다.");
         }
-        if (entity.getState() != StateEnum.WAITING) {
-            throw ReservationException.conflict("이미 처리된 예약입니다.");
+        // 잠금은 신청자가 없어 거절 알림을 보낼 수 없다. 해제는 unlock으로 처리한다.
+        if (entity.getState() == StateEnum.CANCEL || entity.getState() == StateEnum.LOCKED) {
+            throw ReservationException.conflict("거절할 수 없는 예약입니다.");
         }
 
         entity.setState(StateEnum.CANCEL);
@@ -180,6 +209,31 @@ public class CommonService {
         commonRepository.save(dto.toEntity(teacher));
     }
 
+    /**
+     * 잠가 둔 시간을 다시 예약 가능하게 되돌린다.
+     * 잠금과 함께 취소된 예약은 되살리지 않는다. 학생이 다시 신청해야 한다.
+     */
+    @Transactional
+    public void teacherUnlock(LockDTO dto, Long teacherId) {
+        validateNotAlwaysLockedPeriod(dto.getPeriod());
+
+        User teacher = userRepository.findById(teacherId)
+                .orElseThrow(() -> ReservationException.notFound("회원이 없습니다."));
+
+        List<CommonEntity> locked = commonRepository.findAllByDateAndPeriodAndTeacher_Id(
+                        dto.getDate(), dto.getPeriod(), teacher.getId()).stream()
+                .filter(entity -> entity.getState() == StateEnum.LOCKED)
+                .toList();
+
+        if (locked.isEmpty()) {
+            throw ReservationException.notFound("잠긴 시간이 아닙니다.");
+        }
+
+        for (CommonEntity entity : locked) {
+            entity.setState(StateEnum.CANCEL);
+        }
+    }
+
     @Transactional(readOnly = true)
     public List<TeacherReadDTO> T_Read(Long id) {
         return commonRepository.findByTeacher_IdAndStateOrderByDateAscPeriodAsc(id, StateEnum.RESERVED).stream()
@@ -204,7 +258,8 @@ public class CommonService {
                         user.getName(),
                         e.getDate(),
                         e.getPeriod(),
-                        e.getCategory()
+                        e.getCategory(),
+                        ReservationStatus.from(e.getState())
                 ))
                 .toList();
     }
@@ -269,9 +324,50 @@ public class CommonService {
 
     /** 상시 잠금으로 지정된 교시에는 상담을 잡을 수 없다. */
     private void validateNotLockedPeriod(String period) {
-        if (period != null && !period.isBlank() && lockedPeriods.contains(period.trim())) {
+        if (isAlwaysLockedPeriod(period)) {
             throw ReservationException.locked(period.trim() + "에는 상담을 예약할 수 없습니다.");
         }
+    }
+
+    /**
+     * 상시 잠금 교시는 설정값으로 막혀 있어서, 잠금을 풀어도 여전히 예약할 수 없다.
+     * 풀렸다고 오해하지 않도록 해제 자체를 막는다.
+     */
+    private void validateNotAlwaysLockedPeriod(String period) {
+        if (isAlwaysLockedPeriod(period)) {
+            throw ReservationException.locked(
+                    period.trim() + "는 설정으로 상시 잠겨 있어 해제할 수 없습니다.");
+        }
+    }
+
+    /** 한 선생님이 같은 날 같은 교시에 두 건을 수락하지 못하게 막는다. */
+    private void validateSlotNotTaken(CommonEntity target, List<CommonEntity> slotReservations) {
+        boolean taken = slotReservations.stream()
+                .filter(other -> !other.getReservation_id().equals(target.getReservation_id()))
+                .anyMatch(other -> other.getState() == StateEnum.RESERVED);
+
+        if (taken) {
+            throw ReservationException.conflict("같은 시간에 이미 수락한 상담이 있습니다.");
+        }
+    }
+
+    /** 상담 시작이 임박하면 학생이 취소할 수 없다. */
+    private void validateCancelDeadline(LocalDate date, String period) {
+        CounselingPeriod schedule = CounselingPeriod.from(period).orElse(null);
+        if (schedule == null) {
+            // 시간표에 없는 교시는 시작 시각을 알 수 없다. 취소를 막지 않는다.
+            log.warn("시간표에 없는 교시라 취소 마감을 확인하지 못했습니다. period={}", period);
+            return;
+        }
+
+        LocalDateTime deadline = schedule.startsAt(date).minus(CANCEL_DEADLINE);
+        if (!LocalDateTime.now(clock).isBefore(deadline)) {
+            throw ReservationException.conflict("상담 시작 1시간 전부터는 취소할 수 없습니다.");
+        }
+    }
+
+    private boolean isAlwaysLockedPeriod(String period) {
+        return period != null && !period.isBlank() && lockedPeriods.contains(period.trim());
     }
 
     private int priority(StateEnum state) {
@@ -287,9 +383,12 @@ public class CommonService {
         return new TeacherReadDTO(
                 e.getReservation_id(),
                 cryptoService.decrypt(e.getEncryptedUserName()),
+                cryptoService.decrypt(e.getEncryptedStudentNumber()),
                 e.getDate(),
                 e.getPeriod(),
-                e.getCategory()
+                e.getCategory(),
+                cryptoService.decrypt(e.getEncryptedTitle()),
+                cryptoService.decrypt(e.getEncryptedContent())
         );
     }
 
@@ -319,8 +418,8 @@ public class CommonService {
 
         User teacher = userRepository.findById(teacherId)
                 .orElseThrow(() -> ReservationException.notFound("선생님을 찾을 수 없습니다."));
-        if (teacher.getRole() != UserRole.TEACHER) {
-            throw ReservationException.badRequest("선생님 계정만 선택할 수 있습니다.");
+        if (teacher.getRole() != UserRole.WEE_TEACHER) {
+            throw ReservationException.badRequest("일반 상담은 Wee 클래스 선생님만 선택할 수 있습니다.");
         }
         return teacher;
     }

@@ -59,6 +59,12 @@ public class CommonController {
         return ResponseEntity.ok().body("해당 시간을 잠궜습니다.");
     }
 
+    @PostMapping("/teacher/common/unlock")
+    public ResponseEntity<?> teacherUnlock(@RequestBody LockDTO dto) {
+        commonService.teacherUnlock(dto, securityUtil.getCurrentUserId());
+        return ResponseEntity.ok().body("해당 시간의 잠금을 해제했습니다.");
+    }
+
     @GetMapping("/student/common")
     public List<StudentReadDTO> S_read() {
         return commonService.S_Read(securityUtil.getCurrentUserId());
