@@ -2,6 +2,7 @@ package com.example.kodyjobdam.common.service;
 
 import com.example.kodyjobdam.common.dto.request.CreateDTO;
 import com.example.kodyjobdam.common.dto.request.LockDTO;
+import com.example.kodyjobdam.common.dto.request.TeacherCreateDTO;
 import com.example.kodyjobdam.common.dto.response.ReservationStatus;
 import com.example.kodyjobdam.common.dto.response.StudentReadDTO;
 import com.example.kodyjobdam.common.dto.response.SlotStatusDTO;
@@ -117,6 +118,60 @@ public class CommonService {
                 "학생이 상담을 신청했습니다.",
                 reservation.getReservation_id(),
                 "/teacher/common/" + reservation.getReservation_id(),
+                notificationExpirationService.counselingExpiresAt(reservation.getDate())
+        );
+    }
+
+    @Transactional
+    public void createReservationByTeacher(TeacherCreateDTO dto, Long teacherId) {
+        validateNotHoliday(dto.getDate());
+        validateNotLockedPeriod(dto.getPeriod());
+
+        User teacher = findTeacher(teacherId);
+        User student = findStudent(dto.getStudentId());
+        validateCategory(dto.getCategory());
+        String submitterHash = cryptoService.submitterHash(student.getId());
+
+        for (CommonEntity entity : commonRepository.findAllByDateAndPeriod(dto.getDate(), dto.getPeriod())) {
+            if (submitterHash.equals(entity.getSubmitterHash())
+                    && entity.getState() != StateEnum.CANCEL) {
+                throw ReservationException.conflict("이미 예약한 시간입니다.");
+            }
+        }
+        if (courseRepository.existsActiveReservation(submitterHash, dto.getDate(), dto.getPeriod())) {
+            throw ReservationException.conflict("같은 시간에 신청한 진로 상담이 있습니다.");
+        }
+
+        for (CommonEntity entity : commonRepository.findAllByDateAndPeriodAndTeacher_Id(
+                dto.getDate(), dto.getPeriod(), teacher.getId())) {
+            if (entity.getState() == StateEnum.LOCKED) {
+                throw ReservationException.locked("잠긴 날짜 입니다.");
+            }
+            if (entity.getState() == StateEnum.RESERVED) {
+                throw ReservationException.conflict("누군가 예약한 시간입니다.");
+            }
+        }
+
+        CommonEntity reservation = commonRepository.save(CommonEntity.builder()
+                .teacher(teacher)
+                .submitterHash(submitterHash)
+                .encryptedTitle(cryptoService.encrypt(dto.getTitle()))
+                .encryptedContent(cryptoService.encrypt(dto.getContent()))
+                .category(dto.getCategory())
+                .encryptedUserId(cryptoService.encrypt(String.valueOf(student.getId())))
+                .encryptedUserName(cryptoService.encrypt(student.getName()))
+                .encryptedStudentNumber(cryptoService.encrypt(student.getStudent_number()))
+                .date(dto.getDate())
+                .period(dto.getPeriod())
+                .state(StateEnum.RESERVED)
+                .build());
+        notificationService.notifyUser(
+                student,
+                NotificationType.COUNSELING_APPROVED,
+                "상담 일정 등록",
+                teacher.getName() + " 선생님이 상담 일정을 등록했습니다.",
+                reservation.getReservation_id(),
+                "/student/common/" + reservation.getReservation_id(),
                 notificationExpirationService.counselingExpiresAt(reservation.getDate())
         );
     }
@@ -515,5 +570,18 @@ public class CommonService {
             throw ReservationException.badRequest("일반 상담은 Wee 클래스 선생님만 선택할 수 있습니다.");
         }
         return teacher;
+    }
+
+    private User findStudent(Long studentId) {
+        if (studentId == null) {
+            throw ReservationException.badRequest("학생을 선택해주세요.");
+        }
+
+        User student = userRepository.findById(studentId)
+                .orElseThrow(() -> ReservationException.notFound("학생을 찾을 수 없습니다."));
+        if (student.getRole() != UserRole.STUDENT) {
+            throw ReservationException.badRequest("학생 계정만 선택할 수 있습니다.");
+        }
+        return student;
     }
 }

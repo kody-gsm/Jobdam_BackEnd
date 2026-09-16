@@ -2,6 +2,7 @@ package com.example.kodyjobdam.user.service;
 
 import com.example.kodyjobdam.user.UserRepository;
 import com.example.kodyjobdam.user.UserRole;
+import com.example.kodyjobdam.user.dto.StudentSimpleResponse;
 import com.example.kodyjobdam.user.dto.TeacherResponse;
 import com.example.kodyjobdam.user.entity.User;
 import lombok.RequiredArgsConstructor;
@@ -29,6 +30,11 @@ public class TeacherService {
     /** 진로(course) 상담을 담당하는 선생님 목록 */
     public List<TeacherResponse> findCourseTeachers() {
         return toResponses(userRepository.findByRoleOrderByNameAsc(UserRole.TEACHER));
+    }
+
+    /** 선생님이 강제 신청할 때 선택할 학생 목록 */
+    public List<StudentSimpleResponse> findStudents() {
+        return userRepository.findStudentSimpleResponses();
     }
 
     private List<TeacherResponse> toResponses(List<User> users) {
