@@ -29,6 +29,8 @@ public class ScheduleService {
 
     private static final DateTimeFormatter YMD = DateTimeFormatter.ofPattern("yyyyMMdd");
     private static final String EVENT_APPLIED = "Y";
+    /** 나이스는 휴업일이 아닌 날의 휴업일 구분에 이 값을 넣는다. 빈 값으로 두지 않는다. */
+    private static final String NOT_A_HOLIDAY = "해당없음";
     private static final int MAX_RANGE_DAYS = 366;
 
     private final NeisScheduleClient neisScheduleClient;
@@ -119,7 +121,7 @@ public class ScheduleService {
                 date,
                 emptyToNull(row.eventName()),
                 emptyToNull(row.eventContent()),
-                emptyToNull(row.holidayType()),
+                holidayType(row.holidayType()),
                 toGrades(row)
         );
     }
@@ -149,6 +151,12 @@ public class ScheduleService {
             log.warn("나이스 학사일정 날짜 형식이 올바르지 않습니다. value={}", value);
             return null;
         }
+    }
+
+    /** 휴업일 구분. 수업일이면 null 이다. */
+    private String holidayType(String value) {
+        String holidayType = emptyToNull(value);
+        return NOT_A_HOLIDAY.equals(holidayType) ? null : holidayType;
     }
 
     private String emptyToNull(String value) {
