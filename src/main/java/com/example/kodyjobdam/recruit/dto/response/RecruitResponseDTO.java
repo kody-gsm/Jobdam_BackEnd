@@ -35,6 +35,9 @@ public class RecruitResponseDTO {
 
     private String summary;
 
+    /** 공고 이미지 공개 URL. 로그인 없이도 접근 가능. 이미지가 없으면 null. */
+    private String imageUrl;
+
     /** 공고와 함께 만들어진 지원 폼 식별자 */
     private Long formId;
 
@@ -56,6 +59,7 @@ public class RecruitResponseDTO {
                 .deadline(orUndecided(entity.getDeadline()))
                 .interviewDate(orUndecided(entity.getInterviewDate()))
                 .summary(entity.getSummary())
+                .imageUrl(entity.getImageUrl())
                 .formId(entity.getFormId())
                 .status(entity.getStatus())
                 .createdAt(entity.getCreatedAt())

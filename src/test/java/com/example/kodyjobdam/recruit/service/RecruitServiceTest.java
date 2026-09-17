@@ -52,6 +52,9 @@ class RecruitServiceTest {
     private GeminiClient geminiClient;
 
     @Mock
+    private RecruitImageStorage recruitImageStorage;
+
+    @Mock
     private FormService formService;
 
     @Mock
@@ -77,12 +80,15 @@ class RecruitServiceTest {
         when(formService.createForRecruit(
                 eq(teacher), eq("잡담"), eq(LocalDate.of(2026, 9, 10).atTime(LocalTime.MAX))))
                 .thenReturn(form);
+        when(recruitImageStorage.store(any(byte[].class), eq("png")))
+                .thenReturn("/uploads/recruit/2026/09/uuid.png");
         when(recruitRepository.save(any(RecruitEntity.class))).thenAnswer(returnsFirstArg());
 
         RecruitResponseDTO response = recruitService.analyze(
                 new MockMultipartFile("image", "recruit.png", "image/png", new byte[]{1, 2}), 2L);
 
         assertThat(response.getFormId()).isEqualTo(7L);
+        assertThat(response.getImageUrl()).isEqualTo("/uploads/recruit/2026/09/uuid.png");
     }
 
     @Test
@@ -217,7 +223,7 @@ class RecruitServiceTest {
 
         RecruitResponseDTO response = recruitService.update(10L, dto, 2L);
 
-        assertThat(response.getInterviewDate()).isNull();
+        assertThat(response.getInterviewDate()).isEqualTo(RecruitPeriod.UNDECIDED);
         assertThat(response.getInterviewPeriod()).isNull();
         assertThat(response.getCompanyName()).isEqualTo("잡담");
     }
