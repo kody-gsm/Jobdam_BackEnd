@@ -222,7 +222,7 @@ class RecruitServiceTest {
 
         RecruitResponseDTO response = recruitService.update(10L, dto, 2L);
 
-        assertThat(response.getInterviewDate()).isNull();
+        assertThat(response.getInterviewDate()).isEqualTo(RecruitPeriod.UNDECIDED);
         assertThat(response.getInterviewPeriod()).isNull();
         assertThat(response.getCompanyName()).isEqualTo("잡담");
     }
