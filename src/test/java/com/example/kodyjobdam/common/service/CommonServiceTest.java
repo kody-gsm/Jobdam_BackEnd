@@ -7,6 +7,7 @@ import com.example.kodyjobdam.common.dto.response.SlotStatusDTO;
 import com.example.kodyjobdam.common.dto.response.StudentReadDTO;
 import com.example.kodyjobdam.common.entity.CommonEntity;
 import com.example.kodyjobdam.common.entity.CounselingCategoryEnum;
+import com.example.kodyjobdam.common.entity.CounselingPeriod;
 import com.example.kodyjobdam.common.entity.StateEnum;
 import com.example.kodyjobdam.common.exception.ReservationException;
 import com.example.kodyjobdam.common.exception.ScheduleException;
@@ -248,13 +249,76 @@ class CommonServiceTest {
     }
 
     @Test
-    void readSlotStatusOnHolidayIsRejected() {
+    void readSlotStatusShowsHolidayLockWithoutCallingSchedule() {
         LocalDate holiday = LocalDate.of(2026, 9, 25);
+        CommonEntity holidayLock = CommonEntity.builder()
+                .reservation_id(100L)
+                .date(holiday)
+                .period("1교시")
+                .state(StateEnum.LOCKED)
+                .build();
+        when(userRepository.findById(2L)).thenReturn(Optional.of(user(2L, UserRole.WEE_TEACHER)));
+        when(commonRepository.findAllByDateAndTeacher_IdOrderByPeriodAsc(holiday, 2L)).thenReturn(List.of(holidayLock));
+
+        List<SlotStatusDTO> result = commonService.readSlotStatus(2L, holiday, null, 1L);
+
+        assertThat(result).extracting(SlotStatusDTO::getPeriod).containsExactly("1교시", "4교시");
+        assertThat(result).allMatch(slot -> slot.getState() == StateEnum.LOCKED);
+        verify(scheduleService, never()).isHoliday(any());
+    }
+
+    @Test
+    void lockHolidaysLocksEveryPeriodForEachWeeTeacher() {
+        LocalDate holiday = LocalDate.of(2026, 10, 9);
+        User teacher = user(2L, UserRole.WEE_TEACHER);
+        CommonEntity alreadyLocked = CommonEntity.builder()
+                .reservation_id(100L).teacher(teacher).date(holiday).period("1교시").state(StateEnum.LOCKED).build();
+        CommonEntity waiting = CommonEntity.builder()
+                .reservation_id(101L).teacher(teacher).date(holiday).period("2교시").state(StateEnum.WAITING).build();
+
+        when(userRepository.findByRole(UserRole.WEE_TEACHER)).thenReturn(List.of(teacher));
+        when(commonRepository.findAllByDateInAndTeacher_IdIn(List.of(holiday), List.of(2L)))
+                .thenReturn(List.of(alreadyLocked, waiting));
+
+        int created = commonService.lockHolidays(List.of(holiday));
+
+        @SuppressWarnings("unchecked")
+        ArgumentCaptor<List<CommonEntity>> locksCaptor = ArgumentCaptor.forClass(List.class);
+        verify(commonRepository).saveAll(locksCaptor.capture());
+        List<CommonEntity> locks = locksCaptor.getValue();
+
+        assertThat(created).isEqualTo(CounselingPeriod.values().length - 1);
+        assertThat(locks).hasSize(created);
+        assertThat(locks).extracting(CommonEntity::getPeriod).doesNotContain("1교시").contains("2교시", "점심시간");
+        assertThat(locks).allMatch(lock -> lock.getState() == StateEnum.LOCKED
+                && lock.getTeacher() == teacher
+                && lock.getDate().equals(holiday));
+        assertThat(waiting.getState()).isEqualTo(StateEnum.CANCEL);
+    }
+
+    @Test
+    void teacherUnlockOnHolidayIsRejected() {
+        LocalDate holiday = LocalDate.of(2026, 10, 9);
         when(scheduleService.isHoliday(holiday)).thenReturn(true);
 
-        assertThatThrownBy(() -> commonService.readSlotStatus(2L, holiday, null))
+        assertThatThrownBy(() -> commonService.teacherUnlock(lockDto(holiday, "3교시"), 2L))
                 .isInstanceOf(ReservationException.class)
-                .hasMessage("휴업일에는 상담을 예약할 수 없습니다.");
+                .hasMessage("휴업일은 잠금을 해제할 수 없습니다.");
+        verify(commonRepository, never()).findAllByDateAndPeriodAndTeacher_Id(any(), anyString(), any());
+    }
+
+    @Test
+    void teacherUnlockProceedsWhenScheduleLookupFails() {
+        LocalDate date = LocalDate.of(2026, 9, 10);
+        CommonEntity locked = CommonEntity.builder().state(StateEnum.LOCKED).build();
+        when(scheduleService.isHoliday(date))
+                .thenThrow(ScheduleException.badGateway("나이스 학사일정을 불러오지 못했습니다."));
+        when(userRepository.findById(2L)).thenReturn(Optional.of(user(2L, UserRole.WEE_TEACHER)));
+        when(commonRepository.findAllByDateAndPeriodAndTeacher_Id(date, "3교시", 2L)).thenReturn(List.of(locked));
+
+        commonService.teacherUnlock(lockDto(date, "3교시"), 2L);
+
+        assertThat(locked.getState()).isEqualTo(StateEnum.CANCEL);
     }
 
     @Test
@@ -291,12 +355,58 @@ class CommonServiceTest {
         when(userRepository.findById(2L)).thenReturn(Optional.of(teacher));
         when(commonRepository.findAllByDateAndTeacher_IdOrderByPeriodAsc(date, 2L)).thenReturn(List.of());
 
-        List<SlotStatusDTO> result = commonService.readSlotStatus(2L, date, null);
+        List<SlotStatusDTO> result = commonService.readSlotStatus(2L, date, null, 1L);
 
         assertThat(result).hasSize(1);
         assertThat(result.get(0).getPeriod()).isEqualTo("4교시");
         assertThat(result.get(0).getState()).isEqualTo(StateEnum.LOCKED);
         assertThat(result.get(0).isAvailable()).isFalse();
+    }
+
+    @Test
+    void readSlotStatusMarksPeriodsTheStudentAlreadyRequested() {
+        LocalDate date = LocalDate.of(2026, 9, 17);
+        when(userRepository.findById(2L)).thenReturn(Optional.of(user(2L, UserRole.WEE_TEACHER)));
+        when(commonRepository.findAllByDateAndTeacher_IdOrderByPeriodAsc(date, 2L)).thenReturn(List.of());
+        when(cryptoService.submitterHash(1L)).thenReturn("hash");
+        when(commonRepository.findActivePeriods("hash", date)).thenReturn(List.of("1교시"));
+        when(courseRepository.findActivePeriods("hash", date)).thenReturn(List.of("2교시"));
+
+        List<SlotStatusDTO> result = commonService.readSlotStatus(2L, date, null, 1L);
+
+        assertThat(result).extracting(SlotStatusDTO::getPeriod).containsExactly("1교시", "2교시", "4교시");
+        // 다른 선생님에게 신청했어도 같은 시간은 다시 신청할 수 없다.
+        assertThat(result.get(0).isMine()).isTrue();
+        assertThat(result.get(0).getState()).isNull();
+        assertThat(result.get(0).isAvailable()).isFalse();
+        // 진로 상담으로 잡아 둔 시간도 막는다.
+        assertThat(result.get(1).isMine()).isTrue();
+        assertThat(result.get(1).isAvailable()).isFalse();
+        assertThat(result.get(2).getState()).isEqualTo(StateEnum.LOCKED);
+        assertThat(result.get(2).isMine()).isFalse();
+    }
+
+    @Test
+    void readSlotStatusKeepsOtherStudentsWaitingAvailable() {
+        LocalDate date = LocalDate.of(2026, 9, 17);
+        CommonEntity othersWaiting = CommonEntity.builder()
+                .reservation_id(100L)
+                .date(date)
+                .period("1교시")
+                .state(StateEnum.WAITING)
+                .build();
+        when(userRepository.findById(2L)).thenReturn(Optional.of(user(2L, UserRole.WEE_TEACHER)));
+        when(commonRepository.findAllByDateAndTeacher_IdOrderByPeriodAsc(date, 2L))
+                .thenReturn(List.of(othersWaiting));
+        when(cryptoService.submitterHash(1L)).thenReturn("hash");
+
+        List<SlotStatusDTO> result = commonService.readSlotStatus(2L, date, null, 1L);
+
+        // 선생님이 한 명을 고르는 구조라 남의 신청은 자리를 막지 않는다.
+        assertThat(result.get(0).getPeriod()).isEqualTo("1교시");
+        assertThat(result.get(0).getState()).isEqualTo(StateEnum.WAITING);
+        assertThat(result.get(0).isMine()).isFalse();
+        assertThat(result.get(0).isAvailable()).isTrue();
     }
 
     @Test

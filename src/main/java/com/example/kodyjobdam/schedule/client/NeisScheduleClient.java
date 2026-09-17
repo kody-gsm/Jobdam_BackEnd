@@ -9,6 +9,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClient;
+import org.springframework.web.client.RestClientException;
 import org.springframework.web.util.UriComponentsBuilder;
 
 import java.net.URI;
@@ -73,11 +74,18 @@ public class NeisScheduleClient {
                 .build()
                 .toUri();
 
-        NeisScheduleApiResponse response = restClientBuilder.build()
-                .get()
-                .uri(uri)
-                .retrieve()
-                .body(NeisScheduleApiResponse.class);
+        NeisScheduleApiResponse response;
+        try {
+            response = restClientBuilder.build()
+                    .get()
+                    .uri(uri)
+                    .retrieve()
+                    .body(NeisScheduleApiResponse.class);
+        } catch (RestClientException e) {
+            // 타임아웃·연결 실패도 나이스 장애로 본다. 그대로 두면 처리되지 않은 예외로 500이 된다.
+            log.warn("나이스 학사일정 요청 실패. from={}, to={}, page={}", from, to, page, e);
+            throw ScheduleException.badGateway("나이스 학사일정을 불러오지 못했습니다.");
+        }
 
         if (response == null) {
             throw ScheduleException.badGateway("나이스 학사일정 응답이 비어 있습니다.");

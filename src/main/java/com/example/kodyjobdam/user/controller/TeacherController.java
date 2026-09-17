@@ -1,5 +1,6 @@
 package com.example.kodyjobdam.user.controller;
 
+import com.example.kodyjobdam.user.dto.StudentSimpleResponse;
 import com.example.kodyjobdam.user.dto.TeacherResponse;
 import com.example.kodyjobdam.user.service.TeacherService;
 import lombok.RequiredArgsConstructor;
@@ -30,5 +31,11 @@ public class TeacherController {
     @GetMapping("/student/course/teachers")
     public List<TeacherResponse> readCourseTeachers() {
         return teacherService.findCourseTeachers();
+    }
+
+    /** 선생님이 강제 신청할 때 선택할 학생 전체 목록 */
+    @GetMapping("/teacher/students")
+    public List<StudentSimpleResponse> readStudents() {
+        return teacherService.findStudents();
     }
 }

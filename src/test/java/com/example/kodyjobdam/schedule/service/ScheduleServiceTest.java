@@ -61,6 +61,20 @@ class ScheduleServiceTest {
     }
 
     @Test
+    void 휴업일_구분이_해당없음이면_수업일로_본다() {
+        when(neisScheduleClient.fetchSchedules(any(), any())).thenReturn(List.of(
+                row("20260916", "입학설명회", "", "해당없음", "Y", "Y", "Y")
+        ));
+
+        List<ScheduleReadDTO> result = scheduleService.readSchedules(
+                LocalDate.of(2026, 9, 1), LocalDate.of(2026, 9, 30), null);
+
+        assertThat(result.get(0).isHoliday()).isFalse();
+        assertThat(result.get(0).getHolidayType()).isNull();
+        assertThat(scheduleService.isHoliday(LocalDate.of(2026, 9, 16))).isFalse();
+    }
+
+    @Test
     void 학년으로_일정을_거른다() {
         when(neisScheduleClient.fetchSchedules(any(), any())).thenReturn(List.of(
                 row("20260302", "입학식", "", "", "Y", "*", "*"),
@@ -140,6 +154,20 @@ class ScheduleServiceTest {
 
         assertThat(result).hasSize(1);
         verify(neisScheduleClient).fetchSchedules(LocalDate.of(2026, 2, 1), LocalDate.of(2026, 2, 28));
+    }
+
+    @Test
+    void 휴업일_날짜만_골라낸다() {
+        when(neisScheduleClient.fetchSchedules(LocalDate.of(2026, 10, 1), LocalDate.of(2026, 10, 31)))
+                .thenReturn(List.of(
+                        row("20261003", "개천절", "", "공휴일", "Y", "Y", "Y"),
+                        row("20261007", "체육대회", "", "", "Y", "Y", "Y"),
+                        row("20261009", "한글날", "", "공휴일", "Y", "Y", "Y")
+                ));
+
+        List<LocalDate> holidays = scheduleService.findHolidays(LocalDate.of(2026, 10, 1), LocalDate.of(2026, 10, 31));
+
+        assertThat(holidays).containsExactly(LocalDate.of(2026, 10, 3), LocalDate.of(2026, 10, 9));
     }
 
     @Test

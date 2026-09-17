@@ -68,3 +68,10 @@ services:
 volumes:
   db-data:
   profile-images:
+
+networks:
+  default:
+    driver_opts:
+      # 서버 NIC(eth0) MTU가 1400이라 도커 기본값 1500이면 큰 패킷이 버려진다.
+      # 나이스처럼 TLS 응답이 큰 곳은 연결이 멈춰 Read timed out이 난다.
+      com.docker.network.driver.mtu: 1400

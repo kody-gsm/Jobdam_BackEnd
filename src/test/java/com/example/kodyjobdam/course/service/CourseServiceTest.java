@@ -1,6 +1,7 @@
 package com.example.kodyjobdam.course.service;
 
 import com.example.kodyjobdam.common.entity.CounselingCategoryEnum;
+import com.example.kodyjobdam.common.entity.CounselingPeriod;
 import com.example.kodyjobdam.common.exception.ReservationException;
 import com.example.kodyjobdam.common.repository.CommonRepository;
 import com.example.kodyjobdam.common.repository.ReservationSlot;
@@ -102,6 +103,19 @@ class CourseServiceTest {
                 .isInstanceOf(ReservationException.class)
                 .hasMessage("같은 시간에 이미 수락한 상담이 있습니다.");
         assertThat(target.getState()).isEqualTo(StateEnum.WAITING);
+    }
+
+    @Test
+    void lockHolidaysLocksOnlyCareerTeachers() {
+        LocalDate holiday = LocalDate.of(2026, 10, 9);
+        User teacher = user(2L, UserRole.TEACHER);
+        when(userRepository.findByRole(UserRole.TEACHER)).thenReturn(List.of(teacher));
+        when(courseRepository.findAllByDateInAndTeacher_IdIn(List.of(holiday), List.of(2L))).thenReturn(List.of());
+
+        int created = courseService.lockHolidays(List.of(holiday));
+
+        assertThat(created).isEqualTo(CounselingPeriod.values().length);
+        verify(userRepository, never()).findByRole(UserRole.WEE_TEACHER);
     }
 
     private CreateDTO createDto(Long teacherId) {
