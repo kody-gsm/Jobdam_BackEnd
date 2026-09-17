@@ -79,6 +79,11 @@ public class RecruitEntity {
     @Column(length = 1000)
     private String summary;
 
+    /** 선생님이 올린 공고 원본 이미지의 저장소 내 상대 경로 */
+    private String imagePath;
+
+    private String imageContentType;
+
     @Enumerated(EnumType.STRING)
     @Builder.Default
     private RecruitStatus status = RecruitStatus.DRAFT;

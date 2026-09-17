@@ -7,6 +7,7 @@ import com.example.kodyjobdam.recruit.client.GeminiAnalysisResult;
 import com.example.kodyjobdam.recruit.client.GeminiClient;
 import com.example.kodyjobdam.recruit.dto.RecruitPeriodDTO;
 import com.example.kodyjobdam.recruit.dto.request.RecruitUpdateDTO;
+import com.example.kodyjobdam.recruit.dto.response.RecruitImageDownloadDTO;
 import com.example.kodyjobdam.recruit.dto.response.RecruitResponseDTO;
 import com.example.kodyjobdam.recruit.entity.RecruitEntity;
 import com.example.kodyjobdam.recruit.entity.RecruitPeriod;
@@ -19,6 +20,7 @@ import com.example.kodyjobdam.user.UserRepository;
 import com.example.kodyjobdam.user.entity.User;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.core.io.Resource;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
@@ -28,6 +30,7 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 
 @Slf4j
@@ -38,11 +41,21 @@ public class RecruitService {
     private static final Set<String> SUPPORTED_IMAGE_TYPES =
             Set.of("image/png", "image/jpeg", "image/webp", "image/heic", "image/heif");
 
+    private static final Map<String, String> IMAGE_EXTENSIONS = Map.of(
+            "image/png", "png",
+            "image/jpeg", "jpg",
+            "image/webp", "webp",
+            "image/heic", "heic",
+            "image/heif", "heif"
+    );
+
     private final RecruitRepository recruitRepository;
 
     private final UserRepository userRepository;
 
     private final GeminiClient geminiClient;
+
+    private final RecruitImageStorage recruitImageStorage;
 
     private final FormService formService;
 
@@ -78,6 +91,9 @@ public class RecruitService {
         FormEntity form = formService.createForRecruit(
                 user, result.companyName(), applicationDeadline(result.documentPeriod()));
 
+        // 학생에게도 원본 공고 이미지를 보여줄 수 있도록 저장해둔다.
+        String imagePath = recruitImageStorage.store(imageBytes, IMAGE_EXTENSIONS.getOrDefault(contentType, ""));
+
         RecruitEntity entity = recruitRepository.save(RecruitEntity.builder()
                 .user(user)
                 .companyName(result.companyName())
@@ -88,6 +104,8 @@ public class RecruitService {
                 .interviewPeriod(result.interviewPeriod())
                 .form(form)
                 .summary(result.summary())
+                .imagePath(imagePath)
+                .imageContentType(contentType)
                 .status(RecruitStatus.DRAFT)
                 .build());
 
@@ -162,12 +180,14 @@ public class RecruitService {
         validateOwner(entity, teacherId);
 
         Long formId = entity.getFormId();
+        String imagePath = entity.getImagePath();
         // 공고가 폼을 참조하므로 공고를 먼저 지운 뒤에 폼을 정리한다.
         recruitRepository.delete(entity);
         recruitRepository.flush();
         if (formId != null) {
             formService.deleteForRecruit(formId);
         }
+        recruitImageStorage.delete(imagePath);
     }
 
     /** 선생님: 학생에게 공개 */
@@ -216,6 +236,21 @@ public class RecruitService {
             throw RecruitException.notFound("공개된 공고가 아닙니다.");
         }
         return RecruitResponseDTO.from(entity);
+    }
+
+    /** 공고 이미지 조회: 공개된 공고는 누구나, 초안은 작성한 선생님만 */
+    public RecruitImageDownloadDTO getImage(Long recruitId, Long currentUserId) {
+        RecruitEntity entity = findOrThrow(recruitId);
+        boolean isOwner = entity.getUser() != null && entity.getUser().getId().equals(currentUserId);
+        if (entity.getStatus() != RecruitStatus.PUBLISHED && !isOwner) {
+            throw RecruitException.notFound("공개된 공고가 아닙니다.");
+        }
+        if (entity.getImagePath() == null) {
+            throw RecruitException.notFound("등록된 이미지가 없습니다.");
+        }
+
+        Resource resource = recruitImageStorage.load(entity.getImagePath());
+        return new RecruitImageDownloadDTO(resource, entity.getImageContentType());
     }
 
     private RecruitEntity findOrThrow(Long recruitId) {

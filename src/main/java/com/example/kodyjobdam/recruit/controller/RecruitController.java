@@ -1,10 +1,12 @@
 package com.example.kodyjobdam.recruit.controller;
 
 import com.example.kodyjobdam.recruit.dto.request.RecruitUpdateDTO;
+import com.example.kodyjobdam.recruit.dto.response.RecruitImageDownloadDTO;
 import com.example.kodyjobdam.recruit.dto.response.RecruitResponseDTO;
 import com.example.kodyjobdam.recruit.service.RecruitService;
 import com.example.kodyjobdam.user.security.SecurityUtil;
 import lombok.RequiredArgsConstructor;
+import org.springframework.core.io.Resource;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -66,5 +68,15 @@ public class RecruitController {
     @GetMapping("/recruit/{id}")
     public ResponseEntity<RecruitResponseDTO> get(@PathVariable Long id) {
         return ResponseEntity.ok(recruitService.getPublished(id));
+    }
+
+    /** 공고 이미지 조회 (공개된 공고는 누구나, 초안은 작성한 선생님만) */
+    @GetMapping("/recruit/{id}/image")
+    public ResponseEntity<Resource> getImage(@PathVariable Long id) {
+        RecruitImageDownloadDTO download = recruitService.getImage(id, securityUtil.getCurrentUserId());
+
+        return ResponseEntity.ok()
+                .contentType(MediaType.parseMediaType(download.contentType()))
+                .body(download.resource());
     }
 }
