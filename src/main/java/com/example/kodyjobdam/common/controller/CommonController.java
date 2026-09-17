@@ -3,9 +3,11 @@ package com.example.kodyjobdam.common.controller;
 import com.example.kodyjobdam.common.dto.request.CreateDTO;
 import com.example.kodyjobdam.common.dto.request.LockDTO;
 import com.example.kodyjobdam.common.dto.request.TeacherCreateDTO;
+import com.example.kodyjobdam.common.dto.request.WeeklyLockDTO;
 import com.example.kodyjobdam.common.dto.response.SlotStatusDTO;
 import com.example.kodyjobdam.common.dto.response.StudentReadDTO;
 import com.example.kodyjobdam.common.dto.response.TeacherReadDTO;
+import com.example.kodyjobdam.common.dto.response.WeeklyLockResponseDTO;
 import com.example.kodyjobdam.common.service.CommonService;
 import com.example.kodyjobdam.user.security.SecurityUtil;
 import lombok.RequiredArgsConstructor;
@@ -70,6 +72,23 @@ public class CommonController {
     public ResponseEntity<?> teacherUnlock(@RequestBody LockDTO dto) {
         commonService.teacherUnlock(dto, securityUtil.getCurrentUserId());
         return ResponseEntity.ok().body("해당 시간의 잠금을 해제했습니다.");
+    }
+
+    /** 요일·교시를 매주 반복해서 잠근다. 예: 매주 수요일 4교시(수업)를 잠금 */
+    @PostMapping("/teacher/common/lock/weekly")
+    public ResponseEntity<WeeklyLockResponseDTO> teacherLockWeekly(@RequestBody WeeklyLockDTO dto) {
+        return ResponseEntity.ok(commonService.lockWeekly(dto, securityUtil.getCurrentUserId()));
+    }
+
+    @PostMapping("/teacher/common/unlock/weekly")
+    public ResponseEntity<?> teacherUnlockWeekly(@RequestBody WeeklyLockDTO dto) {
+        commonService.unlockWeekly(dto, securityUtil.getCurrentUserId());
+        return ResponseEntity.ok().body("매주 반복 잠금을 해제했습니다.");
+    }
+
+    @GetMapping("/teacher/common/lock/weekly")
+    public List<WeeklyLockResponseDTO> teacherWeeklyLocks() {
+        return commonService.listWeeklyLocks(securityUtil.getCurrentUserId());
     }
 
     @GetMapping("/student/common")
