@@ -4,9 +4,8 @@ import com.example.kodyjobdam.common.exception.RecruitException;
 import jakarta.annotation.PostConstruct;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.core.io.Resource;
-import org.springframework.core.io.UrlResource;
 import org.springframework.stereotype.Component;
+import org.springframework.util.StringUtils;
 
 import java.io.IOException;
 import java.nio.file.Files;
@@ -17,7 +16,7 @@ import java.time.format.DateTimeFormatter;
 import java.util.UUID;
 
 /**
- * 채용 공고 이미지를 서버 디스크에 저장한다.
+ * 채용 공고 이미지를 서버 디스크에 저장하고, 로그인 없이도 볼 수 있는 공개 URL을 돌려준다.
  * recruit 도메인 전용 저장소로, 다른 기능(form 등)에 의존하지 않는다.
  * 파일 이름은 서버가 UUID로 새로 만든다(경로 조작 방지).
  */
@@ -29,8 +28,13 @@ public class RecruitImageStorage {
 
     private final Path root;
 
-    public RecruitImageStorage(@Value("${recruit.image.storage-path:./uploads/recruit}") String storagePath) {
+    private final String publicPath;
+
+    public RecruitImageStorage(
+            @Value("${recruit.image.storage-path:./uploads/recruit}") String storagePath,
+            @Value("${recruit.image.public-path:/uploads/recruit}") String publicPath) {
         this.root = Paths.get(storagePath).toAbsolutePath().normalize();
+        this.publicPath = normalizePublicPath(publicPath);
     }
 
     @PostConstruct
@@ -42,11 +46,11 @@ public class RecruitImageStorage {
         }
     }
 
-    /** 이미지 바이트를 저장하고 저장소 안에서의 상대 경로를 돌려준다 */
+    /** 이미지 바이트를 저장하고 누구나 접근할 수 있는 공개 URL을 돌려준다 */
     public String store(byte[] image, String extension) {
-        String storedName = LocalDate.now().format(SUB_DIRECTORY)
+        String relativeName = LocalDate.now().format(SUB_DIRECTORY)
                 + "/" + UUID.randomUUID() + (extension.isEmpty() ? "" : "." + extension);
-        Path target = resolve(storedName);
+        Path target = resolve(relativeName);
 
         try {
             Files.createDirectories(target.getParent());
@@ -55,39 +59,37 @@ public class RecruitImageStorage {
             throw RecruitException.badRequest("이미지를 저장하지 못했습니다.");
         }
 
-        return storedName;
+        return publicPath + "/" + relativeName;
     }
 
-    public Resource load(String storedName) {
-        try {
-            Resource resource = new UrlResource(resolve(storedName).toUri());
-            if (!resource.exists() || !resource.isReadable()) {
-                throw RecruitException.notFound("이미지가 저장소에 없습니다.");
-            }
-            return resource;
-        } catch (IOException e) {
-            throw RecruitException.notFound("이미지를 읽을 수 없습니다.");
-        }
-    }
-
-    /** 저장된 이미지를 지운다. 경로가 없거나 이미 지워졌으면 조용히 넘어간다. */
-    public void delete(String storedName) {
-        if (storedName == null) {
+    /** 저장된 이미지를 지운다. URL이 없거나 이미 지워졌으면 조용히 넘어간다. */
+    public void delete(String imageUrl) {
+        if (imageUrl == null || !imageUrl.startsWith(publicPath + "/")) {
             return;
         }
+
+        String relativeName = imageUrl.substring((publicPath + "/").length());
         try {
-            Files.deleteIfExists(resolve(storedName));
+            Files.deleteIfExists(resolve(relativeName));
         } catch (IOException e) {
-            log.warn("채용 공고 이미지 삭제 실패: {}", storedName, e);
+            log.warn("채용 공고 이미지 삭제 실패: {}", imageUrl, e);
         }
     }
 
     /** 저장소 바깥을 가리키는 경로를 막는다 */
-    private Path resolve(String storedName) {
-        Path target = root.resolve(storedName).normalize();
+    private Path resolve(String relativeName) {
+        Path target = root.resolve(relativeName).normalize();
         if (!target.startsWith(root)) {
             throw RecruitException.badRequest("잘못된 이미지 경로입니다.");
         }
         return target;
+    }
+
+    private String normalizePublicPath(String publicPath) {
+        String normalized = StringUtils.trimTrailingCharacter(publicPath, '/');
+        if (!normalized.startsWith("/")) {
+            normalized = "/" + normalized;
+        }
+        return normalized;
     }
 }

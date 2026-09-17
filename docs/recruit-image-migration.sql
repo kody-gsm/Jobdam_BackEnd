@@ -3,5 +3,4 @@
 -- 배포 전에 이 스크립트를 먼저 실행해야 앱이 기동된다.
 
 ALTER TABLE recruit
-    ADD COLUMN image_path VARCHAR(255) NULL,
-    ADD COLUMN image_content_type VARCHAR(100) NULL;
+    ADD COLUMN image_url VARCHAR(255) NULL;
