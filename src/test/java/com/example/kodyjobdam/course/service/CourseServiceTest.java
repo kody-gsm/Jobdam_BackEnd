@@ -15,6 +15,7 @@ import com.example.kodyjobdam.course.entity.CourseWeeklyLockEntity;
 import com.example.kodyjobdam.course.entity.StateEnum;
 import com.example.kodyjobdam.course.repository.CourseRepository;
 import com.example.kodyjobdam.course.repository.CourseWeeklyLockRepository;
+import com.example.kodyjobdam.notification.entity.NotificationType;
 import com.example.kodyjobdam.notification.service.NotificationExpirationService;
 import com.example.kodyjobdam.notification.service.NotificationService;
 import com.example.kodyjobdam.schedule.service.ScheduleService;
@@ -30,6 +31,7 @@ import org.springframework.test.util.ReflectionTestUtils;
 
 import java.time.DayOfWeek;
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
 
@@ -114,6 +116,51 @@ class CourseServiceTest {
                 .isInstanceOf(ReservationException.class)
                 .hasMessage("같은 시간에 이미 수락한 상담이 있습니다.");
         assertThat(target.getState()).isEqualTo(StateEnum.WAITING);
+    }
+
+    @Test
+    void approveCancelsOtherWaitingReservationsAndNotifiesThem() {
+        LocalDate date = LocalDate.of(2026, 9, 10);
+        User teacher = user(2L, UserRole.TEACHER);
+        User otherStudent = user(3L, UserRole.STUDENT);
+        CourseEntity accepted = CourseEntity.builder()
+                .reservation_id(100L).teacher(teacher).date(date).period("3교시")
+                .encryptedUserId("encrypted-user-id-1").state(StateEnum.WAITING).build();
+        CourseEntity otherWaiting = CourseEntity.builder()
+                .reservation_id(101L).teacher(teacher).date(date).period("3교시")
+                .encryptedUserId("encrypted-user-id-3").state(StateEnum.WAITING).build();
+        CourseEntity alreadyCanceled = CourseEntity.builder()
+                .reservation_id(102L).teacher(teacher).date(date).period("3교시")
+                .encryptedUserId("encrypted-user-id-3").state(StateEnum.CANCEL).build();
+
+        when(courseRepository.findSlotByReservationId(100L))
+                .thenReturn(Optional.of(new ReservationSlot(date, "3교시", 2L)));
+        when(courseRepository.findAllForUpdateByDateAndPeriodAndTeacherId(date, "3교시", 2L))
+                .thenReturn(List.of(accepted, otherWaiting, alreadyCanceled));
+        when(cryptoService.decrypt("encrypted-user-id-1")).thenReturn("1");
+        when(cryptoService.decrypt("encrypted-user-id-3")).thenReturn("3");
+        when(userRepository.findById(1L)).thenReturn(Optional.of(user(1L, UserRole.STUDENT)));
+        when(userRepository.findById(3L)).thenReturn(Optional.of(otherStudent));
+        when(notificationExpirationService.counselingExpiresAt(date))
+                .thenReturn(LocalDateTime.of(2026, 12, 9, 0, 0));
+
+        courseService.allow(100L, 2L);
+
+        assertThat(accepted.getState()).isEqualTo(StateEnum.RESERVED);
+        assertThat(otherWaiting.getState()).isEqualTo(StateEnum.CANCEL);
+        assertThat(alreadyCanceled.getState()).isEqualTo(StateEnum.CANCEL);
+
+        verify(notificationService).notifyUser(
+                eq(otherStudent),
+                eq(NotificationType.COUNSELING_AUTO_CANCELED),
+                eq("상담 신청 자동 취소"),
+                eq("사용자2 선생님이 같은 시간에 다른 학생의 상담을 수락하여 신청이 취소되었습니다."),
+                eq(101L),
+                eq("/student/course/101"),
+                eq(LocalDateTime.of(2026, 12, 9, 0, 0))
+        );
+        verify(notificationService, never()).notifyUser(
+                any(), eq(NotificationType.COUNSELING_AUTO_CANCELED), any(), any(), eq(102L), any(), any());
     }
 
     @Test

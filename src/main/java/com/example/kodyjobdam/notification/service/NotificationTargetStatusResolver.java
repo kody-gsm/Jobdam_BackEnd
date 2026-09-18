@@ -58,7 +58,9 @@ public class NotificationTargetStatusResolver {
                     .orElse(TargetStatus.missing());
         }
 
-        if (type == NotificationType.COUNSELING_APPROVED || type == NotificationType.COUNSELING_REJECTED) {
+        if (type == NotificationType.COUNSELING_APPROVED
+                || type == NotificationType.COUNSELING_REJECTED
+                || type == NotificationType.COUNSELING_AUTO_CANCELED) {
             if (notification.getTargetUrl() != null && notification.getTargetUrl().contains("/course/")) {
                 return courseRepository.findById(notification.getTargetId())
                         .map(reservation -> new TargetStatus(

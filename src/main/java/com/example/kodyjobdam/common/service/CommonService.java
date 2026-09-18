@@ -233,6 +233,29 @@ public class CommonService {
                 "/student/common/" + entity.getReservation_id(),
                 notificationExpirationService.counselingExpiresAt(entity.getDate())
         );
+        cancelOtherWaitingReservations(entity, slotReservations);
+    }
+
+    /** 한 학생의 신청을 수락하면, 같은 시간에 대기 중이던 다른 학생들의 신청은 자동으로 취소하고 알린다. */
+    private void cancelOtherWaitingReservations(CommonEntity accepted, List<CommonEntity> slotReservations) {
+        for (CommonEntity other : slotReservations) {
+            if (other.getReservation_id().equals(accepted.getReservation_id())
+                    || other.getState() != StateEnum.WAITING) {
+                continue;
+            }
+
+            other.setState(StateEnum.CANCEL);
+            User otherSubmitter = findSubmitter(other);
+            notificationService.notifyUser(
+                    otherSubmitter,
+                    NotificationType.COUNSELING_AUTO_CANCELED,
+                    "상담 신청 자동 취소",
+                    accepted.getTeacher().getName() + " 선생님이 같은 시간에 다른 학생의 상담을 수락하여 신청이 취소되었습니다.",
+                    other.getReservation_id(),
+                    "/student/common/" + other.getReservation_id(),
+                    notificationExpirationService.counselingExpiresAt(other.getDate())
+            );
+        }
     }
 
     @Transactional
