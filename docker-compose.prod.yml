@@ -53,6 +53,8 @@ services:
       PROFILE_IMAGE_UPLOAD_DIR: ${PROFILE_IMAGE_UPLOAD_DIR:-/app/uploads/profile-images}
       PROFILE_IMAGE_PUBLIC_PATH: ${PROFILE_IMAGE_PUBLIC_PATH:-/uploads/profile-images}
       PROFILE_IMAGE_MAX_SIZE: ${PROFILE_IMAGE_MAX_SIZE:-5MB}
+      RECRUIT_IMAGE_STORAGE_PATH: ${RECRUIT_IMAGE_STORAGE_PATH:-/app/uploads/recruit}
+      RECRUIT_IMAGE_PUBLIC_PATH: ${RECRUIT_IMAGE_PUBLIC_PATH:-/uploads/recruit}
       NOTIFICATION_CLEANUP_CRON: "${NOTIFICATION_CLEANUP_CRON:-0 0 3 * * *}"
       NOTIFICATION_CLEANUP_ZONE: ${NOTIFICATION_CLEANUP_ZONE:-Asia/Seoul}
       NOTIFICATION_DEFAULT_RETENTION_DAYS: ${NOTIFICATION_DEFAULT_RETENTION_DAYS:-90}
@@ -63,6 +65,7 @@ services:
       - "8088:8088"
     volumes:
       - profile-images:/app/uploads/profile-images
+      - recruit-images:/app/uploads/recruit
     depends_on:
       db:
         condition: service_healthy
@@ -70,6 +73,7 @@ services:
 volumes:
   db-data:
   profile-images:
+  recruit-images:
 
 networks:
   default:

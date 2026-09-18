@@ -122,8 +122,8 @@ public class FormController {
         return ResponseEntity.ok(formSubmissionService.submit(id, dto, securityUtil.getCurrentUserId()));
     }
 
-    /** 내가 제출한 응답 수정 (재응답) */
-    @PatchMapping("/student/form/{id}/submission")
+    /** 내가 제출한 응답 수정 (재응답). 프론트에서 PUT으로도 보내는 경우가 있어 둘 다 받는다. */
+    @RequestMapping(value = "/student/form/{id}/submission", method = {RequestMethod.PATCH, RequestMethod.PUT})
     public ResponseEntity<FormSubmissionResponseDTO> resubmit(@PathVariable Long id,
                                                               @Valid @RequestBody FormSubmitDTO dto) {
         return ResponseEntity.ok(formSubmissionService.resubmit(id, dto, securityUtil.getCurrentUserId()));

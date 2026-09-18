@@ -3,17 +3,21 @@ package com.example.kodyjobdam.common.service;
 import com.example.kodyjobdam.common.dto.request.CreateDTO;
 import com.example.kodyjobdam.common.dto.request.LockDTO;
 import com.example.kodyjobdam.common.dto.request.TeacherCreateDTO;
+import com.example.kodyjobdam.common.dto.request.WeeklyLockDTO;
 import com.example.kodyjobdam.common.dto.response.ReservationStatus;
 import com.example.kodyjobdam.common.dto.response.StudentReadDTO;
 import com.example.kodyjobdam.common.dto.response.SlotStatusDTO;
 import com.example.kodyjobdam.common.dto.response.TeacherReadDTO;
+import com.example.kodyjobdam.common.dto.response.WeeklyLockResponseDTO;
 import com.example.kodyjobdam.common.entity.CommonEntity;
+import com.example.kodyjobdam.common.entity.CommonWeeklyLockEntity;
 import com.example.kodyjobdam.common.entity.CounselingCategoryEnum;
 import com.example.kodyjobdam.common.entity.CounselingPeriod;
 import com.example.kodyjobdam.common.entity.StateEnum;
 import com.example.kodyjobdam.common.exception.BusinessException;
 import com.example.kodyjobdam.common.exception.ReservationException;
 import com.example.kodyjobdam.common.repository.CommonRepository;
+import com.example.kodyjobdam.common.repository.CommonWeeklyLockRepository;
 import com.example.kodyjobdam.common.repository.ReservationSlot;
 import com.example.kodyjobdam.course.repository.CourseRepository;
 import com.example.kodyjobdam.notification.entity.NotificationType;
@@ -30,6 +34,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Clock;
+import java.time.DayOfWeek;
 import java.time.Duration;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
@@ -50,6 +55,7 @@ import java.util.stream.Stream;
 public class CommonService {
 
     private final CommonRepository commonRepository;
+    private final CommonWeeklyLockRepository weeklyLockRepository;
     private final CourseRepository courseRepository;
     private final UserRepository userRepository;
     private final NotificationService notificationService;
@@ -80,6 +86,7 @@ public class CommonService {
                 .orElseThrow(() -> ReservationException.notFound("회원이 없습니다."));
         User teacher = findTeacher(dto.getTeacherId(), id);
         validateCategory(dto.getCategory());
+        validateNotWeeklyLocked(dto.getDate(), dto.getPeriod(), teacher.getId());
         String submitterHash = cryptoService.submitterHash(id);
 
         for (CommonEntity entity : commonRepository.findAllByDateAndPeriod(dto.getDate(), dto.getPeriod())) {
@@ -130,6 +137,7 @@ public class CommonService {
         User teacher = findTeacher(teacherId);
         User student = findStudent(dto.getStudentId());
         validateCategory(dto.getCategory());
+        validateNotWeeklyLocked(dto.getDate(), dto.getPeriod(), teacher.getId());
         String submitterHash = cryptoService.submitterHash(student.getId());
 
         for (CommonEntity entity : commonRepository.findAllByDateAndPeriod(dto.getDate(), dto.getPeriod())) {
@@ -225,6 +233,29 @@ public class CommonService {
                 "/student/common/" + entity.getReservation_id(),
                 notificationExpirationService.counselingExpiresAt(entity.getDate())
         );
+        cancelOtherWaitingReservations(entity, slotReservations);
+    }
+
+    /** 한 학생의 신청을 수락하면, 같은 시간에 대기 중이던 다른 학생들의 신청은 자동으로 취소하고 알린다. */
+    private void cancelOtherWaitingReservations(CommonEntity accepted, List<CommonEntity> slotReservations) {
+        for (CommonEntity other : slotReservations) {
+            if (other.getReservation_id().equals(accepted.getReservation_id())
+                    || other.getState() != StateEnum.WAITING) {
+                continue;
+            }
+
+            other.setState(StateEnum.CANCEL);
+            User otherSubmitter = findSubmitter(other);
+            notificationService.notifyUser(
+                    otherSubmitter,
+                    NotificationType.COUNSELING_AUTO_CANCELED,
+                    "상담 신청 자동 취소",
+                    accepted.getTeacher().getName() + " 선생님이 같은 시간에 다른 학생의 상담을 수락하여 신청이 취소되었습니다.",
+                    other.getReservation_id(),
+                    "/student/common/" + other.getReservation_id(),
+                    notificationExpirationService.counselingExpiresAt(other.getDate())
+            );
+        }
     }
 
     @Transactional
@@ -339,6 +370,83 @@ public class CommonService {
         }
     }
 
+    /**
+     * 선생님: 요일·교시를 매주 반복해서 잠근다. 수업처럼 매주 겹치는 일정을 등록할 때 쓴다.
+     * 앞으로 이 요일·교시에 잡혀 있는 대기중·수락된 신청은 잠금과 함께 취소한다.
+     */
+    @Transactional
+    public WeeklyLockResponseDTO lockWeekly(WeeklyLockDTO dto, Long teacherId) {
+        validateWeeklyLockRequest(dto);
+
+        User teacher = userRepository.findById(teacherId)
+                .orElseThrow(() -> ReservationException.notFound("회원이 없습니다."));
+
+        if (weeklyLockRepository.existsByTeacher_IdAndDayOfWeekAndPeriod(
+                teacherId, dto.getDayOfWeek(), dto.getPeriod())) {
+            throw ReservationException.conflict("이미 매주 잠가 둔 시간입니다.");
+        }
+
+        cancelFutureReservationsOnWeekday(dto.getDayOfWeek(), dto.getPeriod(), teacherId);
+
+        CommonWeeklyLockEntity entity = weeklyLockRepository.save(CommonWeeklyLockEntity.builder()
+                .teacher(teacher)
+                .dayOfWeek(dto.getDayOfWeek())
+                .period(dto.getPeriod())
+                .build());
+        return WeeklyLockResponseDTO.from(entity);
+    }
+
+    /**
+     * 선생님: 매주 반복 잠금을 해제한다.
+     * 잠금과 함께 취소된 신청은 되살리지 않는다. 학생이 다시 신청해야 한다.
+     */
+    @Transactional
+    public void unlockWeekly(WeeklyLockDTO dto, Long teacherId) {
+        CommonWeeklyLockEntity entity = weeklyLockRepository
+                .findByTeacher_IdAndDayOfWeekAndPeriod(teacherId, dto.getDayOfWeek(), dto.getPeriod())
+                .orElseThrow(() -> ReservationException.notFound("매주 잠근 시간이 아닙니다."));
+
+        weeklyLockRepository.delete(entity);
+    }
+
+    /** 선생님: 내가 매주 반복 잠가 둔 요일·교시 목록 */
+    @Transactional(readOnly = true)
+    public List<WeeklyLockResponseDTO> listWeeklyLocks(Long teacherId) {
+        return weeklyLockRepository.findAllByTeacher_Id(teacherId).stream()
+                .map(WeeklyLockResponseDTO::from)
+                .toList();
+    }
+
+    /** 매주 반복 잠금을 새로 걸 때, 오늘 이후 그 요일에 이미 잡혀 있는 신청을 취소한다. */
+    private void cancelFutureReservationsOnWeekday(DayOfWeek dayOfWeek, String period, Long teacherId) {
+        LocalDate today = LocalDate.now(clock);
+        for (CommonEntity entity : commonRepository.findAllByPeriodAndTeacher_IdAndDateGreaterThanEqual(
+                period, teacherId, today)) {
+            if (entity.getDate().getDayOfWeek() != dayOfWeek) {
+                continue;
+            }
+            if (entity.getState() == StateEnum.WAITING || entity.getState() == StateEnum.RESERVED) {
+                entity.setState(StateEnum.CANCEL);
+            }
+        }
+    }
+
+    private void validateWeeklyLockRequest(WeeklyLockDTO dto) {
+        if (dto.getDayOfWeek() == null) {
+            throw ReservationException.badRequest("요일을 선택해주세요.");
+        }
+        if (dto.getPeriod() == null || dto.getPeriod().isBlank()) {
+            throw ReservationException.badRequest("교시를 선택해주세요.");
+        }
+    }
+
+    /** 선생님이 매주 반복으로 잠가 둔 요일·교시에는 신청할 수 없다. */
+    private void validateNotWeeklyLocked(LocalDate date, String period, Long teacherId) {
+        if (weeklyLockRepository.existsByTeacher_IdAndDayOfWeekAndPeriod(teacherId, date.getDayOfWeek(), period)) {
+            throw ReservationException.locked("선생님이 매주 잠가 둔 시간입니다.");
+        }
+    }
+
     @Transactional(readOnly = true)
     public List<TeacherReadDTO> T_Read(Long id) {
         return commonRepository.findByTeacher_IdAndStateOrderByDateAscPeriodAsc(id, StateEnum.RESERVED).stream()
@@ -389,6 +497,14 @@ public class CommonService {
             }
             if (period == null || period.isBlank() || lockedPeriod.equals(period.trim())) {
                 stateByPeriod.put(lockedPeriod, StateEnum.LOCKED);
+            }
+        }
+        for (CommonWeeklyLockEntity rule : weeklyLockRepository.findAllByTeacher_Id(teacher.getId())) {
+            if (rule.getDayOfWeek() != date.getDayOfWeek()) {
+                continue;
+            }
+            if (period == null || period.isBlank() || rule.getPeriod().equals(period.trim())) {
+                stateByPeriod.put(rule.getPeriod(), StateEnum.LOCKED);
             }
         }
 

@@ -79,6 +79,9 @@ public class RecruitEntity {
     @Column(length = 1000)
     private String summary;
 
+    /** 선생님이 올린 공고 원본 이미지의 공개 조회 URL. 로그인 없이도 접근할 수 있다. */
+    private String imageUrl;
+
     @Enumerated(EnumType.STRING)
     @Builder.Default
     private RecruitStatus status = RecruitStatus.DRAFT;

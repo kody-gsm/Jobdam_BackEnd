@@ -28,6 +28,7 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 
 @Slf4j
@@ -38,11 +39,21 @@ public class RecruitService {
     private static final Set<String> SUPPORTED_IMAGE_TYPES =
             Set.of("image/png", "image/jpeg", "image/webp", "image/heic", "image/heif");
 
+    private static final Map<String, String> IMAGE_EXTENSIONS = Map.of(
+            "image/png", "png",
+            "image/jpeg", "jpg",
+            "image/webp", "webp",
+            "image/heic", "heic",
+            "image/heif", "heif"
+    );
+
     private final RecruitRepository recruitRepository;
 
     private final UserRepository userRepository;
 
     private final GeminiClient geminiClient;
+
+    private final RecruitImageStorage recruitImageStorage;
 
     private final FormService formService;
 
@@ -78,6 +89,9 @@ public class RecruitService {
         FormEntity form = formService.createForRecruit(
                 user, result.companyName(), applicationDeadline(result.documentPeriod()));
 
+        // 학생에게도 원본 공고 이미지를 보여줄 수 있도록 저장해둔다.
+        String imageUrl = recruitImageStorage.store(imageBytes, IMAGE_EXTENSIONS.getOrDefault(contentType, ""));
+
         RecruitEntity entity = recruitRepository.save(RecruitEntity.builder()
                 .user(user)
                 .companyName(result.companyName())
@@ -88,6 +102,7 @@ public class RecruitService {
                 .interviewPeriod(result.interviewPeriod())
                 .form(form)
                 .summary(result.summary())
+                .imageUrl(imageUrl)
                 .status(RecruitStatus.DRAFT)
                 .build());
 
@@ -162,12 +177,14 @@ public class RecruitService {
         validateOwner(entity, teacherId);
 
         Long formId = entity.getFormId();
+        String imageUrl = entity.getImageUrl();
         // 공고가 폼을 참조하므로 공고를 먼저 지운 뒤에 폼을 정리한다.
         recruitRepository.delete(entity);
         recruitRepository.flush();
         if (formId != null) {
             formService.deleteForRecruit(formId);
         }
+        recruitImageStorage.delete(imageUrl);
     }
 
     /** 선생님: 학생에게 공개 */
