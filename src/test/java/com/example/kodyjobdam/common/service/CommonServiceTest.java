@@ -214,6 +214,52 @@ class CommonServiceTest {
     }
 
     @Test
+    void approveCancelsOtherWaitingReservationsAndNotifiesThem() {
+        LocalDate date = LocalDate.of(2026, 9, 10);
+        User teacher = user(2L, UserRole.WEE_TEACHER);
+        User otherStudent = user(3L, UserRole.STUDENT);
+        CommonEntity accepted = CommonEntity.builder()
+                .reservation_id(100L).teacher(teacher).date(date).period("3교시")
+                .encryptedUserId("encrypted-user-id-1").state(StateEnum.WAITING).build();
+        CommonEntity otherWaiting = CommonEntity.builder()
+                .reservation_id(101L).teacher(teacher).date(date).period("3교시")
+                .encryptedUserId("encrypted-user-id-3").state(StateEnum.WAITING).build();
+        CommonEntity alreadyCanceled = CommonEntity.builder()
+                .reservation_id(102L).teacher(teacher).date(date).period("3교시")
+                .encryptedUserId("encrypted-user-id-3").state(StateEnum.CANCEL).build();
+
+        when(commonRepository.findSlotByReservationId(100L))
+                .thenReturn(Optional.of(new ReservationSlot(date, "3교시", 2L)));
+        when(commonRepository.findAllForUpdateByDateAndPeriodAndTeacherId(date, "3교시", 2L))
+                .thenReturn(List.of(accepted, otherWaiting, alreadyCanceled));
+        when(cryptoService.decrypt("encrypted-user-id-1")).thenReturn("1");
+        when(cryptoService.decrypt("encrypted-user-id-3")).thenReturn("3");
+        when(userRepository.findById(1L)).thenReturn(Optional.of(user(1L, UserRole.STUDENT)));
+        when(userRepository.findById(3L)).thenReturn(Optional.of(otherStudent));
+        when(notificationExpirationService.counselingExpiresAt(date))
+                .thenReturn(LocalDateTime.of(2026, 12, 9, 0, 0));
+
+        commonService.allow(100L, 2L);
+
+        assertThat(accepted.getState()).isEqualTo(StateEnum.RESERVED);
+        assertThat(otherWaiting.getState()).isEqualTo(StateEnum.CANCEL);
+        assertThat(alreadyCanceled.getState()).isEqualTo(StateEnum.CANCEL);
+
+        verify(notificationService).notifyUser(
+                eq(otherStudent),
+                eq(NotificationType.COUNSELING_AUTO_CANCELED),
+                eq("상담 신청 자동 취소"),
+                eq("사용자2 선생님이 같은 시간에 다른 학생의 상담을 수락하여 신청이 취소되었습니다."),
+                eq(101L),
+                eq("/student/common/101"),
+                eq(LocalDateTime.of(2026, 12, 9, 0, 0))
+        );
+        // 원래도 취소 상태였던 신청까지 다시 알리지는 않는다.
+        verify(notificationService, never()).notifyUser(
+                any(), eq(NotificationType.COUNSELING_AUTO_CANCELED), any(), any(), eq(102L), any(), any());
+    }
+
+    @Test
     void rejectNotifiesStudent() {
         User student = user(1L, UserRole.STUDENT);
         User teacher = user(2L, UserRole.WEE_TEACHER);
