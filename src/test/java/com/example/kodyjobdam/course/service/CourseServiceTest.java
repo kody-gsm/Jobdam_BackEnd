@@ -19,6 +19,7 @@ import com.example.kodyjobdam.course.repository.CourseWeeklyLockRepository;
 import com.example.kodyjobdam.notification.entity.NotificationType;
 import com.example.kodyjobdam.notification.service.NotificationExpirationService;
 import com.example.kodyjobdam.notification.service.NotificationService;
+import com.example.kodyjobdam.notification.service.ReservationRealtimeService;
 import com.example.kodyjobdam.schedule.service.ScheduleService;
 import com.example.kodyjobdam.user.UserRepository;
 import com.example.kodyjobdam.user.UserRole;
@@ -64,6 +65,9 @@ class CourseServiceTest {
 
     @Mock
     private NotificationExpirationService notificationExpirationService;
+
+    @Mock
+    private ReservationRealtimeService reservationRealtimeService;
 
     @Mock
     private CounselingReservationCryptoService cryptoService;

@@ -1,6 +1,7 @@
 package com.example.kodyjobdam.notification.service;
 
 import com.example.kodyjobdam.notification.dto.NotificationResponseDTO;
+import com.example.kodyjobdam.notification.dto.ReservationRealtimeEvent;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
@@ -40,6 +41,17 @@ public class NotificationSseService {
 
         for (SseEmitter emitter : userEmitters) {
             sendToEmitter(receiverId, emitter, "notification", notification);
+        }
+    }
+
+    public void sendReservation(Long receiverId, ReservationRealtimeEvent event) {
+        List<SseEmitter> userEmitters = emitters.get(receiverId);
+        if (userEmitters == null || userEmitters.isEmpty()) {
+            return;
+        }
+
+        for (SseEmitter emitter : userEmitters) {
+            sendToEmitter(receiverId, emitter, "reservation", event);
         }
     }
 
