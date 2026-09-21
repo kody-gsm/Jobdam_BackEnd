@@ -3,8 +3,6 @@ package com.example.kodyjobdam.recruit.service;
 import com.example.kodyjobdam.common.exception.RecruitException;
 import com.example.kodyjobdam.form.entity.FormEntity;
 import com.example.kodyjobdam.form.service.FormService;
-import com.example.kodyjobdam.notice.dto.NoticeRequestDto;
-import com.example.kodyjobdam.notice.service.DiscordNoticeService;
 import com.example.kodyjobdam.recruit.client.GeminiAnalysisResult;
 import com.example.kodyjobdam.recruit.client.GeminiClient;
 import com.example.kodyjobdam.recruit.dto.RecruitPeriodDTO;
@@ -20,8 +18,6 @@ import com.example.kodyjobdam.notification.service.NotificationService;
 import com.example.kodyjobdam.user.UserRepository;
 import com.example.kodyjobdam.user.entity.User;
 import lombok.RequiredArgsConstructor;
-import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
@@ -34,7 +30,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
-@Slf4j
 @Service
 @RequiredArgsConstructor
 public class RecruitService {
@@ -63,11 +58,6 @@ public class RecruitService {
     private final NotificationService notificationService;
 
     private final NotificationExpirationService notificationExpirationService;
-
-    private final DiscordNoticeService discordNoticeService;
-
-    @Value("${app.frontend-base-url}")
-    private String frontendBaseUrl;
 
     /** 선생님: 이미지 분석 → 초안(DRAFT)으로 저장 후 결과 반환 */
     @Transactional
@@ -133,7 +123,6 @@ public class RecruitService {
                 resolvePeriod(dto.getCodingTestPeriod(), entity.getCodingTestPeriod()),
                 resolveInterviewPeriod(entity, dto),
                 dto.getSummary() == null ? entity.getSummary() : dto.getSummary());
-        syncDiscordRecruit(entity);
         return RecruitResponseDTO.from(entity);
     }
 
@@ -210,7 +199,6 @@ public class RecruitService {
         if (entity.getFormId() != null) {
             formService.publishForRecruit(entity.getFormId());
         }
-        syncDiscordRecruit(entity);
         notificationService.notifyAllStudents(
                 NotificationType.RECRUIT_PUBLISHED,
                 "새로운 취업 공지",
@@ -254,51 +242,5 @@ public class RecruitService {
         if (entity.getUser() == null || !entity.getUser().getId().equals(teacherId)) {
             throw RecruitException.forbidden("채용 공고를 관리할 권한이 없습니다.");
         }
-    }
-
-    private void syncDiscordRecruit(RecruitEntity entity) {
-        if (entity.getStatus() != RecruitStatus.PUBLISHED) {
-            return;
-        }
-
-        try {
-            NoticeRequestDto notice = toRecruitNotice(entity);
-            if (entity.getDiscordMessageId() == null || entity.getDiscordMessageId().isBlank()) {
-                entity.linkDiscordMessage(discordNoticeService.sendNotice(notice));
-                return;
-            }
-
-            discordNoticeService.updateNotice(entity.getDiscordMessageId(), notice);
-        } catch (RuntimeException e) {
-            log.warn("디스코드 공고 메시지 동기화에 실패했습니다. recruitId={}", entity.getId(), e);
-            throw RecruitException.badGateway("디스코드 공고 메시지 동기화에 실패했습니다.");
-        }
-    }
-
-    private NoticeRequestDto toRecruitNotice(RecruitEntity entity) {
-        NoticeRequestDto notice = new NoticeRequestDto();
-        notice.setTitle(entity.getCompanyName() + " 공고");
-        notice.setContent(recruitNoticeContent(entity));
-        notice.setLink(frontendRecruitUrl(entity.getId()));
-        return notice;
-    }
-
-    private String frontendRecruitUrl(Long recruitId) {
-        return frontendBaseUrl.replaceAll("/+$", "") + "/recruit/" + recruitId;
-    }
-
-    private String recruitNoticeContent(RecruitEntity entity) {
-        String summary = entity.getSummary() == null || entity.getSummary().isBlank()
-                ? "공고 요약이 없습니다."
-                : entity.getSummary();
-        return summary + "\n\n서류 접수\n" + displayPeriod(entity.getDocumentPeriod());
-    }
-
-    private String displayPeriod(RecruitPeriod period) {
-        if (period == null || period.isEmpty()) {
-            return RecruitPeriod.UNDECIDED;
-        }
-
-        return period.toDisplay();
     }
 }
