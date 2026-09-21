@@ -6,6 +6,7 @@ import com.example.kodyjobdam.notification.service.NotificationService;
 import com.example.kodyjobdam.form.entity.FormEntity;
 import com.example.kodyjobdam.form.entity.FormStatus;
 import com.example.kodyjobdam.form.service.FormService;
+import com.example.kodyjobdam.notice.service.DiscordNoticeService;
 import com.example.kodyjobdam.recruit.client.GeminiAnalysisResult;
 import com.example.kodyjobdam.recruit.client.GeminiClient;
 import com.example.kodyjobdam.recruit.dto.request.RecruitUpdateDTO;
@@ -63,6 +64,9 @@ class RecruitServiceTest {
     @Mock
     private com.example.kodyjobdam.notification.service.NotificationExpirationService notificationExpirationService;
 
+    @Mock
+    private DiscordNoticeService discordNoticeService;
+
     @InjectMocks
     private RecruitService recruitService;
 
@@ -101,10 +105,12 @@ class RecruitServiceTest {
                 .status(RecruitStatus.DRAFT)
                 .build();
         when(recruitRepository.findById(10L)).thenReturn(Optional.of(recruit));
+        when(discordNoticeService.sendRecruit(recruit)).thenReturn("1234567890");
 
         recruitService.publish(10L, 2L);
 
         verify(formService).publishForRecruit(7L);
+        assertThat(recruit.getDiscordMessageId()).isEqualTo("1234567890");
     }
 
     @Test
@@ -136,6 +142,7 @@ class RecruitServiceTest {
         when(recruitRepository.findById(10L)).thenReturn(Optional.of(recruit));
         when(notificationExpirationService.recruitExpiresAt("2026-09-10"))
                 .thenReturn(LocalDateTime.of(2026, 10, 10, 23, 59, 59));
+        when(discordNoticeService.sendRecruit(recruit)).thenReturn("1234567890");
 
         recruitService.publish(10L, 2L);
 
@@ -147,6 +154,25 @@ class RecruitServiceTest {
                 eq("/recruit/10"),
                 eq(LocalDateTime.of(2026, 10, 10, 23, 59, 59))
         );
+    }
+
+    @Test
+    void updatePublishedRecruitUpdatesDiscordMessage() throws Exception {
+        RecruitEntity recruit = RecruitEntity.builder()
+                .id(10L)
+                .user(user(2L))
+                .companyName("잡담")
+                .summary("기존 요약")
+                .discordMessageId("1234567890")
+                .status(RecruitStatus.PUBLISHED)
+                .build();
+        when(recruitRepository.findById(10L)).thenReturn(Optional.of(recruit));
+
+        RecruitUpdateDTO dto = objectMapper.readValue("{\"summary\":\"수정된 요약\"}", RecruitUpdateDTO.class);
+
+        recruitService.update(10L, dto, 2L);
+
+        verify(discordNoticeService).updateRecruit("1234567890", recruit);
     }
 
     @Test

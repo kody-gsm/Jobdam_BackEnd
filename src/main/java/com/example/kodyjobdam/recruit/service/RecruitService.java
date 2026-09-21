@@ -3,6 +3,7 @@ package com.example.kodyjobdam.recruit.service;
 import com.example.kodyjobdam.common.exception.RecruitException;
 import com.example.kodyjobdam.form.entity.FormEntity;
 import com.example.kodyjobdam.form.service.FormService;
+import com.example.kodyjobdam.notice.service.DiscordNoticeService;
 import com.example.kodyjobdam.recruit.client.GeminiAnalysisResult;
 import com.example.kodyjobdam.recruit.client.GeminiClient;
 import com.example.kodyjobdam.recruit.dto.RecruitPeriodDTO;
@@ -60,6 +61,8 @@ public class RecruitService {
     private final NotificationService notificationService;
 
     private final NotificationExpirationService notificationExpirationService;
+
+    private final DiscordNoticeService discordNoticeService;
 
     /** 선생님: 이미지 분석 → 초안(DRAFT)으로 저장 후 결과 반환 */
     @Transactional
@@ -125,6 +128,7 @@ public class RecruitService {
                 resolvePeriod(dto.getCodingTestPeriod(), entity.getCodingTestPeriod()),
                 resolveInterviewPeriod(entity, dto),
                 dto.getSummary() == null ? entity.getSummary() : dto.getSummary());
+        syncDiscordRecruit(entity);
         return RecruitResponseDTO.from(entity);
     }
 
@@ -201,6 +205,7 @@ public class RecruitService {
         if (entity.getFormId() != null) {
             formService.publishForRecruit(entity.getFormId());
         }
+        syncDiscordRecruit(entity);
         notificationService.notifyAllStudents(
                 NotificationType.RECRUIT_PUBLISHED,
                 "새로운 취업 공지",
@@ -243,6 +248,24 @@ public class RecruitService {
     private void validateOwner(RecruitEntity entity, Long teacherId) {
         if (entity.getUser() == null || !entity.getUser().getId().equals(teacherId)) {
             throw RecruitException.forbidden("채용 공고를 관리할 권한이 없습니다.");
+        }
+    }
+
+    private void syncDiscordRecruit(RecruitEntity entity) {
+        if (entity.getStatus() != RecruitStatus.PUBLISHED) {
+            return;
+        }
+
+        try {
+            if (entity.getDiscordMessageId() == null || entity.getDiscordMessageId().isBlank()) {
+                entity.linkDiscordMessage(discordNoticeService.sendRecruit(entity));
+                return;
+            }
+
+            discordNoticeService.updateRecruit(entity.getDiscordMessageId(), entity);
+        } catch (RuntimeException e) {
+            log.warn("디스코드 공고 메시지 동기화에 실패했습니다. recruitId={}", entity.getId(), e);
+            throw RecruitException.badGateway("디스코드 공고 메시지 동기화에 실패했습니다.");
         }
     }
 }
