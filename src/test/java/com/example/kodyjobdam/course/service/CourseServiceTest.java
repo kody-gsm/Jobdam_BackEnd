@@ -78,7 +78,7 @@ class CourseServiceTest {
     void createReservationRejectsWhenCommonReservationExistsAtSameTime() {
         CreateDTO dto = createDto(2L);
 
-        when(userRepository.findById(1L)).thenReturn(Optional.of(user(1L, UserRole.STUDENT)));
+        when(userRepository.findByIdForUpdate(1L)).thenReturn(Optional.of(user(1L, UserRole.STUDENT)));
         when(userRepository.findById(2L)).thenReturn(Optional.of(user(2L, UserRole.TEACHER)));
         when(cryptoService.submitterHash(1L)).thenReturn("student-hash");
         when(courseRepository.findAllByDateAndPeriod(dto.getDate(), dto.getPeriod())).thenReturn(List.of());
@@ -274,7 +274,7 @@ class CourseServiceTest {
     @Test
     void createReservationOnWeeklyLockedDayIsRejected() {
         CreateDTO dto = createDto(2L);
-        when(userRepository.findById(1L)).thenReturn(Optional.of(user(1L, UserRole.STUDENT)));
+        when(userRepository.findByIdForUpdate(1L)).thenReturn(Optional.of(user(1L, UserRole.STUDENT)));
         when(userRepository.findById(2L)).thenReturn(Optional.of(user(2L, UserRole.TEACHER)));
         when(weeklyLockRepository.existsByTeacher_IdAndDayOfWeekAndPeriod(2L, dto.getDate().getDayOfWeek(), "3교시"))
                 .thenReturn(true);
@@ -342,7 +342,7 @@ class CourseServiceTest {
         dto.setTitle("상담");
         dto.setContent("내용");
         dto.setCategory(CounselingCategoryEnum.EMPLOYMENT);
-        dto.setDate(LocalDate.of(2026, 9, 10));
+        dto.setDate(LocalDate.of(2026, 12, 10));
         dto.setPeriod("3교시");
         return dto;
     }
