@@ -10,6 +10,7 @@ import com.example.kodyjobdam.notice.dto.NoticeRequestDto;
 import com.example.kodyjobdam.notice.service.DiscordNoticeService;
 import com.example.kodyjobdam.recruit.client.GeminiAnalysisResult;
 import com.example.kodyjobdam.recruit.client.GeminiClient;
+import com.example.kodyjobdam.recruit.dto.request.RecruitCreateDTO;
 import com.example.kodyjobdam.recruit.dto.request.RecruitUpdateDTO;
 import com.example.kodyjobdam.recruit.dto.response.RecruitResponseDTO;
 import com.example.kodyjobdam.recruit.entity.RecruitEntity;
@@ -102,6 +103,53 @@ class RecruitServiceTest {
 
         assertThat(response.getFormId()).isEqualTo(7L);
         assertThat(response.getImageUrl()).isEqualTo("/uploads/recruit/2026/09/uuid.png");
+    }
+
+    @Test
+    void createWithoutImageSavesDraftWithApplicationForm() throws Exception {
+        User teacher = user(2L);
+        FormEntity form = FormEntity.builder().id(7L).title("잡담 지원서").status(FormStatus.DRAFT).build();
+
+        when(userRepository.findById(2L)).thenReturn(Optional.of(teacher));
+        when(formService.createForRecruit(
+                eq(teacher), eq("잡담"), eq(LocalDate.of(2026, 9, 12).atTime(LocalTime.MAX))))
+                .thenReturn(form);
+        when(recruitRepository.save(any(RecruitEntity.class))).thenAnswer(returnsFirstArg());
+
+        RecruitCreateDTO dto = objectMapper.readValue(
+                "{\"companyName\":\" 잡담 \",\"deadline\":\"2026-09-12\","
+                        + "\"interviewDate\":\"2026-09-21 ~ 2026-09-22\",\"summary\":\"요약\"}",
+                RecruitCreateDTO.class);
+
+        RecruitResponseDTO response = recruitService.create(dto, 2L);
+
+        assertThat(response.getCompanyName()).isEqualTo("잡담");
+        assertThat(response.getStatus()).isEqualTo(RecruitStatus.DRAFT);
+        assertThat(response.getFormId()).isEqualTo(7L);
+        assertThat(response.getImageUrl()).isNull();
+        assertThat(response.getDeadline()).isEqualTo("2026-09-12");
+        assertThat(response.getInterviewDate()).isEqualTo("2026-09-21 ~ 2026-09-22");
+        assertThat(response.getSummary()).isEqualTo("요약");
+        verify(geminiClient, never()).analyze(any(), any());
+        verify(recruitImageStorage, never()).store(any(), any());
+    }
+
+    @Test
+    void createWithOnlyCompanyNameLeavesScheduleUndecided() throws Exception {
+        User teacher = user(2L);
+        FormEntity form = FormEntity.builder().id(7L).title("잡담 지원서").status(FormStatus.DRAFT).build();
+
+        when(userRepository.findById(2L)).thenReturn(Optional.of(teacher));
+        when(formService.createForRecruit(eq(teacher), eq("잡담"), eq(null))).thenReturn(form);
+        when(recruitRepository.save(any(RecruitEntity.class))).thenAnswer(returnsFirstArg());
+
+        RecruitCreateDTO dto = objectMapper.readValue("{\"companyName\":\"잡담\"}", RecruitCreateDTO.class);
+
+        RecruitResponseDTO response = recruitService.create(dto, 2L);
+
+        assertThat(response.getDeadline()).isEqualTo(RecruitPeriod.UNDECIDED);
+        assertThat(response.getInterviewDate()).isEqualTo(RecruitPeriod.UNDECIDED);
+        assertThat(response.getDocumentPeriod()).isNull();
     }
 
     @Test

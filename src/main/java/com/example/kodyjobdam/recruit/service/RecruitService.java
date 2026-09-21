@@ -8,6 +8,7 @@ import com.example.kodyjobdam.notice.service.DiscordNoticeService;
 import com.example.kodyjobdam.recruit.client.GeminiAnalysisResult;
 import com.example.kodyjobdam.recruit.client.GeminiClient;
 import com.example.kodyjobdam.recruit.dto.RecruitPeriodDTO;
+import com.example.kodyjobdam.recruit.dto.request.RecruitCreateDTO;
 import com.example.kodyjobdam.recruit.dto.request.RecruitUpdateDTO;
 import com.example.kodyjobdam.recruit.dto.response.RecruitResponseDTO;
 import com.example.kodyjobdam.recruit.entity.RecruitEntity;
@@ -111,6 +112,33 @@ public class RecruitService {
                 .form(form)
                 .summary(result.summary())
                 .imageUrl(imageUrl)
+                .status(RecruitStatus.DRAFT)
+                .build());
+
+        return RecruitResponseDTO.from(entity);
+    }
+
+    /** 선생님: 이미지 없이 직접 입력한 내용으로 초안(DRAFT)을 만든다 */
+    @Transactional
+    public RecruitResponseDTO create(RecruitCreateDTO dto, Long userId) {
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> RecruitException.notFound("회원이 없습니다."));
+
+        String companyName = dto.getCompanyName().trim();
+        RecruitPeriod documentPeriod = resolveDocumentPeriod(null, dto.getDocumentPeriod(), dto.getDeadline());
+
+        FormEntity form = formService.createForRecruit(user, companyName, applicationDeadline(documentPeriod));
+
+        RecruitEntity entity = recruitRepository.save(RecruitEntity.builder()
+                .user(user)
+                .companyName(companyName)
+                .documentPeriod(documentPeriod)
+                .writtenExamPeriod(resolvePeriod(dto.getWrittenExamPeriod(), null))
+                .practicalExamPeriod(resolvePeriod(dto.getPracticalExamPeriod(), null))
+                .codingTestPeriod(resolvePeriod(dto.getCodingTestPeriod(), null))
+                .interviewPeriod(resolveInterviewPeriod(null, dto.getInterviewPeriod(), dto.getInterviewDate()))
+                .form(form)
+                .summary(dto.getSummary())
                 .status(RecruitStatus.DRAFT)
                 .build());
 
