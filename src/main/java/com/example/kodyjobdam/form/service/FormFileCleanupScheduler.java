@@ -8,6 +8,8 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 import java.time.LocalDateTime;
 import java.time.ZoneId;
@@ -45,8 +47,20 @@ public class FormFileCleanupScheduler {
                 return;
             }
 
-            orphans.forEach(file -> storage.delete(file.getStoredName()));
+            List<String> storedNames = orphans.stream()
+                    .map(FormFileEntity::getStoredName)
+                    .toList();
             fileRepository.deleteAll(orphans);
+            if (TransactionSynchronizationManager.isSynchronizationActive()) {
+                TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+                    @Override
+                    public void afterCommit() {
+                        storedNames.forEach(storage::delete);
+                    }
+                });
+            } else {
+                storedNames.forEach(storage::delete);
+            }
             log.info("제출되지 않은 폼 첨부 파일 {}개 삭제 완료", orphans.size());
         } catch (RuntimeException e) {
             log.error("폼 첨부 파일 정리 중 오류가 발생했습니다.", e);
