@@ -278,6 +278,35 @@ public class CourseService {
         );
     }
 
+    /** 선생님이 수락하지 않은 채 날짜가 지난 신청을 취소하고 학생에게 알린다. 취소한 개수를 돌려준다. */
+    @Transactional
+    public int expireWaitingReservations(LocalDate today) {
+        List<CourseEntity> expired = courseRepository.findAllForUpdateByStateAndDateBefore(StateEnum.WAITING, today);
+        for (CourseEntity entity : expired) {
+            entity.setState(StateEnum.CANCEL);
+            notifyExpired(entity);
+        }
+        return expired.size();
+    }
+
+    private void notifyExpired(CourseEntity entity) {
+        LocalDateTime expiresAt = notificationExpirationService.counselingExpiresAt(entity.getDate());
+        // 알림 보관 기간까지 지난 오래된 신청은 알려도 곧바로 지워지므로 취소만 한다.
+        if (!expiresAt.isAfter(notificationExpirationService.now())) {
+            return;
+        }
+
+        notificationService.notifyUser(
+                findSubmitter(entity),
+                NotificationType.COUNSELING_EXPIRED,
+                "상담 신청 만료",
+                entity.getDate() + " " + entity.getPeriod() + " 상담 신청이 선생님의 수락 없이 날짜가 지나 취소되었습니다.",
+                entity.getReservation_id(),
+                "/student/course/" + entity.getReservation_id(),
+                expiresAt
+        );
+    }
+
     @Transactional
     public void teacherRock(LockDTO dto, Long teacherId) {
         User teacher = userRepository.findById(teacherId)

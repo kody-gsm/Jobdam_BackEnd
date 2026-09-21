@@ -37,6 +37,12 @@ public interface CourseRepository extends JpaRepository<CourseEntity, Long> {
                                                                 @Param("period") String period,
                                                                 @Param("teacherId") Long teacherId);
 
+    /** 날짜가 지난 신청을 잠가서 읽는다. 같은 신청을 선생님이 동시에 수락해도 한쪽만 반영된다. */
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("select c from CourseEntity c where c.state = :state and c.date < :date order by c.reservation_id")
+    List<CourseEntity> findAllForUpdateByStateAndDateBefore(@Param("state") StateEnum state,
+                                                          @Param("date") LocalDate date);
+
     boolean existsBySubmitterHashAndDateAndPeriodAndStateNot(String submitterHash, LocalDate date, String period,
                                                             StateEnum state);
 

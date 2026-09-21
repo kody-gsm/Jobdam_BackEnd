@@ -260,6 +260,58 @@ class CommonServiceTest {
     }
 
     @Test
+    void expireWaitingReservationsCancelsPastRequestsAndNotifiesStudents() {
+        LocalDate today = LocalDate.of(2026, 9, 21);
+        LocalDate yesterday = today.minusDays(1);
+        User student = user(1L, UserRole.STUDENT);
+        CommonEntity pastWaiting = CommonEntity.builder()
+                .reservation_id(100L).teacher(user(2L, UserRole.WEE_TEACHER)).date(yesterday).period("3교시")
+                .encryptedUserId("encrypted-user-id").state(StateEnum.WAITING).build();
+
+        when(commonRepository.findAllForUpdateByStateAndDateBefore(StateEnum.WAITING, today))
+                .thenReturn(List.of(pastWaiting));
+        when(notificationExpirationService.counselingExpiresAt(yesterday))
+                .thenReturn(LocalDateTime.of(2026, 12, 19, 0, 0));
+        when(notificationExpirationService.now()).thenReturn(LocalDateTime.of(2026, 9, 21, 0, 5));
+        when(cryptoService.decrypt("encrypted-user-id")).thenReturn("1");
+        when(userRepository.findById(1L)).thenReturn(Optional.of(student));
+
+        int expired = commonService.expireWaitingReservations(today);
+
+        assertThat(expired).isEqualTo(1);
+        assertThat(pastWaiting.getState()).isEqualTo(StateEnum.CANCEL);
+        verify(notificationService).notifyUser(
+                eq(student),
+                eq(NotificationType.COUNSELING_EXPIRED),
+                eq("상담 신청 만료"),
+                eq("2026-09-20 3교시 상담 신청이 선생님의 수락 없이 날짜가 지나 취소되었습니다."),
+                eq(100L),
+                eq("/student/common/100"),
+                eq(LocalDateTime.of(2026, 12, 19, 0, 0))
+        );
+    }
+
+    @Test
+    void expireWaitingReservationsCancelsWithoutNotifyingWhenRetentionPassed() {
+        LocalDate today = LocalDate.of(2026, 9, 21);
+        LocalDate longAgo = LocalDate.of(2026, 5, 1);
+        CommonEntity oldWaiting = CommonEntity.builder()
+                .reservation_id(100L).teacher(user(2L, UserRole.WEE_TEACHER)).date(longAgo).period("3교시")
+                .encryptedUserId("encrypted-user-id").state(StateEnum.WAITING).build();
+
+        when(commonRepository.findAllForUpdateByStateAndDateBefore(StateEnum.WAITING, today))
+                .thenReturn(List.of(oldWaiting));
+        when(notificationExpirationService.counselingExpiresAt(longAgo))
+                .thenReturn(LocalDateTime.of(2026, 7, 30, 0, 0));
+        when(notificationExpirationService.now()).thenReturn(LocalDateTime.of(2026, 9, 21, 0, 5));
+
+        commonService.expireWaitingReservations(today);
+
+        assertThat(oldWaiting.getState()).isEqualTo(StateEnum.CANCEL);
+        verify(notificationService, never()).notifyUser(any(), any(), any(), any(), any(), any(), any());
+    }
+
+    @Test
     void rejectNotifiesStudent() {
         User student = user(1L, UserRole.STUDENT);
         User teacher = user(2L, UserRole.WEE_TEACHER);
