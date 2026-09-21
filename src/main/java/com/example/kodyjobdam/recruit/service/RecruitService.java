@@ -21,6 +21,7 @@ import com.example.kodyjobdam.user.UserRepository;
 import com.example.kodyjobdam.user.entity.User;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
@@ -64,6 +65,9 @@ public class RecruitService {
     private final NotificationExpirationService notificationExpirationService;
 
     private final DiscordNoticeService discordNoticeService;
+
+    @Value("${app.frontend-base-url}")
+    private String frontendBaseUrl;
 
     /** 선생님: 이미지 분석 → 초안(DRAFT)으로 저장 후 결과 반환 */
     @Transactional
@@ -275,8 +279,12 @@ public class RecruitService {
         NoticeRequestDto notice = new NoticeRequestDto();
         notice.setTitle(entity.getCompanyName() + " 공고");
         notice.setContent(recruitNoticeContent(entity));
-        notice.setLink("/recruit/" + entity.getId());
+        notice.setLink(frontendRecruitUrl(entity.getId()));
         return notice;
+    }
+
+    private String frontendRecruitUrl(Long recruitId) {
+        return frontendBaseUrl.replaceAll("/+$", "") + "/recruit/" + recruitId;
     }
 
     private String recruitNoticeContent(RecruitEntity entity) {
