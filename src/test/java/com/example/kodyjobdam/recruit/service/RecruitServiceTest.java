@@ -6,6 +6,7 @@ import com.example.kodyjobdam.notification.service.NotificationService;
 import com.example.kodyjobdam.form.entity.FormEntity;
 import com.example.kodyjobdam.form.entity.FormStatus;
 import com.example.kodyjobdam.form.service.FormService;
+import com.example.kodyjobdam.notice.dto.NoticeRequestDto;
 import com.example.kodyjobdam.notice.service.DiscordNoticeService;
 import com.example.kodyjobdam.recruit.client.GeminiAnalysisResult;
 import com.example.kodyjobdam.recruit.client.GeminiClient;
@@ -35,6 +36,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -105,7 +107,7 @@ class RecruitServiceTest {
                 .status(RecruitStatus.DRAFT)
                 .build();
         when(recruitRepository.findById(10L)).thenReturn(Optional.of(recruit));
-        when(discordNoticeService.sendRecruit(recruit)).thenReturn("1234567890");
+        when(discordNoticeService.sendNotice(any(NoticeRequestDto.class))).thenReturn("1234567890");
 
         recruitService.publish(10L, 2L);
 
@@ -142,7 +144,7 @@ class RecruitServiceTest {
         when(recruitRepository.findById(10L)).thenReturn(Optional.of(recruit));
         when(notificationExpirationService.recruitExpiresAt("2026-09-10"))
                 .thenReturn(LocalDateTime.of(2026, 10, 10, 23, 59, 59));
-        when(discordNoticeService.sendRecruit(recruit)).thenReturn("1234567890");
+        when(discordNoticeService.sendNotice(any(NoticeRequestDto.class))).thenReturn("1234567890");
 
         recruitService.publish(10L, 2L);
 
@@ -163,6 +165,7 @@ class RecruitServiceTest {
                 .user(user(2L))
                 .companyName("잡담")
                 .summary("기존 요약")
+                .documentPeriod(new RecruitPeriod(LocalDate.of(2026, 9, 1), LocalDate.of(2026, 9, 10)))
                 .discordMessageId("1234567890")
                 .status(RecruitStatus.PUBLISHED)
                 .build();
@@ -172,7 +175,11 @@ class RecruitServiceTest {
 
         recruitService.update(10L, dto, 2L);
 
-        verify(discordNoticeService).updateRecruit("1234567890", recruit);
+        verify(discordNoticeService).updateNotice(eq("1234567890"), argThat(notice ->
+                "잡담 공고".equals(notice.getTitle())
+                        && "수정된 요약\n\n서류 접수\n2026-09-01 ~ 2026-09-10".equals(notice.getContent())
+                        && "/recruit/10".equals(notice.getLink())
+        ));
     }
 
     @Test

@@ -3,6 +3,7 @@ package com.example.kodyjobdam.recruit.service;
 import com.example.kodyjobdam.common.exception.RecruitException;
 import com.example.kodyjobdam.form.entity.FormEntity;
 import com.example.kodyjobdam.form.service.FormService;
+import com.example.kodyjobdam.notice.dto.NoticeRequestDto;
 import com.example.kodyjobdam.notice.service.DiscordNoticeService;
 import com.example.kodyjobdam.recruit.client.GeminiAnalysisResult;
 import com.example.kodyjobdam.recruit.client.GeminiClient;
@@ -257,15 +258,39 @@ public class RecruitService {
         }
 
         try {
+            NoticeRequestDto notice = toRecruitNotice(entity);
             if (entity.getDiscordMessageId() == null || entity.getDiscordMessageId().isBlank()) {
-                entity.linkDiscordMessage(discordNoticeService.sendRecruit(entity));
+                entity.linkDiscordMessage(discordNoticeService.sendNotice(notice));
                 return;
             }
 
-            discordNoticeService.updateRecruit(entity.getDiscordMessageId(), entity);
+            discordNoticeService.updateNotice(entity.getDiscordMessageId(), notice);
         } catch (RuntimeException e) {
             log.warn("디스코드 공고 메시지 동기화에 실패했습니다. recruitId={}", entity.getId(), e);
             throw RecruitException.badGateway("디스코드 공고 메시지 동기화에 실패했습니다.");
         }
+    }
+
+    private NoticeRequestDto toRecruitNotice(RecruitEntity entity) {
+        NoticeRequestDto notice = new NoticeRequestDto();
+        notice.setTitle(entity.getCompanyName() + " 공고");
+        notice.setContent(recruitNoticeContent(entity));
+        notice.setLink("/recruit/" + entity.getId());
+        return notice;
+    }
+
+    private String recruitNoticeContent(RecruitEntity entity) {
+        String summary = entity.getSummary() == null || entity.getSummary().isBlank()
+                ? "공고 요약이 없습니다."
+                : entity.getSummary();
+        return summary + "\n\n서류 접수\n" + displayPeriod(entity.getDocumentPeriod());
+    }
+
+    private String displayPeriod(RecruitPeriod period) {
+        if (period == null || period.isEmpty()) {
+            return RecruitPeriod.UNDECIDED;
+        }
+
+        return period.toDisplay();
     }
 }

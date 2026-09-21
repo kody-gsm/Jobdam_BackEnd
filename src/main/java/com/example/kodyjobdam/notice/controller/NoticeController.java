@@ -19,8 +19,15 @@ public class NoticeController {
         // DB에 공지 저장 로직 작성
 
         // 디스코드 봇으로 메시지 전송
-        discordNoticeService.sendNotice(requestDto);
+        String messageId = discordNoticeService.sendNotice(requestDto);
 
-        return ResponseEntity.ok("공지가 등록되었으며 디스코드로 발송되었습니다.");
+        return ResponseEntity.ok(messageId);
+    }
+
+    @PatchMapping("/{messageId}")
+    public ResponseEntity<String> updateNotice(@PathVariable String messageId,
+                                               @Valid @RequestBody NoticeRequestDto requestDto) {
+        discordNoticeService.updateNotice(messageId, requestDto);
+        return ResponseEntity.ok("디스코드 공지가 수정되었습니다.");
     }
 }
