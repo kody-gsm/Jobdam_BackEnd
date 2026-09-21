@@ -107,7 +107,7 @@ class CommonServiceTest {
                 .build();
 
         when(commonRepository.findAllByDateAndPeriod(dto.getDate(), dto.getPeriod())).thenReturn(List.of());
-        when(userRepository.findById(1L)).thenReturn(Optional.of(student));
+        when(userRepository.findByIdForUpdate(1L)).thenReturn(Optional.of(student));
         when(userRepository.findById(2L)).thenReturn(Optional.of(teacher));
         when(cryptoService.submitterHash(1L)).thenReturn("student-hash");
         when(cryptoService.encrypt(anyString())).thenReturn("encrypted");
@@ -150,7 +150,7 @@ class CommonServiceTest {
         User notTeacher = user(3L, UserRole.STUDENT);
         CreateDTO dto = createDto(3L);
 
-        when(userRepository.findById(1L)).thenReturn(Optional.of(student));
+        when(userRepository.findByIdForUpdate(1L)).thenReturn(Optional.of(student));
         when(userRepository.findById(3L)).thenReturn(Optional.of(notTeacher));
 
         assertThatThrownBy(() -> commonService.createReservation(dto, 1L))
@@ -257,6 +257,58 @@ class CommonServiceTest {
         // 원래도 취소 상태였던 신청까지 다시 알리지는 않는다.
         verify(notificationService, never()).notifyUser(
                 any(), eq(NotificationType.COUNSELING_AUTO_CANCELED), any(), any(), eq(102L), any(), any());
+    }
+
+    @Test
+    void expireWaitingReservationsCancelsPastRequestsAndNotifiesStudents() {
+        LocalDate today = LocalDate.of(2026, 9, 21);
+        LocalDate yesterday = today.minusDays(1);
+        User student = user(1L, UserRole.STUDENT);
+        CommonEntity pastWaiting = CommonEntity.builder()
+                .reservation_id(100L).teacher(user(2L, UserRole.WEE_TEACHER)).date(yesterday).period("3교시")
+                .encryptedUserId("encrypted-user-id").state(StateEnum.WAITING).build();
+
+        when(commonRepository.findAllForUpdateByStateAndDateBefore(StateEnum.WAITING, today))
+                .thenReturn(List.of(pastWaiting));
+        when(notificationExpirationService.counselingExpiresAt(yesterday))
+                .thenReturn(LocalDateTime.of(2026, 12, 19, 0, 0));
+        when(notificationExpirationService.now()).thenReturn(LocalDateTime.of(2026, 9, 21, 0, 5));
+        when(cryptoService.decrypt("encrypted-user-id")).thenReturn("1");
+        when(userRepository.findById(1L)).thenReturn(Optional.of(student));
+
+        int expired = commonService.expireWaitingReservations(today);
+
+        assertThat(expired).isEqualTo(1);
+        assertThat(pastWaiting.getState()).isEqualTo(StateEnum.CANCEL);
+        verify(notificationService).notifyUser(
+                eq(student),
+                eq(NotificationType.COUNSELING_EXPIRED),
+                eq("상담 신청 만료"),
+                eq("2026-09-20 3교시 상담 신청이 선생님의 수락 없이 날짜가 지나 취소되었습니다."),
+                eq(100L),
+                eq("/student/common/100"),
+                eq(LocalDateTime.of(2026, 12, 19, 0, 0))
+        );
+    }
+
+    @Test
+    void expireWaitingReservationsCancelsWithoutNotifyingWhenRetentionPassed() {
+        LocalDate today = LocalDate.of(2026, 9, 21);
+        LocalDate longAgo = LocalDate.of(2026, 5, 1);
+        CommonEntity oldWaiting = CommonEntity.builder()
+                .reservation_id(100L).teacher(user(2L, UserRole.WEE_TEACHER)).date(longAgo).period("3교시")
+                .encryptedUserId("encrypted-user-id").state(StateEnum.WAITING).build();
+
+        when(commonRepository.findAllForUpdateByStateAndDateBefore(StateEnum.WAITING, today))
+                .thenReturn(List.of(oldWaiting));
+        when(notificationExpirationService.counselingExpiresAt(longAgo))
+                .thenReturn(LocalDateTime.of(2026, 7, 30, 0, 0));
+        when(notificationExpirationService.now()).thenReturn(LocalDateTime.of(2026, 9, 21, 0, 5));
+
+        commonService.expireWaitingReservations(today);
+
+        assertThat(oldWaiting.getState()).isEqualTo(StateEnum.CANCEL);
+        verify(notificationService, never()).notifyUser(any(), any(), any(), any(), any(), any(), any());
     }
 
     @Test
@@ -563,7 +615,7 @@ class CommonServiceTest {
     void createReservationRejectsWhenCourseReservationExistsAtSameTime() {
         CreateDTO dto = createDto(2L);
 
-        when(userRepository.findById(1L)).thenReturn(Optional.of(user(1L, UserRole.STUDENT)));
+        when(userRepository.findByIdForUpdate(1L)).thenReturn(Optional.of(user(1L, UserRole.STUDENT)));
         when(userRepository.findById(2L)).thenReturn(Optional.of(user(2L, UserRole.WEE_TEACHER)));
         when(cryptoService.submitterHash(1L)).thenReturn("student-hash");
         when(commonRepository.findAllByDateAndPeriod(dto.getDate(), dto.getPeriod())).thenReturn(List.of());
@@ -711,7 +763,7 @@ class CommonServiceTest {
     void createReservationOnWeeklyLockedDayIsRejected() {
         CreateDTO dto = createDto(2L);
         dto.setPeriod("3교시");
-        when(userRepository.findById(1L)).thenReturn(Optional.of(user(1L, UserRole.STUDENT)));
+        when(userRepository.findByIdForUpdate(1L)).thenReturn(Optional.of(user(1L, UserRole.STUDENT)));
         when(userRepository.findById(2L)).thenReturn(Optional.of(user(2L, UserRole.WEE_TEACHER)));
         when(weeklyLockRepository.existsByTeacher_IdAndDayOfWeekAndPeriod(2L, dto.getDate().getDayOfWeek(), "3교시"))
                 .thenReturn(true);
@@ -768,7 +820,7 @@ class CommonServiceTest {
         dto.setTitle("상담");
         dto.setContent("내용");
         dto.setCategory(CounselingCategoryEnum.EMPLOYMENT);
-        dto.setDate(LocalDate.of(2026, 9, 10));
+        dto.setDate(LocalDate.of(2026, 12, 10));
         dto.setPeriod("3교시");
         return dto;
     }

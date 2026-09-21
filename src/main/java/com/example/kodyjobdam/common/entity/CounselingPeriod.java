@@ -58,4 +58,8 @@ public enum CounselingPeriod {
     public LocalDateTime startsAt(LocalDate date) {
         return date.atTime(startTime);
     }
+
+    public boolean hasStarted(LocalDate date, java.time.Clock clock) {
+        return !LocalDateTime.now(clock).isBefore(startsAt(date));
+    }
 }
