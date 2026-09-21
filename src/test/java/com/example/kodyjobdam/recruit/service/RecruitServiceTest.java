@@ -259,6 +259,7 @@ class RecruitServiceTest {
                 .id(10L)
                 .user(user(2L))
                 .companyName("잡담")
+                .form(FormEntity.builder().id(7L).status(FormStatus.DRAFT).build())
                 .documentPeriod(new RecruitPeriod(LocalDate.of(2026, 9, 1), LocalDate.of(2026, 9, 10)))
                 .codingTestPeriod(new RecruitPeriod(LocalDate.of(2026, 9, 15), LocalDate.of(2026, 9, 15)))
                 .interviewPeriod(new RecruitPeriod(LocalDate.of(2026, 9, 20), LocalDate.of(2026, 9, 20)))
@@ -279,6 +280,7 @@ class RecruitServiceTest {
         assertThat(response.getDocumentPeriod().startDate()).isEqualTo(LocalDate.of(2026, 9, 1));
         assertThat(response.getDocumentPeriod().endDate()).isEqualTo(LocalDate.of(2026, 9, 12));
         assertThat(response.getCodingTestPeriod().startDate()).isEqualTo(LocalDate.of(2026, 9, 15));
+        verify(formService).updateDeadlineForRecruit(7L, LocalDate.of(2026, 9, 12).atTime(LocalTime.MAX));
     }
 
     @Test

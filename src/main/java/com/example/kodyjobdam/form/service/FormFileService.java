@@ -14,6 +14,8 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.nio.file.Paths;
@@ -67,11 +69,14 @@ public class FormFileService {
             throw FormException.badRequest("올릴 수 없는 형식입니다. 가능한 형식: " + String.join(", ", allowedExtensions));
         }
 
+        String storedName = storage.store(file, extension);
+        deleteStoredFileAfterRollback(storedName);
+
         FormFileEntity saved = fileRepository.save(FormFileEntity.builder()
                 .form(form)
                 .user(user)
                 .originalName(originalName)
-                .storedName(storage.store(file, extension))
+                .storedName(storedName)
                 .contentType(file.getContentType() == null ? DEFAULT_CONTENT_TYPE : file.getContentType())
                 .size(file.getSize())
                 .build());
@@ -121,8 +126,37 @@ public class FormFileService {
             return;
         }
 
-        files.forEach(file -> storage.delete(file.getStoredName()));
         fileRepository.deleteAll(files);
+        deleteStoredFilesAfterCommit(files.stream()
+                .map(FormFileEntity::getStoredName)
+                .toList());
+    }
+
+    private void deleteStoredFileAfterRollback(String storedName) {
+        if (!TransactionSynchronizationManager.isSynchronizationActive()) {
+            return;
+        }
+        TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+            @Override
+            public void afterCompletion(int status) {
+                if (status == STATUS_ROLLED_BACK) {
+                    storage.delete(storedName);
+                }
+            }
+        });
+    }
+
+    private void deleteStoredFilesAfterCommit(List<String> storedNames) {
+        if (!TransactionSynchronizationManager.isSynchronizationActive()) {
+            storedNames.forEach(storage::delete);
+            return;
+        }
+        TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+            @Override
+            public void afterCommit() {
+                storedNames.forEach(storage::delete);
+            }
+        });
     }
 
     /** 경로가 섞여 들어와도 파일 이름만 남긴다 */

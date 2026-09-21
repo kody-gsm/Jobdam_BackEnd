@@ -79,28 +79,30 @@ public class CommonService {
 
     @Transactional
     public void createReservation(CreateDTO dto, Long id) {
+        String period = validateReservationSlot(dto.getDate(), dto.getPeriod());
+        dto.setPeriod(period);
         validateNotHoliday(dto.getDate());
-        validateNotLockedPeriod(dto.getPeriod());
+        validateNotLockedPeriod(period);
 
-        User user = userRepository.findById(id)
+        User user = userRepository.findByIdForUpdate(id)
                 .orElseThrow(() -> ReservationException.notFound("회원이 없습니다."));
         User teacher = findTeacher(dto.getTeacherId(), id);
         validateCategory(dto.getCategory());
-        validateNotWeeklyLocked(dto.getDate(), dto.getPeriod(), teacher.getId());
+        validateNotWeeklyLocked(dto.getDate(), period, teacher.getId());
         String submitterHash = cryptoService.submitterHash(id);
 
-        for (CommonEntity entity : commonRepository.findAllByDateAndPeriod(dto.getDate(), dto.getPeriod())) {
+        for (CommonEntity entity : commonRepository.findAllByDateAndPeriod(dto.getDate(), period)) {
             if (submitterHash.equals(entity.getSubmitterHash())
                     && entity.getState() != StateEnum.CANCEL) {
                 throw ReservationException.conflict("이미 예약한 시간입니다.");
             }
         }
-        if (courseRepository.existsActiveReservation(submitterHash, dto.getDate(), dto.getPeriod())) {
+        if (courseRepository.existsActiveReservation(submitterHash, dto.getDate(), period)) {
             throw ReservationException.conflict("같은 시간에 신청한 진로 상담이 있습니다.");
         }
 
         for (CommonEntity entity : commonRepository.findAllByDateAndPeriodAndTeacher_Id(
-                dto.getDate(), dto.getPeriod(), teacher.getId())) {
+                dto.getDate(), period, teacher.getId())) {
             if (entity.getState() == StateEnum.LOCKED) {
                 throw ReservationException.locked("잠긴 날짜 입니다.");
             }
@@ -131,28 +133,31 @@ public class CommonService {
 
     @Transactional
     public void createReservationByTeacher(TeacherCreateDTO dto, Long teacherId) {
+        String period = validateReservationSlot(dto.getDate(), dto.getPeriod());
+        dto.setPeriod(period);
         validateNotHoliday(dto.getDate());
-        validateNotLockedPeriod(dto.getPeriod());
+        validateNotLockedPeriod(period);
 
         User teacher = findTeacher(teacherId);
-        User student = findStudent(dto.getStudentId());
+        User student = findStudentForUpdate(dto.getStudentId());
         validateCategory(dto.getCategory());
-        validateNotWeeklyLocked(dto.getDate(), dto.getPeriod(), teacher.getId());
+        validateNotWeeklyLocked(dto.getDate(), period, teacher.getId());
         String submitterHash = cryptoService.submitterHash(student.getId());
 
-        for (CommonEntity entity : commonRepository.findAllByDateAndPeriod(dto.getDate(), dto.getPeriod())) {
+        for (CommonEntity entity : commonRepository.findAllByDateAndPeriod(dto.getDate(), period)) {
             if (submitterHash.equals(entity.getSubmitterHash())
                     && entity.getState() != StateEnum.CANCEL) {
                 throw ReservationException.conflict("이미 예약한 시간입니다.");
             }
         }
-        if (courseRepository.existsActiveReservation(submitterHash, dto.getDate(), dto.getPeriod())) {
+        if (courseRepository.existsActiveReservation(submitterHash, dto.getDate(), period)) {
             throw ReservationException.conflict("같은 시간에 신청한 진로 상담이 있습니다.");
         }
 
         // 같은 시간 예약을 잠근 뒤 상태를 봐야 학생 신청 수락과 동시에 들어와도 둘 다 통과하지 않는다.
-        for (CommonEntity entity : commonRepository.findAllForUpdateByDateAndPeriodAndTeacherId(
-                dto.getDate(), dto.getPeriod(), teacher.getId())) {
+        List<CommonEntity> slotReservations = commonRepository.findAllForUpdateByDateAndPeriodAndTeacherId(
+                dto.getDate(), period, teacher.getId());
+        for (CommonEntity entity : slotReservations) {
             if (entity.getState() == StateEnum.LOCKED) {
                 throw ReservationException.locked("잠긴 날짜 입니다.");
             }
@@ -171,7 +176,7 @@ public class CommonService {
                 .encryptedUserName(cryptoService.encrypt(student.getName()))
                 .encryptedStudentNumber(cryptoService.encrypt(student.getStudent_number()))
                 .date(dto.getDate())
-                .period(dto.getPeriod())
+                .period(period)
                 .state(StateEnum.RESERVED)
                 .build());
         notificationService.notifyUser(
@@ -183,6 +188,7 @@ public class CommonService {
                 "/student/common/" + reservation.getReservation_id(),
                 notificationExpirationService.counselingExpiresAt(reservation.getDate())
         );
+        cancelOtherWaitingReservations(reservation, slotReservations);
     }
 
     @Transactional
@@ -454,10 +460,21 @@ public class CommonService {
             if (entity.getDate().getDayOfWeek() != dayOfWeek) {
                 continue;
             }
+            if (!isFutureReservationForWeeklyLock(entity.getDate(), period)) {
+                continue;
+            }
             if (entity.getState() == StateEnum.WAITING || entity.getState() == StateEnum.RESERVED) {
                 entity.setState(StateEnum.CANCEL);
             }
         }
+    }
+
+    private boolean isFutureReservationForWeeklyLock(LocalDate date, String period) {
+        CounselingPeriod schedule = CounselingPeriod.from(period).orElse(null);
+        if (schedule == null) {
+            return date.isAfter(LocalDate.now(clock));
+        }
+        return LocalDateTime.now(clock).isBefore(schedule.startsAt(date));
     }
 
     private void validateWeeklyLockRequest(WeeklyLockDTO dto) {
@@ -731,5 +748,35 @@ public class CommonService {
             throw ReservationException.badRequest("학생 계정만 선택할 수 있습니다.");
         }
         return student;
+    }
+
+    private User findStudentForUpdate(Long studentId) {
+        if (studentId == null) {
+            throw ReservationException.badRequest("학생을 선택해주세요.");
+        }
+
+        User student = userRepository.findByIdForUpdate(studentId)
+                .orElseThrow(() -> ReservationException.notFound("학생을 찾을 수 없습니다."));
+        if (student.getRole() != UserRole.STUDENT) {
+            throw ReservationException.badRequest("학생 계정만 선택할 수 있습니다.");
+        }
+        return student;
+    }
+
+    private String validateReservationSlot(LocalDate date, String period) {
+        if (date == null) {
+            throw ReservationException.badRequest("날짜를 선택해주세요.");
+        }
+        LocalDate today = LocalDate.now(clock);
+        if (date.isBefore(today)) {
+            throw ReservationException.badRequest("지난 날짜에는 상담을 신청할 수 없습니다.");
+        }
+
+        CounselingPeriod counselingPeriod = CounselingPeriod.from(period)
+                .orElseThrow(() -> ReservationException.badRequest("존재하지 않는 교시입니다."));
+        if (counselingPeriod.hasStarted(date, clock)) {
+            throw ReservationException.badRequest("이미 시작된 교시는 신청할 수 없습니다.");
+        }
+        return counselingPeriod.getLabel();
     }
 }
