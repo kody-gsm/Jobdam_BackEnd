@@ -19,6 +19,13 @@ public class RecruitPeriod {
 
     private static final String RANGE_SEPARATOR = " ~ ";
 
+    /**
+     * 공고 이미지에 일정이 적혀 있지 않을 때 화면에 보여주는 값.
+     *
+     * <p>날짜가 아니므로 저장하지는 않는다. 응답에만 채우고, 되돌아오면 다시 비운다.</p>
+     */
+    public static final String UNDECIDED = "미정";
+
     private LocalDate startDate;
 
     private LocalDate endDate;
@@ -41,9 +48,10 @@ public class RecruitPeriod {
         return startDate + RANGE_SEPARATOR + endDate;
     }
 
-    /** {@link #toDisplay()} 형식의 문자열을 기간으로 되돌린다. 비어 있으면 null. */
+    /** {@link #toDisplay()} 형식의 문자열을 기간으로 되돌린다. 비어 있거나 "미정"이면 null. */
     public static RecruitPeriod parse(String text) {
-        if (text == null || text.isBlank()) {
+        // 화면에 보여준 "미정"이 그대로 돌아올 수 있다. 날짜가 아니므로 정해지지 않은 것으로 본다.
+        if (text == null || text.isBlank() || UNDECIDED.equals(text.trim())) {
             return null;
         }
 
