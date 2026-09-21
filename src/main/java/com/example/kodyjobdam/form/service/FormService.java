@@ -78,6 +78,12 @@ public class FormService {
                 .ifPresent(FormEntity::publish);
     }
 
+    @Transactional
+    public void updateDeadlineForRecruit(Long formId, LocalDateTime deadline) {
+        formRepository.findById(formId)
+                .ifPresent(form -> form.update(form.getTitle(), form.getDescription(), deadline));
+    }
+
     /**
      * 채용 공고 삭제에 맞춰 딸린 지원 폼도 정리한다.
      * 이미 제출된 응답이 있으면 지원 기록이 사라지지 않도록 폼을 남겨둔다.
