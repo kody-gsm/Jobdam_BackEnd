@@ -20,12 +20,14 @@ import com.example.kodyjobdam.user.UserRepository;
 import com.example.kodyjobdam.user.UserRole;
 import com.example.kodyjobdam.user.entity.User;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.mock.web.MockMultipartFile;
+import org.springframework.test.util.ReflectionTestUtils;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
@@ -73,6 +75,11 @@ class RecruitServiceTest {
     private RecruitService recruitService;
 
     private final ObjectMapper objectMapper = new ObjectMapper();
+
+    @BeforeEach
+    void setUp() {
+        ReflectionTestUtils.setField(recruitService, "frontendBaseUrl", "https://jobdom-fromt-uen1.vercel.app");
+    }
 
     @Test
     void analyzeCreatesDefaultApplicationForm() {
@@ -178,7 +185,7 @@ class RecruitServiceTest {
         verify(discordNoticeService).updateNotice(eq("1234567890"), argThat(notice ->
                 "잡담 공고".equals(notice.getTitle())
                         && "수정된 요약\n\n서류 접수\n2026-09-01 ~ 2026-09-10".equals(notice.getContent())
-                        && "/recruit/10".equals(notice.getLink())
+                        && "https://jobdom-fromt-uen1.vercel.app/recruit/10".equals(notice.getLink())
         ));
     }
 
