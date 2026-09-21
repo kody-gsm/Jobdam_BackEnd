@@ -6,6 +6,7 @@ import com.example.kodyjobdam.notification.service.NotificationService;
 import com.example.kodyjobdam.form.entity.FormEntity;
 import com.example.kodyjobdam.form.entity.FormStatus;
 import com.example.kodyjobdam.form.service.FormService;
+import com.example.kodyjobdam.notice.service.DiscordNoticeService;
 import com.example.kodyjobdam.recruit.client.GeminiAnalysisResult;
 import com.example.kodyjobdam.recruit.client.GeminiClient;
 import com.example.kodyjobdam.recruit.dto.request.RecruitUpdateDTO;
@@ -52,6 +53,9 @@ class RecruitServiceTest {
     private GeminiClient geminiClient;
 
     @Mock
+    private RecruitImageStorage recruitImageStorage;
+
+    @Mock
     private FormService formService;
 
     @Mock
@@ -59,6 +63,9 @@ class RecruitServiceTest {
 
     @Mock
     private com.example.kodyjobdam.notification.service.NotificationExpirationService notificationExpirationService;
+
+    @Mock
+    private DiscordNoticeService discordNoticeService;
 
     @InjectMocks
     private RecruitService recruitService;
@@ -77,12 +84,15 @@ class RecruitServiceTest {
         when(formService.createForRecruit(
                 eq(teacher), eq("잡담"), eq(LocalDate.of(2026, 9, 10).atTime(LocalTime.MAX))))
                 .thenReturn(form);
+        when(recruitImageStorage.store(any(byte[].class), eq("png")))
+                .thenReturn("/uploads/recruit/2026/09/uuid.png");
         when(recruitRepository.save(any(RecruitEntity.class))).thenAnswer(returnsFirstArg());
 
         RecruitResponseDTO response = recruitService.analyze(
                 new MockMultipartFile("image", "recruit.png", "image/png", new byte[]{1, 2}), 2L);
 
         assertThat(response.getFormId()).isEqualTo(7L);
+        assertThat(response.getImageUrl()).isEqualTo("/uploads/recruit/2026/09/uuid.png");
     }
 
     @Test
@@ -99,6 +109,7 @@ class RecruitServiceTest {
         recruitService.publish(10L, 2L);
 
         verify(formService).publishForRecruit(7L);
+        verify(discordNoticeService, never()).sendNotice(any());
     }
 
     @Test
@@ -141,6 +152,26 @@ class RecruitServiceTest {
                 eq("/recruit/10"),
                 eq(LocalDateTime.of(2026, 10, 10, 23, 59, 59))
         );
+    }
+
+    @Test
+    void updatePublishedRecruitDoesNotSendDiscordMessage() throws Exception {
+        RecruitEntity recruit = RecruitEntity.builder()
+                .id(10L)
+                .user(user(2L))
+                .companyName("잡담")
+                .summary("기존 요약")
+                .documentPeriod(new RecruitPeriod(LocalDate.of(2026, 9, 1), LocalDate.of(2026, 9, 10)))
+                .discordMessageId("1234567890")
+                .status(RecruitStatus.PUBLISHED)
+                .build();
+        when(recruitRepository.findById(10L)).thenReturn(Optional.of(recruit));
+
+        RecruitUpdateDTO dto = objectMapper.readValue("{\"summary\":\"수정된 요약\"}", RecruitUpdateDTO.class);
+
+        recruitService.update(10L, dto, 2L);
+
+        verify(discordNoticeService, never()).updateNotice(any(), any());
     }
 
     @Test
@@ -217,7 +248,7 @@ class RecruitServiceTest {
 
         RecruitResponseDTO response = recruitService.update(10L, dto, 2L);
 
-        assertThat(response.getInterviewDate()).isNull();
+        assertThat(response.getInterviewDate()).isEqualTo(RecruitPeriod.UNDECIDED);
         assertThat(response.getInterviewPeriod()).isNull();
         assertThat(response.getCompanyName()).isEqualTo("잡담");
     }

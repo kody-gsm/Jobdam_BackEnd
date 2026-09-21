@@ -57,6 +57,10 @@ public interface CommonRepository extends JpaRepository<CommonEntity, Long> {
 
     List<CommonEntity> findAllByDateInAndTeacher_IdIn(Collection<LocalDate> dates, Collection<Long> teacherIds);
 
+    /** 매주 반복 잠금을 걸 때, 앞으로 이 교시에 잡혀 있는 신청을 요일별로 걸러 취소하기 위해 읽는다. */
+    List<CommonEntity> findAllByPeriodAndTeacher_IdAndDateGreaterThanEqual(
+            String period, Long teacherId, LocalDate from);
+
     List<CommonEntity> findAllByDateAndTeacher_IdOrderByPeriodAsc(LocalDate date, Long teacherId);
 
     @EntityGraph(attributePaths = {"teacher"})

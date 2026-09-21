@@ -76,8 +76,14 @@ public class RecruitEntity {
     @JoinColumn(name = "form_id")
     private FormEntity form;
 
+    /** 공개된 공고와 연결된 디스코드 메시지 ID. 공고 수정 시 같은 메시지를 수정하는 데 사용한다. */
+    private String discordMessageId;
+
     @Column(length = 1000)
     private String summary;
+
+    /** 선생님이 올린 공고 원본 이미지의 공개 조회 URL. 로그인 없이도 접근할 수 있다. */
+    private String imageUrl;
 
     @Enumerated(EnumType.STRING)
     @Builder.Default
@@ -128,5 +134,10 @@ public class RecruitEntity {
     /** 학생에게 공개 */
     public void publish() {
         this.status = RecruitStatus.PUBLISHED;
+    }
+
+    /** 디스코드에 발송된 공고 메시지와 연결한다. */
+    public void linkDiscordMessage(String discordMessageId) {
+        this.discordMessageId = discordMessageId;
     }
 }
