@@ -462,6 +462,8 @@ public class CourseService {
                 .map(e -> new StudentReadDTO(
                         e.getReservation_id(),
                         user.getName(),
+                        e.getTeacher().getId(),
+                        e.getTeacher().getName(),
                         e.getDate(),
                         e.getPeriod(),
                         e.getCategory(),
