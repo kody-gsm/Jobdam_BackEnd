@@ -55,6 +55,7 @@ services:
       PROFILE_IMAGE_MAX_SIZE: ${PROFILE_IMAGE_MAX_SIZE:-5MB}
       RECRUIT_IMAGE_STORAGE_PATH: ${RECRUIT_IMAGE_STORAGE_PATH:-/app/uploads/recruit}
       RECRUIT_IMAGE_PUBLIC_PATH: ${RECRUIT_IMAGE_PUBLIC_PATH:-/uploads/recruit}
+      FORM_FILE_STORAGE_PATH: ${FORM_FILE_STORAGE_PATH:-/app/uploads/form}
       NOTIFICATION_CLEANUP_CRON: "${NOTIFICATION_CLEANUP_CRON:-0 0 3 * * *}"
       NOTIFICATION_CLEANUP_ZONE: ${NOTIFICATION_CLEANUP_ZONE:-Asia/Seoul}
       NOTIFICATION_DEFAULT_RETENTION_DAYS: ${NOTIFICATION_DEFAULT_RETENTION_DAYS:-90}
@@ -66,6 +67,7 @@ services:
     volumes:
       - profile-images:/app/uploads/profile-images
       - recruit-images:/app/uploads/recruit
+      - form-files:/app/uploads/form
     depends_on:
       db:
         condition: service_healthy
@@ -74,6 +76,7 @@ volumes:
   db-data:
   profile-images:
   recruit-images:
+  form-files:
 
 networks:
   default:

@@ -6,6 +6,7 @@ import com.example.kodyjobdam.form.service.FormService;
 import com.example.kodyjobdam.recruit.client.GeminiAnalysisResult;
 import com.example.kodyjobdam.recruit.client.GeminiClient;
 import com.example.kodyjobdam.recruit.dto.RecruitPeriodDTO;
+import com.example.kodyjobdam.recruit.dto.request.RecruitCreateDTO;
 import com.example.kodyjobdam.recruit.dto.request.RecruitUpdateDTO;
 import com.example.kodyjobdam.recruit.dto.response.RecruitResponseDTO;
 import com.example.kodyjobdam.recruit.entity.RecruitEntity;
@@ -107,6 +108,33 @@ public class RecruitService {
         return RecruitResponseDTO.from(entity);
     }
 
+    /** 선생님: 이미지 없이 직접 입력한 내용으로 초안(DRAFT)을 만든다 */
+    @Transactional
+    public RecruitResponseDTO create(RecruitCreateDTO dto, Long userId) {
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> RecruitException.notFound("회원이 없습니다."));
+
+        String companyName = dto.getCompanyName().trim();
+        RecruitPeriod documentPeriod = resolveDocumentPeriod(null, dto.getDocumentPeriod(), dto.getDeadline());
+
+        FormEntity form = formService.createForRecruit(user, companyName, applicationDeadline(documentPeriod));
+
+        RecruitEntity entity = recruitRepository.save(RecruitEntity.builder()
+                .user(user)
+                .companyName(companyName)
+                .documentPeriod(documentPeriod)
+                .writtenExamPeriod(resolvePeriod(dto.getWrittenExamPeriod(), null))
+                .practicalExamPeriod(resolvePeriod(dto.getPracticalExamPeriod(), null))
+                .codingTestPeriod(resolvePeriod(dto.getCodingTestPeriod(), null))
+                .interviewPeriod(resolveInterviewPeriod(null, dto.getInterviewPeriod(), dto.getInterviewDate()))
+                .form(form)
+                .summary(dto.getSummary())
+                .status(RecruitStatus.DRAFT)
+                .build());
+
+        return RecruitResponseDTO.from(entity);
+    }
+
     /**
      * 선생님: 분석 결과 수정.
      * 요청에 담기지 않은(null) 항목은 기존 값을 유지한다. 값을 지울 때는 빈 문자열이나 빈 기간을 보낸다.
@@ -117,11 +145,11 @@ public class RecruitService {
         validateOwner(entity, teacherId);
         entity.update(
                 dto.getCompanyName() == null ? entity.getCompanyName() : dto.getCompanyName(),
-                resolveDocumentPeriod(entity, dto),
+                resolveDocumentPeriod(entity.getDocumentPeriod(), dto.getDocumentPeriod(), dto.getDeadline()),
                 resolvePeriod(dto.getWrittenExamPeriod(), entity.getWrittenExamPeriod()),
                 resolvePeriod(dto.getPracticalExamPeriod(), entity.getPracticalExamPeriod()),
                 resolvePeriod(dto.getCodingTestPeriod(), entity.getCodingTestPeriod()),
-                resolveInterviewPeriod(entity, dto),
+                resolveInterviewPeriod(entity.getInterviewPeriod(), dto.getInterviewPeriod(), dto.getInterviewDate()),
                 dto.getSummary() == null ? entity.getSummary() : dto.getSummary());
         return RecruitResponseDTO.from(entity);
     }
@@ -143,13 +171,12 @@ public class RecruitService {
     }
 
     /** 지원 마감(deadline)은 서류 접수 종료일만 바꾼다. documentPeriod를 함께 보내면 그쪽을 따른다. */
-    private RecruitPeriod resolveDocumentPeriod(RecruitEntity entity, RecruitUpdateDTO dto) {
-        RecruitPeriod current = entity.getDocumentPeriod();
-        if (dto.getDocumentPeriod() != null || dto.getDeadline() == null) {
-            return resolvePeriod(dto.getDocumentPeriod(), current);
+    private RecruitPeriod resolveDocumentPeriod(RecruitPeriod current, RecruitPeriodDTO documentPeriod, String deadlineText) {
+        if (documentPeriod != null || deadlineText == null) {
+            return resolvePeriod(documentPeriod, current);
         }
 
-        RecruitPeriod deadline = RecruitPeriod.parse(dto.getDeadline());
+        RecruitPeriod deadline = RecruitPeriod.parse(deadlineText);
         LocalDate startDate = current == null ? null : current.getStartDate();
         LocalDate endDate = deadline == null ? null : deadline.getEndDate();
         if (startDate == null && endDate == null) {
@@ -160,12 +187,12 @@ public class RecruitService {
     }
 
     /** 면접 일정(interviewDate)은 기간 전체를 바꾼다. interviewPeriod를 함께 보내면 그쪽을 따른다. */
-    private RecruitPeriod resolveInterviewPeriod(RecruitEntity entity, RecruitUpdateDTO dto) {
-        if (dto.getInterviewPeriod() != null || dto.getInterviewDate() == null) {
-            return resolvePeriod(dto.getInterviewPeriod(), entity.getInterviewPeriod());
+    private RecruitPeriod resolveInterviewPeriod(RecruitPeriod current, RecruitPeriodDTO interviewPeriod, String interviewDate) {
+        if (interviewPeriod != null || interviewDate == null) {
+            return resolvePeriod(interviewPeriod, current);
         }
 
-        return RecruitPeriod.parse(dto.getInterviewDate());
+        return RecruitPeriod.parse(interviewDate);
     }
 
     /** 선생님: 채용 공고 삭제 (공개된 공고도 지울 수 있다) */
