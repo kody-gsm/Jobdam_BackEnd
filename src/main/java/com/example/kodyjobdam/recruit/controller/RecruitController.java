@@ -1,9 +1,11 @@
 package com.example.kodyjobdam.recruit.controller;
 
+import com.example.kodyjobdam.recruit.dto.request.RecruitCreateDTO;
 import com.example.kodyjobdam.recruit.dto.request.RecruitUpdateDTO;
 import com.example.kodyjobdam.recruit.dto.response.RecruitResponseDTO;
 import com.example.kodyjobdam.recruit.service.RecruitService;
 import com.example.kodyjobdam.user.security.SecurityUtil;
+import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
@@ -26,6 +28,12 @@ public class RecruitController {
     @PostMapping(value = "/teacher/recruit/analyze", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     public ResponseEntity<RecruitResponseDTO> analyze(@RequestParam("image") MultipartFile image) {
         return ResponseEntity.ok(recruitService.analyze(image, securityUtil.getCurrentUserId()));
+    }
+
+    /** 이미지 없이 직접 입력해 초안 저장 */
+    @PostMapping("/teacher/recruit")
+    public ResponseEntity<RecruitResponseDTO> create(@Valid @RequestBody RecruitCreateDTO dto) {
+        return ResponseEntity.ok(recruitService.create(dto, securityUtil.getCurrentUserId()));
     }
 
     /** 분석 결과 수정 */
