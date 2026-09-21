@@ -6,7 +6,6 @@ import com.example.kodyjobdam.notification.service.NotificationService;
 import com.example.kodyjobdam.form.entity.FormEntity;
 import com.example.kodyjobdam.form.entity.FormStatus;
 import com.example.kodyjobdam.form.service.FormService;
-import com.example.kodyjobdam.notice.dto.NoticeRequestDto;
 import com.example.kodyjobdam.notice.service.DiscordNoticeService;
 import com.example.kodyjobdam.recruit.client.GeminiAnalysisResult;
 import com.example.kodyjobdam.recruit.client.GeminiClient;
@@ -20,14 +19,12 @@ import com.example.kodyjobdam.user.UserRepository;
 import com.example.kodyjobdam.user.UserRole;
 import com.example.kodyjobdam.user.entity.User;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.mock.web.MockMultipartFile;
-import org.springframework.test.util.ReflectionTestUtils;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
@@ -38,7 +35,6 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
-import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -76,11 +72,6 @@ class RecruitServiceTest {
 
     private final ObjectMapper objectMapper = new ObjectMapper();
 
-    @BeforeEach
-    void setUp() {
-        ReflectionTestUtils.setField(recruitService, "frontendBaseUrl", "https://jobdom-fromt-uen1.vercel.app");
-    }
-
     @Test
     void analyzeCreatesDefaultApplicationForm() {
         User teacher = user(2L);
@@ -114,12 +105,11 @@ class RecruitServiceTest {
                 .status(RecruitStatus.DRAFT)
                 .build();
         when(recruitRepository.findById(10L)).thenReturn(Optional.of(recruit));
-        when(discordNoticeService.sendNotice(any(NoticeRequestDto.class))).thenReturn("1234567890");
 
         recruitService.publish(10L, 2L);
 
         verify(formService).publishForRecruit(7L);
-        assertThat(recruit.getDiscordMessageId()).isEqualTo("1234567890");
+        verify(discordNoticeService, never()).sendNotice(any());
     }
 
     @Test
@@ -151,7 +141,6 @@ class RecruitServiceTest {
         when(recruitRepository.findById(10L)).thenReturn(Optional.of(recruit));
         when(notificationExpirationService.recruitExpiresAt("2026-09-10"))
                 .thenReturn(LocalDateTime.of(2026, 10, 10, 23, 59, 59));
-        when(discordNoticeService.sendNotice(any(NoticeRequestDto.class))).thenReturn("1234567890");
 
         recruitService.publish(10L, 2L);
 
@@ -166,7 +155,7 @@ class RecruitServiceTest {
     }
 
     @Test
-    void updatePublishedRecruitUpdatesDiscordMessage() throws Exception {
+    void updatePublishedRecruitDoesNotSendDiscordMessage() throws Exception {
         RecruitEntity recruit = RecruitEntity.builder()
                 .id(10L)
                 .user(user(2L))
@@ -182,11 +171,7 @@ class RecruitServiceTest {
 
         recruitService.update(10L, dto, 2L);
 
-        verify(discordNoticeService).updateNotice(eq("1234567890"), argThat(notice ->
-                "잡담 공고".equals(notice.getTitle())
-                        && "수정된 요약\n\n서류 접수\n2026-09-01 ~ 2026-09-10".equals(notice.getContent())
-                        && "https://jobdom-fromt-uen1.vercel.app/recruit/10".equals(notice.getLink())
-        ));
+        verify(discordNoticeService, never()).updateNotice(any(), any());
     }
 
     @Test
