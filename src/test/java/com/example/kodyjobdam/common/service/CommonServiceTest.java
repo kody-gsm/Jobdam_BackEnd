@@ -20,6 +20,7 @@ import com.example.kodyjobdam.common.repository.ReservationSlot;
 import com.example.kodyjobdam.course.repository.CourseRepository;
 import com.example.kodyjobdam.notification.entity.NotificationType;
 import com.example.kodyjobdam.notification.service.NotificationService;
+import com.example.kodyjobdam.notification.service.ReservationRealtimeService;
 import com.example.kodyjobdam.schedule.service.ScheduleService;
 import com.example.kodyjobdam.user.UserRepository;
 import com.example.kodyjobdam.user.UserRole;
@@ -68,6 +69,9 @@ class CommonServiceTest {
 
     @Mock
     private NotificationService notificationService;
+
+    @Mock
+    private ReservationRealtimeService reservationRealtimeService;
 
     @Mock
     private com.example.kodyjobdam.notification.service.NotificationExpirationService notificationExpirationService;
@@ -304,6 +308,8 @@ class CommonServiceTest {
         when(notificationExpirationService.counselingExpiresAt(longAgo))
                 .thenReturn(LocalDateTime.of(2026, 7, 30, 0, 0));
         when(notificationExpirationService.now()).thenReturn(LocalDateTime.of(2026, 9, 21, 0, 5));
+        when(cryptoService.decrypt("encrypted-user-id")).thenReturn("1");
+        when(userRepository.findById(1L)).thenReturn(Optional.of(user(1L, UserRole.STUDENT)));
 
         commonService.expireWaitingReservations(today);
 

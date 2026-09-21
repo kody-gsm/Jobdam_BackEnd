@@ -22,8 +22,10 @@ import com.example.kodyjobdam.course.entity.StateEnum;
 import com.example.kodyjobdam.course.repository.CourseRepository;
 import com.example.kodyjobdam.course.repository.CourseWeeklyLockRepository;
 import com.example.kodyjobdam.notification.entity.NotificationType;
+import com.example.kodyjobdam.notification.dto.ReservationRealtimeEvent;
 import com.example.kodyjobdam.notification.service.NotificationExpirationService;
 import com.example.kodyjobdam.notification.service.NotificationService;
+import com.example.kodyjobdam.notification.service.ReservationRealtimeService;
 import com.example.kodyjobdam.schedule.service.ScheduleService;
 import com.example.kodyjobdam.user.UserRepository;
 import com.example.kodyjobdam.user.UserRole;
@@ -40,6 +42,7 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collection;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
@@ -63,6 +66,7 @@ public class CourseService {
     private final UserRepository userRepository;
     private final NotificationService notificationService;
     private final NotificationExpirationService notificationExpirationService;
+    private final ReservationRealtimeService reservationRealtimeService;
     private final CounselingReservationCryptoService cryptoService;
     private final ScheduleService scheduleService;
 
@@ -124,6 +128,7 @@ public class CourseService {
                 "/teacher/course/" + reservation.getReservation_id(),
                 notificationExpirationService.counselingExpiresAt(reservation.getDate())
         );
+        publishReservationChange(reservation, user.getId(), "REQUESTED");
     }
 
     @Transactional
@@ -182,6 +187,7 @@ public class CourseService {
                 "/student/course/" + reservation.getReservation_id(),
                 notificationExpirationService.counselingExpiresAt(reservation.getDate())
         );
+        publishReservationChange(reservation, student.getId(), "CREATED_BY_TEACHER");
         cancelOtherWaitingReservations(reservation, slotReservations);
     }
 
@@ -196,6 +202,7 @@ public class CourseService {
         validateCancelDeadline(entity.getDate(), entity.getPeriod());
 
         entity.setState(StateEnum.CANCEL);
+        publishReservationChange(entity, userId, "CANCELED_BY_STUDENT");
     }
 
     @Transactional
@@ -233,6 +240,7 @@ public class CourseService {
                 "/student/course/" + entity.getReservation_id(),
                 notificationExpirationService.counselingExpiresAt(entity.getDate())
         );
+        publishReservationChange(entity, submitter.getId(), "APPROVED");
         cancelOtherWaitingReservations(entity, slotReservations);
     }
 
@@ -255,6 +263,7 @@ public class CourseService {
                     "/student/course/" + other.getReservation_id(),
                     notificationExpirationService.counselingExpiresAt(other.getDate())
             );
+            publishReservationChange(other, otherSubmitter.getId(), "AUTO_CANCELED");
         }
     }
 
@@ -282,6 +291,7 @@ public class CourseService {
                 "/student/course/" + entity.getReservation_id(),
                 notificationExpirationService.counselingExpiresAt(entity.getDate())
         );
+        publishReservationChange(entity, submitter.getId(), "REJECTED");
     }
 
     /** 선생님이 수락하지 않은 채 날짜가 지난 신청을 취소하고 학생에게 알린다. 취소한 개수를 돌려준다. */
@@ -290,7 +300,9 @@ public class CourseService {
         List<CourseEntity> expired = courseRepository.findAllForUpdateByStateAndDateBefore(StateEnum.WAITING, today);
         for (CourseEntity entity : expired) {
             entity.setState(StateEnum.CANCEL);
+            User submitter = findSubmitter(entity);
             notifyExpired(entity);
+            publishReservationChange(entity, submitter.getId(), "EXPIRED");
         }
         return expired.size();
     }
@@ -724,6 +736,23 @@ public class CourseService {
             throw ReservationException.badRequest("학생 계정만 선택할 수 있습니다.");
         }
         return student;
+    }
+
+    private void publishReservationChange(CourseEntity entity, Long studentId, String action) {
+        Long teacherId = entity.getTeacher() == null ? null : entity.getTeacher().getId();
+        reservationRealtimeService.sendAfterCommit(
+                Arrays.asList(studentId, teacherId),
+                new ReservationRealtimeEvent(
+                        "COURSE",
+                        action,
+                        entity.getReservation_id(),
+                        entity.getDate(),
+                        entity.getPeriod(),
+                        ReservationStatus.from(entity.getState()).name(),
+                        teacherId,
+                        studentId
+                )
+        );
     }
 
     private String validateReservationSlot(LocalDate date, String period) {
