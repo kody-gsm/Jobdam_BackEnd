@@ -9,6 +9,7 @@ import com.example.kodyjobdam.common.service.CounselingReservationCryptoService;
 import com.example.kodyjobdam.course.dto.request.CreateDTO;
 import com.example.kodyjobdam.course.dto.request.WeeklyLockDTO;
 import com.example.kodyjobdam.course.dto.response.SlotStatusDTO;
+import com.example.kodyjobdam.course.dto.response.StudentReadDTO;
 import com.example.kodyjobdam.course.dto.response.WeeklyLockResponseDTO;
 import com.example.kodyjobdam.course.entity.CourseEntity;
 import com.example.kodyjobdam.course.entity.CourseWeeklyLockEntity;
@@ -269,6 +270,30 @@ class CourseServiceTest {
         assertThat(result).anySatisfy(slot -> {
             assertThat(slot.getPeriod()).isEqualTo("3교시");
             assertThat(slot.getState()).isEqualTo(StateEnum.LOCKED);
+        });
+    }
+
+    @Test
+    void studentReadReturnsTeacherInformation() {
+        User teacher = user(2L, UserRole.TEACHER);
+        CourseEntity reservation = CourseEntity.builder()
+                .reservation_id(1L)
+                .date(LocalDate.of(2026, 9, 10))
+                .period("1교시")
+                .submitterHash("student-hash")
+                .teacher(teacher)
+                .state(StateEnum.WAITING)
+                .build();
+
+        when(userRepository.findById(1L)).thenReturn(Optional.of(user(1L, UserRole.STUDENT)));
+        when(cryptoService.submitterHash(1L)).thenReturn("student-hash");
+        when(courseRepository.findBySubmitterHash("student-hash")).thenReturn(List.of(reservation));
+
+        List<StudentReadDTO> result = courseService.S_Read(1L);
+
+        assertThat(result).singleElement().satisfies(dto -> {
+            assertThat(dto.getTeacherId()).isEqualTo(2L);
+            assertThat(dto.getTeacherName()).isEqualTo("사용자2");
         });
     }
 

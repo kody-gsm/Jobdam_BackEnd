@@ -620,15 +620,16 @@ class CommonServiceTest {
 
     @Test
     void studentReadReturnsStatusInFrontendFormat() {
+        User teacher = user(2L, UserRole.WEE_TEACHER);
         CommonEntity waiting = CommonEntity.builder()
                 .reservation_id(1L).date(LocalDate.of(2026, 9, 10)).period("1교시")
-                .submitterHash("student-hash").state(StateEnum.WAITING).build();
+                .submitterHash("student-hash").teacher(teacher).state(StateEnum.WAITING).build();
         CommonEntity reserved = CommonEntity.builder()
                 .reservation_id(2L).date(LocalDate.of(2026, 9, 10)).period("2교시")
-                .submitterHash("student-hash").state(StateEnum.RESERVED).build();
+                .submitterHash("student-hash").teacher(teacher).state(StateEnum.RESERVED).build();
         CommonEntity canceled = CommonEntity.builder()
                 .reservation_id(3L).date(LocalDate.of(2026, 9, 10)).period("3교시")
-                .submitterHash("student-hash").state(StateEnum.CANCEL).build();
+                .submitterHash("student-hash").teacher(teacher).state(StateEnum.CANCEL).build();
 
         when(userRepository.findById(1L)).thenReturn(Optional.of(user(1L, UserRole.STUDENT)));
         when(cryptoService.submitterHash(1L)).thenReturn("student-hash");
@@ -638,6 +639,10 @@ class CommonServiceTest {
 
         assertThat(result).extracting(StudentReadDTO::getStatus)
                 .containsExactly(ReservationStatus.WAITING, ReservationStatus.RESERVED, ReservationStatus.CANCELED);
+        assertThat(result).allSatisfy(dto -> {
+            assertThat(dto.getTeacherId()).isEqualTo(2L);
+            assertThat(dto.getTeacherName()).isEqualTo("사용자2");
+        });
     }
 
     @Test
