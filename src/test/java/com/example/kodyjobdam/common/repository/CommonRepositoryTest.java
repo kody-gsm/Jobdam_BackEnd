@@ -71,10 +71,30 @@ class CommonRepositoryTest {
         assertThat(commonRepository.existsActiveReservation("waiting-student", DATE, "4교시")).isFalse();
     }
 
+    @Test
+    void findAllForUpdateByStateAndDateBeforeReadsOnlyWaitingBeforeToday() {
+        User teacher = saveUser("teacher@test.com");
+        LocalDate today = DATE.plusDays(1);
+        CommonEntity pastWaiting = save(teacher, DATE, "3교시", "a", StateEnum.WAITING);
+        save(teacher, DATE, "4교시", "b", StateEnum.RESERVED);
+        save(teacher, DATE, "5교시", "c", StateEnum.CANCEL);
+        save(teacher, today, "3교시", "d", StateEnum.WAITING);
+        entityManager.flush();
+        entityManager.clear();
+
+        assertThat(commonRepository.findAllForUpdateByStateAndDateBefore(StateEnum.WAITING, today))
+                .extracting(CommonEntity::getReservation_id)
+                .containsExactly(pastWaiting.getReservation_id());
+    }
+
     private CommonEntity save(User teacher, String period, String submitterHash, StateEnum state) {
+        return save(teacher, DATE, period, submitterHash, state);
+    }
+
+    private CommonEntity save(User teacher, LocalDate date, String period, String submitterHash, StateEnum state) {
         CommonEntity entity = CommonEntity.builder()
                 .teacher(teacher)
-                .date(DATE)
+                .date(date)
                 .period(period)
                 .submitterHash(submitterHash)
                 .state(state)
