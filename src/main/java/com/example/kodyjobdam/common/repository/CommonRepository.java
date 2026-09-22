@@ -36,11 +36,13 @@ public interface CommonRepository extends JpaRepository<CommonEntity, Long> {
                                                                 @Param("period") String period,
                                                                 @Param("teacherId") Long teacherId);
 
-    /** 날짜가 지난 신청을 잠가서 읽는다. 같은 신청을 선생님이 동시에 수락해도 한쪽만 반영된다. */
+    List<CommonEntity> findAllByStateAndDateLessThanEqual(StateEnum state, LocalDate date);
+
+    /** 만료할 신청을 잠가서 다시 읽는다. 그사이 선생님이 수락해 상태가 바뀐 신청은 빠진다. */
     @Lock(LockModeType.PESSIMISTIC_WRITE)
-    @Query("select c from CommonEntity c where c.state = :state and c.date < :date order by c.reservation_id")
-    List<CommonEntity> findAllForUpdateByStateAndDateBefore(@Param("state") StateEnum state,
-                                                          @Param("date") LocalDate date);
+    @Query("select c from CommonEntity c where c.reservation_id in :ids and c.state = :state order by c.reservation_id")
+    List<CommonEntity> findAllForUpdateByIdInAndState(@Param("ids") Collection<Long> ids,
+                                                     @Param("state") StateEnum state);
 
     boolean existsBySubmitterHashAndDateAndPeriodAndStateNot(String submitterHash, LocalDate date, String period,
                                                             StateEnum state);
