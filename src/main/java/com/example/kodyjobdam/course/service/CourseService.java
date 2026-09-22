@@ -294,20 +294,36 @@ public class CourseService {
         publishReservationChange(entity, submitter.getId(), "REJECTED");
     }
 
-    /** 선생님이 수락하지 않은 채 날짜가 지난 신청을 취소하고 학생에게 알린다. 취소한 개수를 돌려준다. */
+    /** 선생님이 수락하지 않은 채 상담 시작 시각이 지난 신청을 취소하고 학생에게 알린다. 취소한 개수를 돌려준다. */
     @Transactional
-    public int expireWaitingReservations(LocalDate today) {
-        List<CourseEntity> expired = courseRepository.findAllForUpdateByStateAndDateBefore(StateEnum.WAITING, today);
+    public int expireWaitingReservations(LocalDateTime now) {
+        List<Long> startedIds = courseRepository.findAllByStateAndDateLessThanEqual(StateEnum.WAITING, now.toLocalDate())
+                .stream()
+                .filter(entity -> hasCounselingStarted(entity.getDate(), entity.getPeriod(), now))
+                .map(CourseEntity::getReservation_id)
+                .toList();
+        if (startedIds.isEmpty()) {
+            return 0;
+        }
+
+        List<CourseEntity> expired = courseRepository.findAllForUpdateByIdInAndState(startedIds, StateEnum.WAITING);
         for (CourseEntity entity : expired) {
             entity.setState(StateEnum.CANCEL);
             User submitter = findSubmitter(entity);
-            notifyExpired(entity);
+            notifyExpired(entity, submitter);
             publishReservationChange(entity, submitter.getId(), "EXPIRED");
         }
         return expired.size();
     }
 
-    private void notifyExpired(CourseEntity entity) {
+    /** 표에 없는 교시는 시작 시각을 모르므로 날짜가 지나야 시작된 것으로 본다. */
+    private boolean hasCounselingStarted(LocalDate date, String period, LocalDateTime now) {
+        return CounselingPeriod.from(period)
+                .map(schedule -> !now.isBefore(schedule.startsAt(date)))
+                .orElse(date.isBefore(now.toLocalDate()));
+    }
+
+    private void notifyExpired(CourseEntity entity, User submitter) {
         LocalDateTime expiresAt = notificationExpirationService.counselingExpiresAt(entity.getDate());
         // 알림 보관 기간까지 지난 오래된 신청은 알려도 곧바로 지워지므로 취소만 한다.
         if (!expiresAt.isAfter(notificationExpirationService.now())) {
@@ -315,10 +331,10 @@ public class CourseService {
         }
 
         notificationService.notifyUser(
-                findSubmitter(entity),
+                submitter,
                 NotificationType.COUNSELING_EXPIRED,
                 "상담 신청 만료",
-                entity.getDate() + " " + entity.getPeriod() + " 상담 신청이 선생님의 수락 없이 날짜가 지나 취소되었습니다.",
+                entity.getDate() + " " + entity.getPeriod() + " 상담 신청이 선생님의 수락 없이 상담 시간이 되어 취소되었습니다.",
                 entity.getReservation_id(),
                 "/student/course/" + entity.getReservation_id(),
                 expiresAt
