@@ -31,9 +31,11 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.test.util.ReflectionTestUtils;
 
+import java.time.Clock;
 import java.time.DayOfWeek;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.ZoneId;
 import java.util.List;
 import java.util.Optional;
 
@@ -124,35 +126,55 @@ class CourseServiceTest {
     }
 
     @Test
-    void expireWaitingReservationsCancelsPastRequestsAndNotifiesStudents() {
-        LocalDate today = LocalDate.of(2026, 9, 21);
-        LocalDate yesterday = today.minusDays(1);
+    void expireWaitingReservationsCancelsRequestsWhosePeriodHasStarted() {
+        LocalDateTime now = LocalDateTime.of(2026, 9, 21, 15, 30);
+        LocalDate today = now.toLocalDate();
         User student = user(1L, UserRole.STUDENT);
-        CourseEntity pastWaiting = CourseEntity.builder()
-                .reservation_id(100L).teacher(user(2L, UserRole.TEACHER)).date(yesterday).period("3교시")
+        CourseEntity seventhPeriod = CourseEntity.builder()
+                .reservation_id(100L).teacher(user(2L, UserRole.TEACHER)).date(today).period("7교시")
+                .encryptedUserId("encrypted-user-id").state(StateEnum.WAITING).build();
+        CourseEntity eighthPeriod = CourseEntity.builder()
+                .reservation_id(101L).teacher(user(2L, UserRole.TEACHER)).date(today).period("8교시")
                 .encryptedUserId("encrypted-user-id").state(StateEnum.WAITING).build();
 
-        when(courseRepository.findAllForUpdateByStateAndDateBefore(StateEnum.WAITING, today))
-                .thenReturn(List.of(pastWaiting));
-        when(notificationExpirationService.counselingExpiresAt(yesterday))
-                .thenReturn(LocalDateTime.of(2026, 12, 19, 0, 0));
-        when(notificationExpirationService.now()).thenReturn(LocalDateTime.of(2026, 9, 21, 0, 5));
+        when(courseRepository.findAllByStateAndDateLessThanEqual(StateEnum.WAITING, today))
+                .thenReturn(List.of(seventhPeriod, eighthPeriod));
+        when(courseRepository.findAllForUpdateByIdInAndState(List.of(100L), StateEnum.WAITING))
+                .thenReturn(List.of(seventhPeriod));
+        when(notificationExpirationService.counselingExpiresAt(today))
+                .thenReturn(LocalDateTime.of(2026, 12, 20, 0, 0));
+        when(notificationExpirationService.now()).thenReturn(now);
         when(cryptoService.decrypt("encrypted-user-id")).thenReturn("1");
         when(userRepository.findById(1L)).thenReturn(Optional.of(student));
 
-        int expired = courseService.expireWaitingReservations(today);
+        int expired = courseService.expireWaitingReservations(now);
 
         assertThat(expired).isEqualTo(1);
-        assertThat(pastWaiting.getState()).isEqualTo(StateEnum.CANCEL);
+        assertThat(seventhPeriod.getState()).isEqualTo(StateEnum.CANCEL);
+        assertThat(eighthPeriod.getState()).isEqualTo(StateEnum.WAITING);
         verify(notificationService).notifyUser(
                 eq(student),
                 eq(NotificationType.COUNSELING_EXPIRED),
                 eq("상담 신청 만료"),
-                eq("2026-09-20 3교시 상담 신청이 선생님의 수락 없이 날짜가 지나 취소되었습니다."),
+                eq("2026-09-21 7교시 상담 신청이 선생님의 수락 없이 상담 시간이 되어 취소되었습니다."),
                 eq(100L),
                 eq("/student/course/100"),
-                eq(LocalDateTime.of(2026, 12, 19, 0, 0))
+                eq(LocalDateTime.of(2026, 12, 20, 0, 0))
         );
+    }
+
+    @Test
+    void createReservationWithinThirtyMinutesBeforeStartIsRejected() {
+        CreateDTO dto = createDto(2L);
+        // 3교시는 10:40에 시작한다.
+        ZoneId zone = ZoneId.of("Asia/Seoul");
+        ReflectionTestUtils.setField(courseService, "clock",
+                Clock.fixed(dto.getDate().atTime(10, 10).atZone(zone).toInstant(), zone));
+
+        assertThatThrownBy(() -> courseService.createReservation(dto, 1L))
+                .isInstanceOf(ReservationException.class)
+                .hasMessage("상담 시작 30분 전부터는 신청할 수 없습니다.");
+        verify(courseRepository, never()).save(any());
     }
 
     @Test

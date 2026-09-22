@@ -11,6 +11,7 @@ import org.springframework.boot.test.autoconfigure.jdbc.AutoConfigureTestDatabas
 import org.springframework.boot.test.autoconfigure.orm.jpa.DataJpaTest;
 
 import java.time.LocalDate;
+import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -72,19 +73,34 @@ class CommonRepositoryTest {
     }
 
     @Test
-    void findAllForUpdateByStateAndDateBeforeReadsOnlyWaitingBeforeToday() {
+    void findAllByStateAndDateLessThanEqualReadsWaitingUpToToday() {
         User teacher = saveUser("teacher@test.com");
         LocalDate today = DATE.plusDays(1);
         CommonEntity pastWaiting = save(teacher, DATE, "3교시", "a", StateEnum.WAITING);
         save(teacher, DATE, "4교시", "b", StateEnum.RESERVED);
         save(teacher, DATE, "5교시", "c", StateEnum.CANCEL);
-        save(teacher, today, "3교시", "d", StateEnum.WAITING);
+        CommonEntity todayWaiting = save(teacher, today, "3교시", "d", StateEnum.WAITING);
+        save(teacher, today.plusDays(1), "3교시", "e", StateEnum.WAITING);
         entityManager.flush();
         entityManager.clear();
 
-        assertThat(commonRepository.findAllForUpdateByStateAndDateBefore(StateEnum.WAITING, today))
+        assertThat(commonRepository.findAllByStateAndDateLessThanEqual(StateEnum.WAITING, today))
                 .extracting(CommonEntity::getReservation_id)
-                .containsExactly(pastWaiting.getReservation_id());
+                .containsExactlyInAnyOrder(pastWaiting.getReservation_id(), todayWaiting.getReservation_id());
+    }
+
+    @Test
+    void findAllForUpdateByIdInAndStateSkipsRequestsNoLongerWaiting() {
+        User teacher = saveUser("teacher@test.com");
+        CommonEntity stillWaiting = save(teacher, "3교시", "a", StateEnum.WAITING);
+        CommonEntity acceptedMeanwhile = save(teacher, "4교시", "b", StateEnum.RESERVED);
+        entityManager.flush();
+        entityManager.clear();
+
+        assertThat(commonRepository.findAllForUpdateByIdInAndState(
+                List.of(stillWaiting.getReservation_id(), acceptedMeanwhile.getReservation_id()), StateEnum.WAITING))
+                .extracting(CommonEntity::getReservation_id)
+                .containsExactly(stillWaiting.getReservation_id());
     }
 
     private CommonEntity save(User teacher, String period, String submitterHash, StateEnum state) {
