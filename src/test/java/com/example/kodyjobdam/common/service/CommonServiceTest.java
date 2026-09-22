@@ -336,6 +336,18 @@ class CommonServiceTest {
     }
 
     @Test
+    void createReservationWithinThirtyMinutesBeforeStartIsRejected() {
+        CreateDTO dto = createDto(2L);
+        // 3교시는 10:40에 시작한다.
+        fixClock(dto.getDate().atTime(10, 10));
+
+        assertThatThrownBy(() -> commonService.createReservation(dto, 1L))
+                .isInstanceOf(ReservationException.class)
+                .hasMessage("상담 시작 30분 전부터는 신청할 수 없습니다.");
+        verify(commonRepository, never()).save(any());
+    }
+
+    @Test
     void rejectNotifiesStudent() {
         User student = user(1L, UserRole.STUDENT);
         User teacher = user(2L, UserRole.WEE_TEACHER);

@@ -60,6 +60,9 @@ public class CourseService {
     /** 상담 시작 이 시간 전부터는 학생이 취소할 수 없다. */
     private static final Duration CANCEL_DEADLINE = Duration.ofHours(1);
 
+    /** 상담 시작 이 시간 전부터는 학생이 신청할 수 없다. */
+    private static final Duration APPLY_DEADLINE = Duration.ofMinutes(30);
+
     private final CourseRepository courseRepository;
     private final CourseWeeklyLockRepository weeklyLockRepository;
     private final CommonRepository commonRepository;
@@ -80,6 +83,7 @@ public class CourseService {
     @Transactional
     public void createReservation(CreateDTO dto, Long id) {
         String period = validateReservationSlot(dto.getDate(), dto.getPeriod());
+        validateBeforeApplyDeadline(dto.getDate(), period);
         dto.setPeriod(period);
         validateNotHoliday(dto.getDate());
 
@@ -786,5 +790,12 @@ public class CourseService {
             throw ReservationException.badRequest("이미 시작된 교시는 신청할 수 없습니다.");
         }
         return counselingPeriod.getLabel();
+    }
+
+    private void validateBeforeApplyDeadline(LocalDate date, String period) {
+        LocalDateTime startsAt = CounselingPeriod.from(period).orElseThrow().startsAt(date);
+        if (!LocalDateTime.now(clock).isBefore(startsAt.minus(APPLY_DEADLINE))) {
+            throw ReservationException.badRequest("상담 시작 30분 전부터는 신청할 수 없습니다.");
+        }
     }
 }

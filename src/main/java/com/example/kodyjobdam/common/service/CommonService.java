@@ -70,6 +70,9 @@ public class CommonService {
     /** 상담 시작 이 시간 전부터는 학생이 취소할 수 없다. */
     private static final Duration CANCEL_DEADLINE = Duration.ofHours(1);
 
+    /** 상담 시작 이 시간 전부터는 학생이 신청할 수 없다. */
+    private static final Duration APPLY_DEADLINE = Duration.ofMinutes(30);
+
     /** 상시 잠금 교시. 클라이언트가 쓰는 교시 라벨("4교시", "점심시간")로 적는다. 쉼표로 여러 개를 지정할 수 있다. */
     @Value("${reservation.locked-periods:}")
     private Set<String> lockedPeriods;
@@ -84,6 +87,7 @@ public class CommonService {
     @Transactional
     public void createReservation(CreateDTO dto, Long id) {
         String period = validateReservationSlot(dto.getDate(), dto.getPeriod());
+        validateBeforeApplyDeadline(dto.getDate(), period);
         dto.setPeriod(period);
         validateNotHoliday(dto.getDate());
         validateNotLockedPeriod(period);
@@ -823,5 +827,12 @@ public class CommonService {
             throw ReservationException.badRequest("이미 시작된 교시는 신청할 수 없습니다.");
         }
         return counselingPeriod.getLabel();
+    }
+
+    private void validateBeforeApplyDeadline(LocalDate date, String period) {
+        LocalDateTime startsAt = CounselingPeriod.from(period).orElseThrow().startsAt(date);
+        if (!LocalDateTime.now(clock).isBefore(startsAt.minus(APPLY_DEADLINE))) {
+            throw ReservationException.badRequest("상담 시작 30분 전부터는 신청할 수 없습니다.");
+        }
     }
 }

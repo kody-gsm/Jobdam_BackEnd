@@ -31,9 +31,11 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.test.util.ReflectionTestUtils;
 
+import java.time.Clock;
 import java.time.DayOfWeek;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.ZoneId;
 import java.util.List;
 import java.util.Optional;
 
@@ -159,6 +161,20 @@ class CourseServiceTest {
                 eq("/student/course/100"),
                 eq(LocalDateTime.of(2026, 12, 20, 0, 0))
         );
+    }
+
+    @Test
+    void createReservationWithinThirtyMinutesBeforeStartIsRejected() {
+        CreateDTO dto = createDto(2L);
+        // 3교시는 10:40에 시작한다.
+        ZoneId zone = ZoneId.of("Asia/Seoul");
+        ReflectionTestUtils.setField(courseService, "clock",
+                Clock.fixed(dto.getDate().atTime(10, 10).atZone(zone).toInstant(), zone));
+
+        assertThatThrownBy(() -> courseService.createReservation(dto, 1L))
+                .isInstanceOf(ReservationException.class)
+                .hasMessage("상담 시작 30분 전부터는 신청할 수 없습니다.");
+        verify(courseRepository, never()).save(any());
     }
 
     @Test
