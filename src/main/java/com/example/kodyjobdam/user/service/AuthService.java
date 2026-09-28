@@ -47,6 +47,7 @@ public class AuthService {
     private final PasswordEncoder passwordEncoder;
     private final JwtTokenProvider jwtTokenProvider;
     private final EmailVerificationService emailVerificationService;
+    private final EmailVerificationAttemptService emailVerificationAttemptService;
     private final DataGsmStudentSyncService dataGsmStudentSyncService;
     private final SecurityUtil securityUtil;
     private final ProfileImageStorageService profileImageStorageService;
@@ -301,15 +302,12 @@ public class AuthService {
                 .orElseThrow(() -> new IllegalArgumentException("Invalid verification code."));
 
         if (verificationCode.getExpiresAt().isBefore(LocalDateTime.now())) {
-            verificationCode.setUsedAt(LocalDateTime.now());
+            emailVerificationAttemptService.markUsed(verificationCode.getId());
             throw new IllegalArgumentException("Verification code has expired.");
         }
 
         if (!verificationCode.getCodeHash().equals(hashToken(code))) {
-            verificationCode.setFailedAttempts(verificationCode.getFailedAttempts() + 1);
-            if (verificationCode.getFailedAttempts() >= emailCodeMaxFailedAttempts) {
-                verificationCode.setUsedAt(LocalDateTime.now());
-            }
+            emailVerificationAttemptService.recordFailedAttempt(verificationCode.getId(), emailCodeMaxFailedAttempts);
             throw new IllegalArgumentException("Invalid verification code.");
         }
 

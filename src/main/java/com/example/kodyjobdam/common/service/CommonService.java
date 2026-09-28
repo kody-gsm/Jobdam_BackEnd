@@ -21,8 +21,10 @@ import com.example.kodyjobdam.common.repository.CommonWeeklyLockRepository;
 import com.example.kodyjobdam.common.repository.ReservationSlot;
 import com.example.kodyjobdam.course.repository.CourseRepository;
 import com.example.kodyjobdam.notification.entity.NotificationType;
+import com.example.kodyjobdam.notification.dto.ReservationRealtimeEvent;
 import com.example.kodyjobdam.notification.service.NotificationExpirationService;
 import com.example.kodyjobdam.notification.service.NotificationService;
+import com.example.kodyjobdam.notification.service.ReservationRealtimeService;
 import com.example.kodyjobdam.schedule.service.ScheduleService;
 import com.example.kodyjobdam.user.UserRepository;
 import com.example.kodyjobdam.user.UserRole;
@@ -40,6 +42,7 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collection;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
@@ -60,11 +63,15 @@ public class CommonService {
     private final UserRepository userRepository;
     private final NotificationService notificationService;
     private final NotificationExpirationService notificationExpirationService;
+    private final ReservationRealtimeService reservationRealtimeService;
     private final CounselingReservationCryptoService cryptoService;
     private final ScheduleService scheduleService;
 
     /** 상담 시작 이 시간 전부터는 학생이 취소할 수 없다. */
     private static final Duration CANCEL_DEADLINE = Duration.ofHours(1);
+
+    /** 상담 시작 이 시간 전부터는 학생이 신청할 수 없다. */
+    private static final Duration APPLY_DEADLINE = Duration.ofMinutes(30);
 
     /** 상시 잠금 교시. 클라이언트가 쓰는 교시 라벨("4교시", "점심시간")로 적는다. 쉼표로 여러 개를 지정할 수 있다. */
     @Value("${reservation.locked-periods:}")
@@ -79,28 +86,31 @@ public class CommonService {
 
     @Transactional
     public void createReservation(CreateDTO dto, Long id) {
+        String period = validateReservationSlot(dto.getDate(), dto.getPeriod());
+        validateBeforeApplyDeadline(dto.getDate(), period);
+        dto.setPeriod(period);
         validateNotHoliday(dto.getDate());
-        validateNotLockedPeriod(dto.getPeriod());
+        validateNotLockedPeriod(period);
 
-        User user = userRepository.findById(id)
+        User user = userRepository.findByIdForUpdate(id)
                 .orElseThrow(() -> ReservationException.notFound("회원이 없습니다."));
         User teacher = findTeacher(dto.getTeacherId(), id);
         validateCategory(dto.getCategory());
-        validateNotWeeklyLocked(dto.getDate(), dto.getPeriod(), teacher.getId());
+        validateNotWeeklyLocked(dto.getDate(), period, teacher.getId());
         String submitterHash = cryptoService.submitterHash(id);
 
-        for (CommonEntity entity : commonRepository.findAllByDateAndPeriod(dto.getDate(), dto.getPeriod())) {
+        for (CommonEntity entity : commonRepository.findAllByDateAndPeriod(dto.getDate(), period)) {
             if (submitterHash.equals(entity.getSubmitterHash())
                     && entity.getState() != StateEnum.CANCEL) {
                 throw ReservationException.conflict("이미 예약한 시간입니다.");
             }
         }
-        if (courseRepository.existsActiveReservation(submitterHash, dto.getDate(), dto.getPeriod())) {
+        if (courseRepository.existsActiveReservation(submitterHash, dto.getDate(), period)) {
             throw ReservationException.conflict("같은 시간에 신청한 진로 상담이 있습니다.");
         }
 
         for (CommonEntity entity : commonRepository.findAllByDateAndPeriodAndTeacher_Id(
-                dto.getDate(), dto.getPeriod(), teacher.getId())) {
+                dto.getDate(), period, teacher.getId())) {
             if (entity.getState() == StateEnum.LOCKED) {
                 throw ReservationException.locked("잠긴 날짜 입니다.");
             }
@@ -127,32 +137,36 @@ public class CommonService {
                 "/teacher/common/" + reservation.getReservation_id(),
                 notificationExpirationService.counselingExpiresAt(reservation.getDate())
         );
+        publishReservationChange(reservation, user.getId(), "REQUESTED");
     }
 
     @Transactional
     public void createReservationByTeacher(TeacherCreateDTO dto, Long teacherId) {
+        String period = validateReservationSlot(dto.getDate(), dto.getPeriod());
+        dto.setPeriod(period);
         validateNotHoliday(dto.getDate());
-        validateNotLockedPeriod(dto.getPeriod());
+        validateNotLockedPeriod(period);
 
         User teacher = findTeacher(teacherId);
-        User student = findStudent(dto.getStudentId());
+        User student = findStudentForUpdate(dto.getStudentId());
         validateCategory(dto.getCategory());
-        validateNotWeeklyLocked(dto.getDate(), dto.getPeriod(), teacher.getId());
+        validateNotWeeklyLocked(dto.getDate(), period, teacher.getId());
         String submitterHash = cryptoService.submitterHash(student.getId());
 
-        for (CommonEntity entity : commonRepository.findAllByDateAndPeriod(dto.getDate(), dto.getPeriod())) {
+        for (CommonEntity entity : commonRepository.findAllByDateAndPeriod(dto.getDate(), period)) {
             if (submitterHash.equals(entity.getSubmitterHash())
                     && entity.getState() != StateEnum.CANCEL) {
                 throw ReservationException.conflict("이미 예약한 시간입니다.");
             }
         }
-        if (courseRepository.existsActiveReservation(submitterHash, dto.getDate(), dto.getPeriod())) {
+        if (courseRepository.existsActiveReservation(submitterHash, dto.getDate(), period)) {
             throw ReservationException.conflict("같은 시간에 신청한 진로 상담이 있습니다.");
         }
 
         // 같은 시간 예약을 잠근 뒤 상태를 봐야 학생 신청 수락과 동시에 들어와도 둘 다 통과하지 않는다.
-        for (CommonEntity entity : commonRepository.findAllForUpdateByDateAndPeriodAndTeacherId(
-                dto.getDate(), dto.getPeriod(), teacher.getId())) {
+        List<CommonEntity> slotReservations = commonRepository.findAllForUpdateByDateAndPeriodAndTeacherId(
+                dto.getDate(), period, teacher.getId());
+        for (CommonEntity entity : slotReservations) {
             if (entity.getState() == StateEnum.LOCKED) {
                 throw ReservationException.locked("잠긴 날짜 입니다.");
             }
@@ -171,7 +185,7 @@ public class CommonService {
                 .encryptedUserName(cryptoService.encrypt(student.getName()))
                 .encryptedStudentNumber(cryptoService.encrypt(student.getStudent_number()))
                 .date(dto.getDate())
-                .period(dto.getPeriod())
+                .period(period)
                 .state(StateEnum.RESERVED)
                 .build());
         notificationService.notifyUser(
@@ -183,6 +197,8 @@ public class CommonService {
                 "/student/common/" + reservation.getReservation_id(),
                 notificationExpirationService.counselingExpiresAt(reservation.getDate())
         );
+        publishReservationChange(reservation, student.getId(), "CREATED_BY_TEACHER");
+        cancelOtherWaitingReservations(reservation, slotReservations);
     }
 
     @Transactional
@@ -196,6 +212,7 @@ public class CommonService {
         validateCancelDeadline(entity.getDate(), entity.getPeriod());
 
         entity.setState(StateEnum.CANCEL);
+        publishReservationChange(entity, userId, "CANCELED_BY_STUDENT");
     }
 
     @Transactional
@@ -233,6 +250,7 @@ public class CommonService {
                 "/student/common/" + entity.getReservation_id(),
                 notificationExpirationService.counselingExpiresAt(entity.getDate())
         );
+        publishReservationChange(entity, submitter.getId(), "APPROVED");
         cancelOtherWaitingReservations(entity, slotReservations);
     }
 
@@ -255,6 +273,7 @@ public class CommonService {
                     "/student/common/" + other.getReservation_id(),
                     notificationExpirationService.counselingExpiresAt(other.getDate())
             );
+            publishReservationChange(other, otherSubmitter.getId(), "AUTO_CANCELED");
         }
     }
 
@@ -282,20 +301,39 @@ public class CommonService {
                 "/student/common/" + entity.getReservation_id(),
                 notificationExpirationService.counselingExpiresAt(entity.getDate())
         );
+        publishReservationChange(entity, submitter.getId(), "REJECTED");
     }
 
-    /** 선생님이 수락하지 않은 채 날짜가 지난 신청을 취소하고 학생에게 알린다. 취소한 개수를 돌려준다. */
+    /** 선생님이 수락하지 않은 채 상담 시작 시각이 지난 신청을 취소하고 학생에게 알린다. 취소한 개수를 돌려준다. */
     @Transactional
-    public int expireWaitingReservations(LocalDate today) {
-        List<CommonEntity> expired = commonRepository.findAllForUpdateByStateAndDateBefore(StateEnum.WAITING, today);
+    public int expireWaitingReservations(LocalDateTime now) {
+        List<Long> startedIds = commonRepository.findAllByStateAndDateLessThanEqual(StateEnum.WAITING, now.toLocalDate())
+                .stream()
+                .filter(entity -> hasCounselingStarted(entity.getDate(), entity.getPeriod(), now))
+                .map(CommonEntity::getReservation_id)
+                .toList();
+        if (startedIds.isEmpty()) {
+            return 0;
+        }
+
+        List<CommonEntity> expired = commonRepository.findAllForUpdateByIdInAndState(startedIds, StateEnum.WAITING);
         for (CommonEntity entity : expired) {
             entity.setState(StateEnum.CANCEL);
-            notifyExpired(entity);
+            User submitter = findSubmitter(entity);
+            notifyExpired(entity, submitter);
+            publishReservationChange(entity, submitter.getId(), "EXPIRED");
         }
         return expired.size();
     }
 
-    private void notifyExpired(CommonEntity entity) {
+    /** 표에 없는 교시는 시작 시각을 모르므로 날짜가 지나야 시작된 것으로 본다. */
+    private boolean hasCounselingStarted(LocalDate date, String period, LocalDateTime now) {
+        return CounselingPeriod.from(period)
+                .map(schedule -> !now.isBefore(schedule.startsAt(date)))
+                .orElse(date.isBefore(now.toLocalDate()));
+    }
+
+    private void notifyExpired(CommonEntity entity, User submitter) {
         LocalDateTime expiresAt = notificationExpirationService.counselingExpiresAt(entity.getDate());
         // 알림 보관 기간까지 지난 오래된 신청은 알려도 곧바로 지워지므로 취소만 한다.
         if (!expiresAt.isAfter(notificationExpirationService.now())) {
@@ -303,10 +341,10 @@ public class CommonService {
         }
 
         notificationService.notifyUser(
-                findSubmitter(entity),
+                submitter,
                 NotificationType.COUNSELING_EXPIRED,
                 "상담 신청 만료",
-                entity.getDate() + " " + entity.getPeriod() + " 상담 신청이 선생님의 수락 없이 날짜가 지나 취소되었습니다.",
+                entity.getDate() + " " + entity.getPeriod() + " 상담 신청이 선생님의 수락 없이 상담 시간이 되어 취소되었습니다.",
                 entity.getReservation_id(),
                 "/student/common/" + entity.getReservation_id(),
                 expiresAt
@@ -454,10 +492,21 @@ public class CommonService {
             if (entity.getDate().getDayOfWeek() != dayOfWeek) {
                 continue;
             }
+            if (!isFutureReservationForWeeklyLock(entity.getDate(), period)) {
+                continue;
+            }
             if (entity.getState() == StateEnum.WAITING || entity.getState() == StateEnum.RESERVED) {
                 entity.setState(StateEnum.CANCEL);
             }
         }
+    }
+
+    private boolean isFutureReservationForWeeklyLock(LocalDate date, String period) {
+        CounselingPeriod schedule = CounselingPeriod.from(period).orElse(null);
+        if (schedule == null) {
+            return date.isAfter(LocalDate.now(clock));
+        }
+        return LocalDateTime.now(clock).isBefore(schedule.startsAt(date));
     }
 
     private void validateWeeklyLockRequest(WeeklyLockDTO dto) {
@@ -731,5 +780,59 @@ public class CommonService {
             throw ReservationException.badRequest("학생 계정만 선택할 수 있습니다.");
         }
         return student;
+    }
+
+    private User findStudentForUpdate(Long studentId) {
+        if (studentId == null) {
+            throw ReservationException.badRequest("학생을 선택해주세요.");
+        }
+
+        User student = userRepository.findByIdForUpdate(studentId)
+                .orElseThrow(() -> ReservationException.notFound("학생을 찾을 수 없습니다."));
+        if (student.getRole() != UserRole.STUDENT) {
+            throw ReservationException.badRequest("학생 계정만 선택할 수 있습니다.");
+        }
+        return student;
+    }
+
+    private void publishReservationChange(CommonEntity entity, Long studentId, String action) {
+        Long teacherId = entity.getTeacher() == null ? null : entity.getTeacher().getId();
+        reservationRealtimeService.sendAfterCommit(
+                Arrays.asList(studentId, teacherId),
+                new ReservationRealtimeEvent(
+                        "COMMON",
+                        action,
+                        entity.getReservation_id(),
+                        entity.getDate(),
+                        entity.getPeriod(),
+                        ReservationStatus.from(entity.getState()).name(),
+                        teacherId,
+                        studentId
+                )
+        );
+    }
+
+    private String validateReservationSlot(LocalDate date, String period) {
+        if (date == null) {
+            throw ReservationException.badRequest("날짜를 선택해주세요.");
+        }
+        LocalDate today = LocalDate.now(clock);
+        if (date.isBefore(today)) {
+            throw ReservationException.badRequest("지난 날짜에는 상담을 신청할 수 없습니다.");
+        }
+
+        CounselingPeriod counselingPeriod = CounselingPeriod.from(period)
+                .orElseThrow(() -> ReservationException.badRequest("존재하지 않는 교시입니다."));
+        if (counselingPeriod.hasStarted(date, clock)) {
+            throw ReservationException.badRequest("이미 시작된 교시는 신청할 수 없습니다.");
+        }
+        return counselingPeriod.getLabel();
+    }
+
+    private void validateBeforeApplyDeadline(LocalDate date, String period) {
+        LocalDateTime startsAt = CounselingPeriod.from(period).orElseThrow().startsAt(date);
+        if (!LocalDateTime.now(clock).isBefore(startsAt.minus(APPLY_DEADLINE))) {
+            throw ReservationException.badRequest("상담 시작 30분 전부터는 신청할 수 없습니다.");
+        }
     }
 }

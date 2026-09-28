@@ -143,14 +143,19 @@ public class RecruitService {
     public RecruitResponseDTO update(Long recruitId, RecruitUpdateDTO dto, Long teacherId) {
         RecruitEntity entity = findOrThrow(recruitId);
         validateOwner(entity, teacherId);
+        RecruitPeriod documentPeriod = resolveDocumentPeriod(
+                entity.getDocumentPeriod(), dto.getDocumentPeriod(), dto.getDeadline());
         entity.update(
                 dto.getCompanyName() == null ? entity.getCompanyName() : dto.getCompanyName(),
-                resolveDocumentPeriod(entity.getDocumentPeriod(), dto.getDocumentPeriod(), dto.getDeadline()),
+                documentPeriod,
                 resolvePeriod(dto.getWrittenExamPeriod(), entity.getWrittenExamPeriod()),
                 resolvePeriod(dto.getPracticalExamPeriod(), entity.getPracticalExamPeriod()),
                 resolvePeriod(dto.getCodingTestPeriod(), entity.getCodingTestPeriod()),
                 resolveInterviewPeriod(entity.getInterviewPeriod(), dto.getInterviewPeriod(), dto.getInterviewDate()),
                 dto.getSummary() == null ? entity.getSummary() : dto.getSummary());
+        if (entity.getFormId() != null) {
+            formService.updateDeadlineForRecruit(entity.getFormId(), applicationDeadline(documentPeriod));
+        }
         return RecruitResponseDTO.from(entity);
     }
 

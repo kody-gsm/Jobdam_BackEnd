@@ -16,6 +16,8 @@ public interface EmailVerificationCodeRepository extends JpaRepository<EmailVeri
             EmailVerificationPurpose purpose
     );
 
+    Optional<EmailVerificationCode> findByIdAndUsedAtIsNull(Long id);
+
     @Modifying(clearAutomatically = true, flushAutomatically = true)
     @Query("""
             update EmailVerificationCode e

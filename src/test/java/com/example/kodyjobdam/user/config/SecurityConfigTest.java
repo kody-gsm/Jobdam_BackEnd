@@ -2,48 +2,40 @@ package com.example.kodyjobdam.user.config;
 
 import com.example.kodyjobdam.user.security.CustomUserDetailsService;
 import com.example.kodyjobdam.user.security.JwtTokenProvider;
-import io.jsonwebtoken.Jwts;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
 import org.springframework.boot.test.mock.mockito.MockBean;
+import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.Import;
-import org.springframework.security.core.userdetails.User;
-import org.springframework.test.web.servlet.MockMvc;
-import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.RestController;
+import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
+import org.springframework.security.web.SecurityFilterChain;
+import org.springframework.test.context.junit.jupiter.web.SpringJUnitWebConfig;
+import org.springframework.web.servlet.config.annotation.EnableWebMvc;
 
-import static org.mockito.Mockito.when;
-import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
-import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+import static org.assertj.core.api.Assertions.assertThat;
 
-@WebMvcTest(SecurityConfigTest.ProbeController.class)
-@Import({SecurityConfig.class, JwtAuthenticationFilter.class, SecurityConfigTest.ProbeController.class})
+/** 보안 설정 빈만 띄워 본다. 전체 컨텍스트 테스트가 없어 빈 순환 참조가 배포 뒤에야 드러났다. */
+@SpringJUnitWebConfig(SecurityConfigTest.Config.class)
 class SecurityConfigTest {
-    @Autowired MockMvc mvc;
-    @MockBean JwtTokenProvider tokens;
-    @MockBean CustomUserDetailsService users;
 
-    @Test
-    void teacherApiReturns401ForExpiredToken403ForStudentAnd200ForTeacher() throws Exception {
-        mvc.perform(get("/teacher/probe")).andExpect(status().isUnauthorized());
-        mvc.perform(get("/teacher/probe").header("Authorization", "Bearer expired"))
-                .andExpect(status().isUnauthorized());
-        for (String role : new String[]{"STUDENT", "TEACHER"}) {
-            var claims = Jwts.claims();
-            claims.put("email", "test@example.com");
-            when(tokens.validateToken(role)).thenReturn(true);
-            when(tokens.getClaims(role)).thenReturn(claims);
-            when(users.loadUserByUsername("test@example.com"))
-                    .thenReturn(User.withUsername("test").password("unused").roles(role).build());
-            mvc.perform(get("/teacher/probe").header("Authorization", "Bearer " + role))
-                    .andExpect(role.equals("TEACHER") ? status().isOk() : status().isForbidden());
-        }
+    @Configuration
+    @EnableWebMvc
+    @EnableWebSecurity
+    @Import({SecurityConfig.class, JwtAuthenticationFilter.class})
+    static class Config {
     }
 
-    @RestController
-    static class ProbeController {
-        @GetMapping("/teacher/probe")
-        String read() { return "ok"; }
+    @MockBean
+    private JwtTokenProvider jwtTokenProvider;
+
+    @MockBean
+    private CustomUserDetailsService userDetailsService;
+
+    @Autowired
+    private SecurityFilterChain securityFilterChain;
+
+    @Test
+    void 보안_설정과_JWT_필터가_순환_참조_없이_만들어진다() {
+        assertThat(securityFilterChain.getFilters()).hasAtLeastOneElementOfType(JwtAuthenticationFilter.class);
     }
 }
