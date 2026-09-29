@@ -63,6 +63,9 @@ class FormServiceTest {
     @Mock
     private org.springframework.context.ApplicationEventPublisher eventPublisher;
 
+    @Mock
+    private com.example.kodyjobdam.notice.service.NoticeAnnouncer noticeAnnouncer;
+
     @InjectMocks
     private FormService formService;
 
@@ -164,6 +167,7 @@ class FormServiceTest {
 
         formService.publish(10L, 2L);
 
+        verify(noticeAnnouncer).announce("만족도 조사", "내용", "/form/10");
         verify(notificationService).notifyAllStudents(
                 eq(NotificationType.FORM_PUBLISHED),
                 eq("새로운 폼"),
@@ -194,8 +198,9 @@ class FormServiceTest {
 
         assertThat(form.getStatus()).isEqualTo(FormStatus.PUBLISHED);
         verify(eventPublisher).publishEvent(new com.example.kodyjobdam.form.event.FormPublishedEvent(10L));
-        // 공고가 공개 알림을 보내므로 폼 쪽에서는 보내지 않는다.
+        // 공고가 공개 알림과 디스코드 공지를 보내므로 폼 쪽에서는 보내지 않는다.
         verify(notificationService, never()).notifyAllStudents(any(), any(), any(), any(), any(), any());
+        verify(noticeAnnouncer, never()).announce(any(), any(), any());
     }
 
     @Test

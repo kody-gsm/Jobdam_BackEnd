@@ -69,6 +69,9 @@ class RecruitServiceTest {
     @Mock
     private DiscordNoticeService discordNoticeService;
 
+    @Mock
+    private com.example.kodyjobdam.notice.service.NoticeAnnouncer noticeAnnouncer;
+
     @InjectMocks
     private RecruitService recruitService;
 
@@ -178,6 +181,8 @@ class RecruitServiceTest {
         assertThat(recruit.getStatus()).isEqualTo(RecruitStatus.PUBLISHED);
         verify(notificationService).notifyAllStudents(
                 eq(NotificationType.RECRUIT_PUBLISHED), any(), any(), eq(10L), any(), any());
+        // 이 경로에는 프론트의 디스코드 발송 호출이 없어 백엔드가 보낸다.
+        verify(noticeAnnouncer).announce("잡담 공고", "새로운 취업 공고가 등록되었습니다.", "/recruit/10");
     }
 
     @Test
