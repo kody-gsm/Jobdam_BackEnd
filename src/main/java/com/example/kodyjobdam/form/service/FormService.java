@@ -11,14 +11,17 @@ import com.example.kodyjobdam.form.entity.FormQuestionEntity;
 import com.example.kodyjobdam.form.entity.FormQuestionOptionEntity;
 import com.example.kodyjobdam.form.entity.FormStatus;
 import com.example.kodyjobdam.form.entity.QuestionType;
+import com.example.kodyjobdam.form.event.FormPublishedEvent;
 import com.example.kodyjobdam.form.repository.FormRepository;
 import com.example.kodyjobdam.form.repository.FormSubmissionRepository;
 import com.example.kodyjobdam.notification.entity.NotificationType;
 import com.example.kodyjobdam.notification.service.NotificationExpirationService;
 import com.example.kodyjobdam.notification.service.NotificationService;
+import com.example.kodyjobdam.recruit.repository.RecruitRepository;
 import com.example.kodyjobdam.user.UserRepository;
 import com.example.kodyjobdam.user.entity.User;
 import lombok.RequiredArgsConstructor;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -43,6 +46,10 @@ public class FormService {
     private final NotificationExpirationService notificationExpirationService;
 
     private final FormFileService formFileService;
+
+    private final RecruitRepository recruitRepository;
+
+    private final ApplicationEventPublisher eventPublisher;
 
     /**
      * 채용 공고에 딸린 기본 지원 폼을 만든다.
@@ -173,6 +180,12 @@ public class FormService {
         }
 
         form.publish();
+        // 공고에 딸린 폼은 공고도 함께 공개하고, 알림도 공고 쪽에서 한 번만 보낸다.
+        if (recruitRepository.existsByForm_Id(formId)) {
+            eventPublisher.publishEvent(new FormPublishedEvent(formId));
+            return FormResponseDTO.from(form);
+        }
+
         notificationService.notifyAllStudents(
                 NotificationType.FORM_PUBLISHED,
                 "새로운 폼",
