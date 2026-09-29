@@ -1,10 +1,12 @@
 package com.example.kodyjobdam.recruit.service;
 
 import com.example.kodyjobdam.common.exception.RecruitException;
+import com.example.kodyjobdam.common.exception.FormException;
 import com.example.kodyjobdam.notification.entity.NotificationType;
 import com.example.kodyjobdam.notification.service.NotificationService;
 import com.example.kodyjobdam.form.entity.FormEntity;
 import com.example.kodyjobdam.form.entity.FormStatus;
+import com.example.kodyjobdam.form.event.FormPublishedEvent;
 import com.example.kodyjobdam.form.service.FormService;
 import com.example.kodyjobdam.notice.service.DiscordNoticeService;
 import com.example.kodyjobdam.recruit.client.GeminiAnalysisResult;
@@ -37,6 +39,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import static org.mockito.AdditionalAnswers.returnsFirstArg;
@@ -158,6 +161,81 @@ class RecruitServiceTest {
 
         verify(formService).publishForRecruit(7L);
         verify(discordNoticeService, never()).sendNotice(any());
+    }
+
+    @Test
+    void publishingRecruitFormAlsoPublishesRecruit() {
+        RecruitEntity recruit = RecruitEntity.builder()
+                .id(10L)
+                .user(user(2L))
+                .companyName("잡담")
+                .form(FormEntity.builder().id(7L).status(FormStatus.PUBLISHED).build())
+                .status(RecruitStatus.DRAFT)
+                .build();
+        when(recruitRepository.findByForm_Id(7L)).thenReturn(Optional.of(recruit));
+        when(recruitRepository.findById(10L)).thenReturn(Optional.of(recruit));
+
+        recruitService.publishForPublishedForm(new FormPublishedEvent(7L, 2L));
+
+        assertThat(recruit.getStatus()).isEqualTo(RecruitStatus.PUBLISHED);
+        verify(notificationService).notifyAllStudents(
+                eq(NotificationType.RECRUIT_PUBLISHED), any(), any(), eq(10L), any(), any());
+    }
+
+    @Test
+    void publishingFormOfAlreadyPublishedRecruitDoesNothing() {
+        RecruitEntity recruit = RecruitEntity.builder()
+                .id(10L)
+                .user(user(2L))
+                .companyName("잡담")
+                .form(FormEntity.builder().id(7L).status(FormStatus.PUBLISHED).build())
+                .status(RecruitStatus.PUBLISHED)
+                .build();
+        when(recruitRepository.findByForm_Id(7L)).thenReturn(Optional.of(recruit));
+
+        recruitService.publishForPublishedForm(new FormPublishedEvent(7L, 2L));
+
+        verify(notificationService, never()).notifyAllStudents(any(), any(), any(), any(), any(), any());
+    }
+
+    @Test
+    void publishingOtherTeachersLinkedFormDoesNotPublishRecruit() {
+        RecruitEntity recruit = RecruitEntity.builder()
+                .id(10L).user(user(2L))
+                .form(FormEntity.builder().id(7L).status(FormStatus.PUBLISHED).build())
+                .status(RecruitStatus.DRAFT).build();
+        when(recruitRepository.findByForm_Id(7L)).thenReturn(Optional.of(recruit));
+
+        assertThatThrownBy(() -> recruitService.publishForPublishedForm(new FormPublishedEvent(7L, 3L)))
+                .isInstanceOf(RecruitException.class);
+        assertThat(recruit.getStatus()).isEqualTo(RecruitStatus.DRAFT);
+    }
+
+    @Test
+    void publishingFormOfClosedRecruitIsRejected() {
+        RecruitEntity recruit = RecruitEntity.builder().id(10L).user(user(2L))
+                .form(FormEntity.builder().id(7L).status(FormStatus.PUBLISHED).build())
+                .status(RecruitStatus.CLOSED).build();
+        when(recruitRepository.findByForm_Id(7L)).thenReturn(Optional.of(recruit));
+
+        assertThatThrownBy(() -> recruitService.publishForPublishedForm(new FormPublishedEvent(7L, 2L)))
+                .isInstanceOf(RecruitException.class);
+        assertThat(recruit.getStatus()).isEqualTo(RecruitStatus.CLOSED);
+    }
+
+    @Test
+    void closedLinkedFormDoesNotPublishRecruit() {
+        RecruitEntity recruit = RecruitEntity.builder()
+                .id(10L).user(user(2L))
+                .form(FormEntity.builder().id(7L).status(FormStatus.CLOSED).build())
+                .status(RecruitStatus.DRAFT).build();
+        when(recruitRepository.findById(10L)).thenReturn(Optional.of(recruit));
+        doThrow(FormException.badRequest("마감된 폼"))
+                .when(formService).publishForRecruit(7L);
+
+        assertThatThrownBy(() -> recruitService.publish(10L, 2L))
+                .isInstanceOf(FormException.class);
+        assertThat(recruit.getStatus()).isEqualTo(RecruitStatus.DRAFT);
     }
 
     @Test

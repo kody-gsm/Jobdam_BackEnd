@@ -8,10 +8,14 @@ import com.example.kodyjobdam.form.entity.FormEntity;
 import com.example.kodyjobdam.form.entity.FormQuestionEntity;
 import com.example.kodyjobdam.form.entity.FormStatus;
 import com.example.kodyjobdam.form.entity.QuestionType;
+import com.example.kodyjobdam.form.event.FormPublishedEvent;
 import com.example.kodyjobdam.form.repository.FormRepository;
 import com.example.kodyjobdam.form.repository.FormSubmissionRepository;
 import com.example.kodyjobdam.notification.entity.NotificationType;
 import com.example.kodyjobdam.notification.service.NotificationService;
+import com.example.kodyjobdam.recruit.entity.RecruitEntity;
+import com.example.kodyjobdam.recruit.entity.RecruitStatus;
+import com.example.kodyjobdam.recruit.repository.RecruitRepository;
 import com.example.kodyjobdam.user.UserRepository;
 import com.example.kodyjobdam.user.UserRole;
 import com.example.kodyjobdam.user.entity.User;
@@ -20,6 +24,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.test.util.ReflectionTestUtils;
 
 import java.time.LocalDateTime;
@@ -56,6 +61,12 @@ class FormServiceTest {
 
     @Mock
     private FormFileService formFileService;
+
+    @Mock
+    private RecruitRepository recruitRepository;
+
+    @Mock
+    private ApplicationEventPublisher eventPublisher;
 
     @InjectMocks
     private FormService formService;
@@ -169,6 +180,73 @@ class FormServiceTest {
     }
 
     @Test
+    void publishRecruitFormLeavesNotificationToRecruit() {
+        FormEntity form = FormEntity.builder()
+                .id(10L)
+                .user(user(2L))
+                .title("잡담 지원서")
+                .status(FormStatus.DRAFT)
+                .build();
+        form.addQuestion(FormQuestionEntity.builder()
+                .orderIndex(1)
+                .type(QuestionType.SHORT_TEXT)
+                .title("학번")
+                .build());
+        when(formRepository.findById(10L)).thenReturn(Optional.of(form));
+        when(recruitRepository.existsByForm_Id(10L)).thenReturn(true);
+
+        formService.publish(10L, 2L);
+
+        assertThat(form.getStatus()).isEqualTo(FormStatus.PUBLISHED);
+        verify(eventPublisher).publishEvent(new FormPublishedEvent(10L, 2L));
+        // 공고가 공개 알림을 보내므로 폼 쪽에서는 보내지 않는다.
+        verify(notificationService, never()).notifyAllStudents(any(), any(), any(), any(), any(), any());
+    }
+
+    @Test
+    void closingRecruitFormAlsoClosesRecruit() {
+        FormEntity form = FormEntity.builder().id(10L).user(user(2L))
+                .status(FormStatus.PUBLISHED).build();
+        RecruitEntity recruit = RecruitEntity.builder()
+                .user(user(2L))
+                .form(form)
+                .status(RecruitStatus.PUBLISHED)
+                .build();
+        when(formRepository.findById(10L)).thenReturn(Optional.of(form));
+        when(recruitRepository.findByForm_Id(10L)).thenReturn(Optional.of(recruit));
+
+        formService.close(10L, 2L);
+
+        assertThat(form.getStatus()).isEqualTo(FormStatus.CLOSED);
+        assertThat(recruit.getStatus()).isEqualTo(RecruitStatus.CLOSED);
+    }
+
+    @Test
+    void closingOtherTeachersRecruitFormIsRejected() {
+        FormEntity form = FormEntity.builder().id(10L).user(user(2L))
+                .status(FormStatus.PUBLISHED).build();
+        RecruitEntity recruit = RecruitEntity.builder().user(user(3L))
+                .form(form).status(RecruitStatus.PUBLISHED).build();
+        when(formRepository.findById(10L)).thenReturn(Optional.of(form));
+        when(recruitRepository.findByForm_Id(10L)).thenReturn(Optional.of(recruit));
+
+        assertThatThrownBy(() -> formService.close(10L, 2L))
+                .isInstanceOf(FormException.class);
+        assertThat(form.getStatus()).isEqualTo(FormStatus.PUBLISHED);
+        assertThat(recruit.getStatus()).isEqualTo(RecruitStatus.PUBLISHED);
+    }
+
+    @Test
+    void closedRecruitFormCannotBePublishedWithRecruit() {
+        FormEntity form = FormEntity.builder().id(10L).status(FormStatus.CLOSED).build();
+        when(formRepository.findById(10L)).thenReturn(Optional.of(form));
+
+        assertThatThrownBy(() -> formService.publishForRecruit(10L))
+                .isInstanceOf(FormException.class);
+        assertThat(form.getStatus()).isEqualTo(FormStatus.CLOSED);
+    }
+
+    @Test
     void publishAlreadyPublishedFormDoesNotCreateDuplicateNotification() {
         FormEntity form = FormEntity.builder()
                 .id(10L)
@@ -220,6 +298,8 @@ class FormServiceTest {
     @Test
     void 공고_공개시_초안인_지원_폼은_알림_없이_공개된다() {
         FormEntity form = draftForm();
+        form.addQuestion(FormQuestionEntity.builder()
+                .orderIndex(1).type(QuestionType.SHORT_TEXT).title("학번").build());
         when(formRepository.findById(1L)).thenReturn(Optional.of(form));
 
         formService.publishForRecruit(1L);

@@ -2,6 +2,7 @@ package com.example.kodyjobdam.recruit.service;
 
 import com.example.kodyjobdam.common.exception.RecruitException;
 import com.example.kodyjobdam.form.entity.FormEntity;
+import com.example.kodyjobdam.form.event.FormPublishedEvent;
 import com.example.kodyjobdam.form.service.FormService;
 import com.example.kodyjobdam.recruit.client.GeminiAnalysisResult;
 import com.example.kodyjobdam.recruit.client.GeminiClient;
@@ -19,6 +20,7 @@ import com.example.kodyjobdam.notification.service.NotificationService;
 import com.example.kodyjobdam.user.UserRepository;
 import com.example.kodyjobdam.user.entity.User;
 import lombok.RequiredArgsConstructor;
+import org.springframework.context.event.EventListener;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
@@ -226,11 +228,11 @@ public class RecruitService {
             throw RecruitException.badRequest("초안 상태의 채용 공고만 공개할 수 있습니다.");
         }
 
-        entity.publish();
         // 공고가 열리면 지원 폼도 함께 열어 학생이 바로 지원할 수 있게 한다.
         if (entity.getFormId() != null) {
             formService.publishForRecruit(entity.getFormId());
         }
+        entity.publish();
         notificationService.notifyAllStudents(
                 NotificationType.RECRUIT_PUBLISHED,
                 "새로운 취업 공지",
@@ -240,6 +242,20 @@ public class RecruitService {
                 notificationExpirationService.recruitExpiresAt(entity.getDeadline())
         );
         return RecruitResponseDTO.from(entity);
+    }
+
+    /** 공고에 딸린 폼을 폼 화면에서 공개하면 공고도 함께 공개한다. 폼을 공개한 트랜잭션 안에서 이어 돈다. */
+    @EventListener
+    public void publishForPublishedForm(FormPublishedEvent event) {
+        recruitRepository.findByForm_Id(event.formId()).ifPresent(recruit -> {
+            validateOwner(recruit, event.teacherId());
+            if (recruit.getStatus() == RecruitStatus.CLOSED) {
+                throw RecruitException.badRequest("마감된 채용 공고는 공개할 수 없습니다.");
+            }
+            if (recruit.getStatus() == RecruitStatus.DRAFT) {
+                publish(recruit.getId(), event.teacherId());
+            }
+        });
     }
 
     /** 선생님 관리용: 초안 포함 전체 목록 */

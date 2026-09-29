@@ -11,14 +11,18 @@ import com.example.kodyjobdam.form.entity.FormQuestionEntity;
 import com.example.kodyjobdam.form.entity.FormQuestionOptionEntity;
 import com.example.kodyjobdam.form.entity.FormStatus;
 import com.example.kodyjobdam.form.entity.QuestionType;
+import com.example.kodyjobdam.form.event.FormPublishedEvent;
 import com.example.kodyjobdam.form.repository.FormRepository;
 import com.example.kodyjobdam.form.repository.FormSubmissionRepository;
 import com.example.kodyjobdam.notification.entity.NotificationType;
 import com.example.kodyjobdam.notification.service.NotificationExpirationService;
 import com.example.kodyjobdam.notification.service.NotificationService;
+import com.example.kodyjobdam.recruit.entity.RecruitStatus;
+import com.example.kodyjobdam.recruit.repository.RecruitRepository;
 import com.example.kodyjobdam.user.UserRepository;
 import com.example.kodyjobdam.user.entity.User;
 import lombok.RequiredArgsConstructor;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -43,6 +47,10 @@ public class FormService {
     private final NotificationExpirationService notificationExpirationService;
 
     private final FormFileService formFileService;
+
+    private final RecruitRepository recruitRepository;
+
+    private final ApplicationEventPublisher eventPublisher;
 
     /**
      * 채용 공고에 딸린 기본 지원 폼을 만든다.
@@ -73,9 +81,12 @@ public class FormService {
      */
     @Transactional
     public void publishForRecruit(Long formId) {
-        formRepository.findById(formId)
-                .filter(form -> form.getStatus() == FormStatus.DRAFT)
-                .ifPresent(FormEntity::publish);
+        FormEntity form = findOrThrow(formId);
+        if (form.getStatus() == FormStatus.PUBLISHED) return;
+        if (form.getStatus() != FormStatus.DRAFT || form.getQuestions().isEmpty()) {
+            throw FormException.badRequest("공개할 수 없는 지원 폼입니다.");
+        }
+        form.publish();
     }
 
     @Transactional
@@ -173,6 +184,12 @@ public class FormService {
         }
 
         form.publish();
+        // 공고에 딸린 폼은 공고도 함께 공개하고, 알림도 공고 쪽에서 한 번만 보낸다.
+        if (recruitRepository.existsByForm_Id(formId)) {
+            eventPublisher.publishEvent(new FormPublishedEvent(formId, teacherId));
+            return FormResponseDTO.from(form);
+        }
+
         notificationService.notifyAllStudents(
                 NotificationType.FORM_PUBLISHED,
                 "새로운 폼",
@@ -194,6 +211,14 @@ public class FormService {
             throw FormException.badRequest("공개된 폼만 마감할 수 있습니다.");
         }
 
+        recruitRepository.findByForm_Id(formId).ifPresent(recruit -> {
+            if (recruit.getUser() == null || !recruit.getUser().getId().equals(teacherId)) {
+                throw FormException.forbidden("연결된 공고를 관리할 권한이 없습니다.");
+            }
+            if (recruit.getStatus() == RecruitStatus.PUBLISHED) {
+                recruit.close();
+            }
+        });
         form.close();
         return FormResponseDTO.from(form);
     }

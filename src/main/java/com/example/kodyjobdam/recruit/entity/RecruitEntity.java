@@ -136,6 +136,11 @@ public class RecruitEntity {
         this.status = RecruitStatus.PUBLISHED;
     }
 
+    /** 연결된 지원 폼 마감에 맞춰 공고도 비공개 */
+    public void close() {
+        this.status = RecruitStatus.CLOSED;
+    }
+
     /** 디스코드에 발송된 공고 메시지와 연결한다. */
     public void linkDiscordMessage(String discordMessageId) {
         this.discordMessageId = discordMessageId;
