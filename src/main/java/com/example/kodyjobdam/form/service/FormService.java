@@ -16,6 +16,7 @@ import com.example.kodyjobdam.form.repository.FormRepository;
 import com.example.kodyjobdam.form.repository.FormSubmissionRepository;
 import com.example.kodyjobdam.notification.entity.NotificationType;
 import com.example.kodyjobdam.notification.service.NotificationExpirationService;
+import com.example.kodyjobdam.notice.service.NoticeAnnouncer;
 import com.example.kodyjobdam.notification.service.NotificationService;
 import com.example.kodyjobdam.recruit.repository.RecruitRepository;
 import com.example.kodyjobdam.user.UserRepository;
@@ -48,6 +49,8 @@ public class FormService {
     private final FormFileService formFileService;
 
     private final RecruitRepository recruitRepository;
+
+    private final NoticeAnnouncer noticeAnnouncer;
 
     private final ApplicationEventPublisher eventPublisher;
 
@@ -186,6 +189,12 @@ public class FormService {
             return FormResponseDTO.from(form);
         }
 
+        noticeAnnouncer.announce(
+                form.getTitle(),
+                form.getDescription() == null || form.getDescription().isBlank()
+                        ? "새로운 폼이 게시되었습니다."
+                        : form.getDescription(),
+                "/form/" + form.getId());
         notificationService.notifyAllStudents(
                 NotificationType.FORM_PUBLISHED,
                 "새로운 폼",
