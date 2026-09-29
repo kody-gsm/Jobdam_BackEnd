@@ -14,6 +14,7 @@ import com.example.kodyjobdam.recruit.entity.RecruitEntity;
 import com.example.kodyjobdam.recruit.entity.RecruitPeriod;
 import com.example.kodyjobdam.recruit.entity.RecruitStatus;
 import com.example.kodyjobdam.recruit.repository.RecruitRepository;
+import com.example.kodyjobdam.notice.service.NoticeAnnouncer;
 import com.example.kodyjobdam.notification.entity.NotificationType;
 import com.example.kodyjobdam.notification.service.NotificationExpirationService;
 import com.example.kodyjobdam.notification.service.NotificationService;
@@ -61,6 +62,8 @@ public class RecruitService {
     private final NotificationService notificationService;
 
     private final NotificationExpirationService notificationExpirationService;
+
+    private final NoticeAnnouncer noticeAnnouncer;
 
     /** 선생님: 이미지 분석 → 초안(DRAFT)으로 저장 후 결과 반환 */
     @Transactional
@@ -249,7 +252,16 @@ public class RecruitService {
     public void publishForPublishedForm(FormPublishedEvent event) {
         recruitRepository.findByForm_Id(event.formId())
                 .filter(recruit -> recruit.getStatus() == RecruitStatus.DRAFT)
-                .ifPresent(recruit -> publish(recruit.getId(), recruit.getUser().getId()));
+                .ifPresent(recruit -> {
+                    publish(recruit.getId(), recruit.getUser().getId());
+                    // 공고 화면에서 공개할 때는 프론트가 디스코드로 보내지만, 이 경로에는 그 호출이 없다.
+                    noticeAnnouncer.announce(
+                            recruit.getCompanyName() + " 공고",
+                            recruit.getSummary() == null || recruit.getSummary().isBlank()
+                                    ? "새로운 취업 공고가 등록되었습니다."
+                                    : recruit.getSummary(),
+                            "/recruit/" + recruit.getId());
+                });
     }
 
     /** 선생님 관리용: 초안 포함 전체 목록 */
