@@ -57,6 +57,12 @@ class FormServiceTest {
     @Mock
     private FormFileService formFileService;
 
+    @Mock
+    private com.example.kodyjobdam.recruit.repository.RecruitRepository recruitRepository;
+
+    @Mock
+    private org.springframework.context.ApplicationEventPublisher eventPublisher;
+
     @InjectMocks
     private FormService formService;
 
@@ -166,6 +172,30 @@ class FormServiceTest {
                 eq("/form/10"),
                 eq(LocalDateTime.of(2026, 10, 10, 0, 0))
         );
+    }
+
+    @Test
+    void publishRecruitFormLeavesNotificationToRecruit() {
+        FormEntity form = FormEntity.builder()
+                .id(10L)
+                .user(user(2L))
+                .title("잡담 지원서")
+                .status(FormStatus.DRAFT)
+                .build();
+        form.addQuestion(FormQuestionEntity.builder()
+                .orderIndex(1)
+                .type(QuestionType.SHORT_TEXT)
+                .title("학번")
+                .build());
+        when(formRepository.findById(10L)).thenReturn(Optional.of(form));
+        when(recruitRepository.existsByForm_Id(10L)).thenReturn(true);
+
+        formService.publish(10L, 2L);
+
+        assertThat(form.getStatus()).isEqualTo(FormStatus.PUBLISHED);
+        verify(eventPublisher).publishEvent(new com.example.kodyjobdam.form.event.FormPublishedEvent(10L));
+        // 공고가 공개 알림을 보내므로 폼 쪽에서는 보내지 않는다.
+        verify(notificationService, never()).notifyAllStudents(any(), any(), any(), any(), any(), any());
     }
 
     @Test

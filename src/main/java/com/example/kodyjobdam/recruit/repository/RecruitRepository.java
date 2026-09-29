@@ -6,6 +6,7 @@ import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.stereotype.Repository;
 
 import java.util.List;
+import java.util.Optional;
 
 @Repository
 public interface RecruitRepository extends JpaRepository<RecruitEntity, Long> {
@@ -17,4 +18,8 @@ public interface RecruitRepository extends JpaRepository<RecruitEntity, Long> {
     List<RecruitEntity> findAllByOrderByCreatedAtDesc();
 
     List<RecruitEntity> findByUserIdOrderByCreatedAtDesc(Long userId);
+
+    Optional<RecruitEntity> findByForm_Id(Long formId);
+
+    boolean existsByForm_Id(Long formId);
 }

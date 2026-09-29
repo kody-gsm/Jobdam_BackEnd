@@ -5,6 +5,7 @@ import com.example.kodyjobdam.notification.entity.NotificationType;
 import com.example.kodyjobdam.notification.service.NotificationService;
 import com.example.kodyjobdam.form.entity.FormEntity;
 import com.example.kodyjobdam.form.entity.FormStatus;
+import com.example.kodyjobdam.form.event.FormPublishedEvent;
 import com.example.kodyjobdam.form.service.FormService;
 import com.example.kodyjobdam.notice.service.DiscordNoticeService;
 import com.example.kodyjobdam.recruit.client.GeminiAnalysisResult;
@@ -158,6 +159,41 @@ class RecruitServiceTest {
 
         verify(formService).publishForRecruit(7L);
         verify(discordNoticeService, never()).sendNotice(any());
+    }
+
+    @Test
+    void publishingRecruitFormAlsoPublishesRecruit() {
+        RecruitEntity recruit = RecruitEntity.builder()
+                .id(10L)
+                .user(user(2L))
+                .companyName("잡담")
+                .form(FormEntity.builder().id(7L).status(FormStatus.PUBLISHED).build())
+                .status(RecruitStatus.DRAFT)
+                .build();
+        when(recruitRepository.findByForm_Id(7L)).thenReturn(Optional.of(recruit));
+        when(recruitRepository.findById(10L)).thenReturn(Optional.of(recruit));
+
+        recruitService.publishForPublishedForm(new FormPublishedEvent(7L));
+
+        assertThat(recruit.getStatus()).isEqualTo(RecruitStatus.PUBLISHED);
+        verify(notificationService).notifyAllStudents(
+                eq(NotificationType.RECRUIT_PUBLISHED), any(), any(), eq(10L), any(), any());
+    }
+
+    @Test
+    void publishingFormOfAlreadyPublishedRecruitDoesNothing() {
+        RecruitEntity recruit = RecruitEntity.builder()
+                .id(10L)
+                .user(user(2L))
+                .companyName("잡담")
+                .form(FormEntity.builder().id(7L).status(FormStatus.PUBLISHED).build())
+                .status(RecruitStatus.PUBLISHED)
+                .build();
+        when(recruitRepository.findByForm_Id(7L)).thenReturn(Optional.of(recruit));
+
+        recruitService.publishForPublishedForm(new FormPublishedEvent(7L));
+
+        verify(notificationService, never()).notifyAllStudents(any(), any(), any(), any(), any(), any());
     }
 
     @Test
