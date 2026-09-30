@@ -9,6 +9,7 @@ import com.example.kodyjobdam.form.entity.FormEntity;
 import com.example.kodyjobdam.form.entity.FormQuestionEntity;
 import com.example.kodyjobdam.form.entity.FormStatus;
 import com.example.kodyjobdam.form.dto.response.FormSummaryResponseDTO;
+import com.example.kodyjobdam.form.entity.FormSubmissionEntity;
 import com.example.kodyjobdam.form.entity.QuestionType;
 import com.example.kodyjobdam.form.repository.FormRepository;
 import com.example.kodyjobdam.form.repository.FormSubmissionRepository;
@@ -20,6 +21,7 @@ import com.example.kodyjobdam.user.entity.User;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.InOrder;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
@@ -38,6 +40,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.assertj.core.api.Assertions.tuple;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -283,20 +286,28 @@ class FormServiceTest {
     }
 
     @Test
-    void 공고_삭제시_응답이_있는_지원_폼은_남긴다() {
-        when(formRepository.findById(1L)).thenReturn(Optional.of(draftForm()));
-        when(submissionRepository.existsByFormId(1L)).thenReturn(true);
+    void 공고_삭제시_응답이_있는_지원_폼도_제출과_함께_지운다() {
+        FormEntity form = draftForm();
+        List<FormSubmissionEntity> submissions = List.of(
+                FormSubmissionEntity.builder().id(100L).form(form).build(),
+                FormSubmissionEntity.builder().id(101L).form(form).build());
+        when(formRepository.findById(1L)).thenReturn(Optional.of(form));
+        when(submissionRepository.findByFormIdOrderBySubmittedAtDesc(1L)).thenReturn(submissions);
 
         formService.deleteForRecruit(1L);
 
-        verify(formRepository, never()).delete(any(FormEntity.class));
+        // 답변이 질문·첨부 파일을 참조하므로 제출 → 파일 → 폼 순서를 지켜야 한다.
+        InOrder order = inOrder(submissionRepository, formFileService, formRepository);
+        order.verify(submissionRepository).deleteAll(submissions);
+        order.verify(submissionRepository).flush();
+        order.verify(formFileService).deleteAllByForm(1L);
+        order.verify(formRepository).delete(form);
     }
 
     @Test
     void 공고_삭제시_응답이_없는_지원_폼은_함께_지운다() {
         FormEntity form = draftForm();
         when(formRepository.findById(1L)).thenReturn(Optional.of(form));
-        when(submissionRepository.existsByFormId(1L)).thenReturn(false);
 
         formService.deleteForRecruit(1L);
 
