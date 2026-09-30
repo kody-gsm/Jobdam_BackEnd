@@ -1,5 +1,6 @@
 package com.example.kodyjobdam.recruit.service;
 
+import com.example.kodyjobdam.common.dto.response.PublicationStatus;
 import com.example.kodyjobdam.common.exception.RecruitException;
 import com.example.kodyjobdam.form.entity.FormEntity;
 import com.example.kodyjobdam.form.event.FormPublishedEvent;
@@ -27,9 +28,11 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.io.IOException;
+import java.time.Clock;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
+import java.time.ZoneId;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -72,6 +75,9 @@ public class RecruitService {
     private final NotificationExpirationService notificationExpirationService;
 
     private final NoticeAnnouncer noticeAnnouncer;
+
+    /** 마감 여부를 판단하는 기준 시계. 마감일은 한국 시간으로 저장된다. */
+    private Clock clock = Clock.system(ZoneId.of("Asia/Seoul"));
 
     /** 선생님: 이미지 분석 → 초안(DRAFT)으로 저장 후 결과 반환 */
     @Transactional
@@ -118,7 +124,7 @@ public class RecruitService {
                 .status(RecruitStatus.DRAFT)
                 .build());
 
-        return RecruitResponseDTO.from(entity);
+        return RecruitResponseDTO.from(entity, today());
     }
 
     /** 선생님: 이미지 없이 직접 입력한 내용으로 초안(DRAFT)을 만든다 */
@@ -145,7 +151,7 @@ public class RecruitService {
                 .status(RecruitStatus.DRAFT)
                 .build());
 
-        return RecruitResponseDTO.from(entity);
+        return RecruitResponseDTO.from(entity, today());
     }
 
     /**
@@ -169,7 +175,7 @@ public class RecruitService {
         if (entity.getFormId() != null) {
             formService.updateDeadlineForRecruit(entity.getFormId(), applicationDeadline(documentPeriod));
         }
-        return RecruitResponseDTO.from(entity);
+        return RecruitResponseDTO.from(entity, today());
     }
 
     /**
@@ -238,8 +244,14 @@ public class RecruitService {
     public RecruitResponseDTO publish(Long recruitId, Long teacherId) {
         RecruitEntity entity = findOrThrow(recruitId);
         validateOwner(entity, teacherId);
+        LocalDate today = today();
         if (entity.getStatus() != RecruitStatus.DRAFT) {
             throw RecruitException.badRequest("초안 상태의 채용 공고만 공개할 수 있습니다.");
+        }
+        // 공개해도 곧바로 마감 상태가 되어 학생에게 보이지 않는다. 공지·알림만 헛되게 나가므로 막는다.
+        if (entity.isPastDeadline(today)) {
+            throw RecruitException.badRequest(
+                    "서류 접수 종료일이 이미 지난 공고는 공개할 수 없습니다. 접수 기간을 먼저 수정해주세요.");
         }
 
         entity.publish();
@@ -255,7 +267,7 @@ public class RecruitService {
                 "/recruit/" + entity.getId(),
                 notificationExpirationService.recruitExpiresAt(entity.getDeadline())
         );
-        return RecruitResponseDTO.from(entity);
+        return RecruitResponseDTO.from(entity, today);
     }
 
     /** 공고에 딸린 폼을 폼 화면에서 공개하면 공고도 함께 공개한다. 폼을 공개한 트랜잭션 안에서 이어 돈다. */
@@ -277,25 +289,35 @@ public class RecruitService {
 
     /** 선생님 관리용: 초안 포함 전체 목록 */
     public List<RecruitResponseDTO> listForTeacher(Long teacherId) {
+        LocalDate today = today();
         return recruitRepository.findByUserIdOrderByCreatedAtDesc(teacherId).stream()
-                .map(RecruitResponseDTO::from)
+                .map(recruit -> RecruitResponseDTO.from(recruit, today))
                 .toList();
     }
 
-    /** 학생/공개용: 공개된 공고 목록 */
+    /** 학생/공개용: 공개 중이고 마감되지 않은 공고 목록 */
     public List<RecruitResponseDTO> listPublished() {
+        LocalDate today = today();
         return recruitRepository.findByStatusOrderByCreatedAtDesc(RecruitStatus.PUBLISHED).stream()
-                .map(RecruitResponseDTO::from)
+                // 마감된 공고는 단건 조회도 막으므로 목록에서도 빼서 눌렀을 때 404가 나지 않게 한다.
+                .filter(recruit -> recruit.publicationStatus(today) == PublicationStatus.PUBLISHED)
+                .map(recruit -> RecruitResponseDTO.from(recruit, today))
                 .toList();
     }
 
-    /** 학생/공개용: 공개된 공고 단건 */
+    /** 학생/공개용: 공개 중이고 마감되지 않은 공고 단건 */
     public RecruitResponseDTO getPublished(Long recruitId) {
         RecruitEntity entity = findOrThrow(recruitId);
-        if (entity.getStatus() != RecruitStatus.PUBLISHED) {
+        LocalDate today = today();
+        if (entity.publicationStatus(today) != PublicationStatus.PUBLISHED) {
             throw RecruitException.notFound("공개된 공고가 아닙니다.");
         }
-        return RecruitResponseDTO.from(entity);
+        return RecruitResponseDTO.from(entity, today);
+    }
+
+    /** 마감 판단 기준 날짜 (한국 시간) */
+    private LocalDate today() {
+        return LocalDate.now(clock);
     }
 
     private RecruitEntity findOrThrow(Long recruitId) {

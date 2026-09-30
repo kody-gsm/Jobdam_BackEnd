@@ -1,5 +1,6 @@
 package com.example.kodyjobdam.recruit.service;
 
+import com.example.kodyjobdam.common.dto.response.PublicationStatus;
 import com.example.kodyjobdam.common.exception.RecruitException;
 import com.example.kodyjobdam.notification.entity.NotificationType;
 import com.example.kodyjobdam.notification.service.NotificationService;
@@ -21,16 +22,21 @@ import com.example.kodyjobdam.user.UserRepository;
 import com.example.kodyjobdam.user.UserRole;
 import com.example.kodyjobdam.user.entity.User;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.mock.web.MockMultipartFile;
+import org.springframework.test.util.ReflectionTestUtils;
 
+import java.time.Clock;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
+import java.time.ZoneId;
+import java.util.List;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -77,6 +83,18 @@ class RecruitServiceTest {
 
     private final ObjectMapper objectMapper = new ObjectMapper();
 
+    private static final ZoneId SEOUL = ZoneId.of("Asia/Seoul");
+
+    /**
+     * 마감 판단 기준 날짜를 고정한다.
+     * 고정하지 않으면 테스트에 적어둔 2026-09 전형 일정이 실제 날짜에 추월당해 깨진다.
+     */
+    @BeforeEach
+    void fixClock() {
+        ReflectionTestUtils.setField(recruitService, "clock",
+                Clock.fixed(LocalDate.of(2026, 9, 1).atTime(9, 0).atZone(SEOUL).toInstant(), SEOUL));
+    }
+
     @Test
     void analyzeCreatesDefaultApplicationForm() {
         User teacher = user(2L);
@@ -119,7 +137,7 @@ class RecruitServiceTest {
         RecruitResponseDTO response = recruitService.create(dto, 2L);
 
         assertThat(response.getCompanyName()).isEqualTo("잡담");
-        assertThat(response.getStatus()).isEqualTo(RecruitStatus.DRAFT);
+        assertThat(response.getStatus()).isEqualTo(PublicationStatus.DRAFT);
         assertThat(response.getFormId()).isEqualTo(7L);
         assertThat(response.getImageUrl()).isNull();
         assertThat(response.getDeadline()).isEqualTo("2026-09-12");
@@ -344,6 +362,67 @@ class RecruitServiceTest {
         assertThat(response.getInterviewDate()).isEqualTo(RecruitPeriod.UNDECIDED);
         assertThat(response.getInterviewPeriod()).isNull();
         assertThat(response.getCompanyName()).isEqualTo("잡담");
+    }
+
+    @Test
+    void 서류_접수_종료일이_지난_공고는_공개할_수_없다() {
+        RecruitEntity recruit = publishedRecruit(10L, LocalDate.of(2026, 8, 31));
+        ReflectionTestUtils.setField(recruit, "status", RecruitStatus.DRAFT);
+        when(recruitRepository.findById(10L)).thenReturn(Optional.of(recruit));
+
+        assertThatThrownBy(() -> recruitService.publish(10L, 2L))
+                .isInstanceOf(RecruitException.class)
+                .hasMessage("서류 접수 종료일이 이미 지난 공고는 공개할 수 없습니다. 접수 기간을 먼저 수정해주세요.");
+        assertThat(recruit.getStatus()).isEqualTo(RecruitStatus.DRAFT);
+        verify(notificationService, never()).notifyAllStudents(any(), any(), any(), any(), any(), any());
+    }
+
+    @Test
+    void 접수_종료일_당일까지는_공개_상태로_본다() {
+        when(recruitRepository.findById(10L))
+                .thenReturn(Optional.of(publishedRecruit(10L, LocalDate.of(2026, 9, 1))));
+
+        assertThat(recruitService.getPublished(10L).getStatus()).isEqualTo(PublicationStatus.PUBLISHED);
+    }
+
+    @Test
+    void 접수가_마감된_공고는_학생에게_보이지_않는다() {
+        when(recruitRepository.findById(10L))
+                .thenReturn(Optional.of(publishedRecruit(10L, LocalDate.of(2026, 8, 31))));
+
+        assertThatThrownBy(() -> recruitService.getPublished(10L))
+                .isInstanceOf(RecruitException.class);
+    }
+
+    @Test
+    void 학생_공고_목록에서_마감된_공고는_빠진다() {
+        when(recruitRepository.findByStatusOrderByCreatedAtDesc(RecruitStatus.PUBLISHED)).thenReturn(List.of(
+                publishedRecruit(11L, LocalDate.of(2026, 9, 30)),
+                publishedRecruit(12L, LocalDate.of(2026, 8, 31))));
+
+        assertThat(recruitService.listPublished())
+                .extracting(RecruitResponseDTO::getId)
+                .containsExactly(11L);
+    }
+
+    @Test
+    void 선생님_공고_목록에는_마감된_공고도_CLOSED로_보인다() {
+        when(recruitRepository.findByUserIdOrderByCreatedAtDesc(2L))
+                .thenReturn(List.of(publishedRecruit(12L, LocalDate.of(2026, 8, 31))));
+
+        assertThat(recruitService.listForTeacher(2L))
+                .extracting(RecruitResponseDTO::getStatus)
+                .containsExactly(PublicationStatus.CLOSED);
+    }
+
+    private RecruitEntity publishedRecruit(Long id, LocalDate documentEndDate) {
+        return RecruitEntity.builder()
+                .id(id)
+                .user(user(2L))
+                .companyName("잡담")
+                .documentPeriod(new RecruitPeriod(LocalDate.of(2026, 8, 1), documentEndDate))
+                .status(RecruitStatus.PUBLISHED)
+                .build();
     }
 
     private User user(Long id) {

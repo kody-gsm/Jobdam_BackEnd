@@ -1,5 +1,6 @@
 package com.example.kodyjobdam.form.service;
 
+import com.example.kodyjobdam.common.dto.response.PublicationStatus;
 import com.example.kodyjobdam.common.exception.FormException;
 import com.example.kodyjobdam.form.dto.request.FormCreateDTO;
 import com.example.kodyjobdam.form.dto.request.FormQuestionCreateDTO;
@@ -26,7 +27,9 @@ import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.Clock;
 import java.time.LocalDateTime;
+import java.time.ZoneId;
 import java.util.List;
 
 @Service
@@ -53,6 +56,9 @@ public class FormService {
     private final NoticeAnnouncer noticeAnnouncer;
 
     private final ApplicationEventPublisher eventPublisher;
+
+    /** 마감 여부를 판단하는 기준 시계. 마감일은 한국 시간으로 저장된다. */
+    private Clock clock = Clock.system(ZoneId.of("Asia/Seoul"));
 
     /**
      * 채용 공고에 딸린 기본 지원 폼을 만든다.
@@ -124,7 +130,7 @@ public class FormService {
 
         applyQuestions(form, dto.getQuestions());
 
-        return FormResponseDTO.from(formRepository.save(form));
+        return FormResponseDTO.from(formRepository.save(form), now());
     }
 
     /**
@@ -155,7 +161,7 @@ public class FormService {
             applyQuestions(form, dto.getQuestions());
         }
 
-        return FormResponseDTO.from(form);
+        return FormResponseDTO.from(form, now());
     }
 
     /**
@@ -195,6 +201,7 @@ public class FormService {
     public FormResponseDTO publish(Long formId, Long teacherId) {
         FormEntity form = findOrThrow(formId);
         validateOwner(form, teacherId);
+        LocalDateTime now = now();
 
         if (form.getStatus() != FormStatus.DRAFT) {
             throw FormException.badRequest("초안 상태의 폼만 공개할 수 있습니다.");
@@ -202,12 +209,16 @@ public class FormService {
         if (form.getQuestions().isEmpty()) {
             throw FormException.badRequest("질문이 없는 폼은 공개할 수 없습니다.");
         }
+        // 공개해도 곧바로 마감 상태가 되어 학생에게 보이지 않는다. 공지·알림만 헛되게 나가므로 막는다.
+        if (form.isPastDeadline(now)) {
+            throw FormException.badRequest("마감일이 이미 지난 폼은 공개할 수 없습니다. 마감일을 먼저 수정해주세요.");
+        }
 
         form.publish();
         // 공고에 딸린 폼은 공고도 함께 공개하고, 알림도 공고 쪽에서 한 번만 보낸다.
         if (recruitRepository.existsByForm_Id(formId)) {
             eventPublisher.publishEvent(new FormPublishedEvent(formId));
-            return FormResponseDTO.from(form);
+            return FormResponseDTO.from(form, now);
         }
 
         noticeAnnouncer.announce(
@@ -224,7 +235,7 @@ public class FormService {
                 "/form/" + form.getId(),
                 notificationExpirationService.formExpiresAt(form.getDeadline())
         );
-        return FormResponseDTO.from(form);
+        return FormResponseDTO.from(form, now);
     }
 
     /** 선생님: 응답 마감 */
@@ -238,14 +249,15 @@ public class FormService {
         }
 
         form.close();
-        return FormResponseDTO.from(form);
+        return FormResponseDTO.from(form, now());
     }
 
     /** 선생님 관리용: 초안 포함 전체 목록 */
     @Transactional(readOnly = true)
     public List<FormSummaryResponseDTO> listForTeacher(Long teacherId) {
+        LocalDateTime now = now();
         return formRepository.findByUserIdOrderByCreatedAtDesc(teacherId).stream()
-                .map(FormSummaryResponseDTO::from)
+                .map(form -> FormSummaryResponseDTO.from(form, now))
                 .toList();
     }
 
@@ -254,27 +266,36 @@ public class FormService {
     public FormResponseDTO getForTeacher(Long formId, Long teacherId) {
         FormEntity form = findOrThrow(formId);
         validateOwner(form, teacherId);
-        return FormResponseDTO.from(form);
+        return FormResponseDTO.from(form, now());
     }
 
-    /** 학생용: 공개된 폼 목록 */
+    /** 학생용: 공개 중이고 마감되지 않은 폼 목록 */
     @Transactional(readOnly = true)
     public List<FormSummaryResponseDTO> listPublished() {
+        LocalDateTime now = now();
         return formRepository.findByStatusOrderByCreatedAtDesc(FormStatus.PUBLISHED).stream()
-                .map(FormSummaryResponseDTO::from)
+                // 마감된 폼은 단건 조회도 막으므로 목록에서도 빼서 눌렀을 때 404가 나지 않게 한다.
+                .filter(form -> form.publicationStatus(now) == PublicationStatus.PUBLISHED)
+                .map(form -> FormSummaryResponseDTO.from(form, now))
                 .toList();
     }
 
-    /** 학생용: 공개된 폼 단건 (초안·마감된 폼은 보이지 않는다) */
+    /** 학생용: 공개 중이고 마감되지 않은 폼 단건 (초안·마감된 폼은 보이지 않는다) */
     @Transactional(readOnly = true)
     public FormResponseDTO getPublished(Long formId) {
         FormEntity form = findOrThrow(formId);
+        LocalDateTime now = now();
 
-        if (form.getStatus() != FormStatus.PUBLISHED) {
+        if (form.publicationStatus(now) != PublicationStatus.PUBLISHED) {
             throw FormException.notFound("공개된 폼이 아닙니다.");
         }
 
-        return FormResponseDTO.from(form);
+        return FormResponseDTO.from(form, now);
+    }
+
+    /** 마감 판단 기준 시각 (한국 시간) */
+    private LocalDateTime now() {
+        return LocalDateTime.now(clock);
     }
 
     /** 기본 지원 폼에 쓰는 단답형 질문 */

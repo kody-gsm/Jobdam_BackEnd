@@ -1,5 +1,6 @@
 package com.example.kodyjobdam.recruit.entity;
 
+import com.example.kodyjobdam.common.dto.response.PublicationStatus;
 import com.example.kodyjobdam.form.entity.FormEntity;
 import com.example.kodyjobdam.user.entity.User;
 import jakarta.persistence.*;
@@ -113,12 +114,39 @@ public class RecruitEntity {
     }
 
     /**
+     * 서류 접수 종료일. 접수 기간을 못 읽었으면 null.
+     * 공고와 딸린 지원 폼의 마감일은 모두 이 날짜에서 나오는 단일 기준이다.
+     */
+    public LocalDate getDocumentEndDate() {
+        return documentPeriod == null ? null : documentPeriod.getEndDate();
+    }
+
+    /**
      * 지원 마감일(서류 접수 종료일)을 yyyy-MM-dd 문자열로 돌려준다.
      * 알림 만료 계산이 문자열 마감일을 받으므로 그 형식에 맞춘 파생값이다.
      */
     public String getDeadline() {
-        LocalDate endDate = documentPeriod == null ? null : documentPeriod.getEndDate();
+        LocalDate endDate = getDocumentEndDate();
         return endDate == null ? null : endDate.toString();
+    }
+
+    /** 서류 접수가 마감됐는지. 종료일 당일까지는 접수 중으로 본다. 종료일이 없으면 마감되지 않은 것으로 본다. */
+    public boolean isPastDeadline(LocalDate today) {
+        LocalDate endDate = getDocumentEndDate();
+        return endDate != null && today.isAfter(endDate);
+    }
+
+    /**
+     * 학생 화면용 공개 상태. 저장된 상태와 서류 접수 종료일을 함께 본다.
+     *
+     * <p>RecruitStatus에는 CLOSED가 없고 마감된 공고도 PUBLISHED로 남으므로
+     * 마감 판단은 항상 이 메서드를 거친다. 딸린 지원 폼과 같은 날짜를 기준으로 삼는다.</p>
+     */
+    public PublicationStatus publicationStatus(LocalDate today) {
+        if (this.status == RecruitStatus.DRAFT) {
+            return PublicationStatus.DRAFT;
+        }
+        return isPastDeadline(today) ? PublicationStatus.CLOSED : PublicationStatus.PUBLISHED;
     }
 
     /** 면접 일정을 화면 표기 문자열로 돌려준다. 하루짜리 면접은 날짜 하나로 표기한다. */

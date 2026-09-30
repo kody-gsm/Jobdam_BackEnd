@@ -1,5 +1,6 @@
 package com.example.kodyjobdam.form.service;
 
+import com.example.kodyjobdam.common.dto.response.PublicationStatus;
 import com.example.kodyjobdam.common.exception.FormException;
 import com.example.kodyjobdam.form.dto.request.FormCreateDTO;
 import com.example.kodyjobdam.form.dto.request.FormUpdateDTO;
@@ -7,6 +8,7 @@ import com.example.kodyjobdam.form.dto.request.FormQuestionCreateDTO;
 import com.example.kodyjobdam.form.entity.FormEntity;
 import com.example.kodyjobdam.form.entity.FormQuestionEntity;
 import com.example.kodyjobdam.form.entity.FormStatus;
+import com.example.kodyjobdam.form.dto.response.FormSummaryResponseDTO;
 import com.example.kodyjobdam.form.entity.QuestionType;
 import com.example.kodyjobdam.form.repository.FormRepository;
 import com.example.kodyjobdam.form.repository.FormSubmissionRepository;
@@ -15,6 +17,7 @@ import com.example.kodyjobdam.notification.service.NotificationService;
 import com.example.kodyjobdam.user.UserRepository;
 import com.example.kodyjobdam.user.UserRole;
 import com.example.kodyjobdam.user.entity.User;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
@@ -22,7 +25,10 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.test.util.ReflectionTestUtils;
 
+import java.time.Clock;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.ZoneId;
 import java.util.List;
 import java.util.Optional;
 
@@ -68,6 +74,18 @@ class FormServiceTest {
 
     @InjectMocks
     private FormService formService;
+
+    private static final ZoneId SEOUL = ZoneId.of("Asia/Seoul");
+
+    /**
+     * 마감 판단 기준 시각을 고정한다.
+     * 고정하지 않으면 테스트에 적어둔 2026-09 마감일이 실제 날짜에 추월당해 깨진다.
+     */
+    @BeforeEach
+    void fixClock() {
+        ReflectionTestUtils.setField(formService, "clock",
+                Clock.fixed(LocalDate.of(2026, 9, 1).atTime(9, 0).atZone(SEOUL).toInstant(), SEOUL));
+    }
 
     @Test
     void 응답이_없으면_폼을_삭제한다() {
@@ -342,6 +360,79 @@ class FormServiceTest {
         formService.update(1L, dto, 2L);
 
         assertThat(form.getDeadline()).isEqualTo(LocalDateTime.of(2026, 9, 20, 23, 59, 59));
+    }
+
+    @Test
+    void 마감일이_지난_폼은_공개할_수_없다() {
+        FormEntity form = FormEntity.builder()
+                .id(1L)
+                .title("폼")
+                .user(user(2L))
+                .deadline(LocalDateTime.of(2026, 8, 31, 23, 59, 59))
+                .status(FormStatus.DRAFT)
+                .build();
+        form.addQuestion(FormQuestionEntity.builder()
+                .orderIndex(1)
+                .type(QuestionType.SHORT_TEXT)
+                .title("질문")
+                .required(true)
+                .build());
+        when(formRepository.findById(1L)).thenReturn(Optional.of(form));
+
+        assertThatThrownBy(() -> formService.publish(1L, 2L))
+                .isInstanceOf(FormException.class)
+                .hasMessage("마감일이 이미 지난 폼은 공개할 수 없습니다. 마감일을 먼저 수정해주세요.");
+        assertThat(form.getStatus()).isEqualTo(FormStatus.DRAFT);
+        verify(notificationService, never()).notifyAllStudents(any(), any(), any(), any(), any(), any());
+        verify(noticeAnnouncer, never()).announce(any(), any(), any());
+    }
+
+    @Test
+    void 마감_시각_당일까지는_공개_상태로_본다() {
+        when(formRepository.findById(1L))
+                .thenReturn(Optional.of(publishedForm(1L, LocalDateTime.of(2026, 9, 1, 23, 59, 59))));
+
+        assertThat(formService.getPublished(1L).getStatus()).isEqualTo(PublicationStatus.PUBLISHED);
+    }
+
+    @Test
+    void 마감일이_지난_폼은_학생에게_보이지_않는다() {
+        when(formRepository.findById(1L))
+                .thenReturn(Optional.of(publishedForm(1L, LocalDateTime.of(2026, 8, 31, 23, 59, 59))));
+
+        assertThatThrownBy(() -> formService.getPublished(1L))
+                .isInstanceOf(FormException.class);
+    }
+
+    @Test
+    void 학생_폼_목록에서_마감된_폼은_빠진다() {
+        when(formRepository.findByStatusOrderByCreatedAtDesc(FormStatus.PUBLISHED)).thenReturn(List.of(
+                publishedForm(1L, LocalDateTime.of(2026, 9, 30, 23, 59, 59)),
+                publishedForm(2L, LocalDateTime.of(2026, 8, 31, 23, 59, 59))));
+
+        assertThat(formService.listPublished())
+                .extracting(FormSummaryResponseDTO::getId)
+                .containsExactly(1L);
+    }
+
+    @Test
+    void 선생님_폼_목록에는_마감된_폼도_CLOSED로_보인다() {
+        when(formRepository.findByUserIdOrderByCreatedAtDesc(2L))
+                .thenReturn(List.of(publishedForm(2L, LocalDateTime.of(2026, 8, 31, 23, 59, 59))));
+
+        assertThat(formService.listForTeacher(2L))
+                .extracting(FormSummaryResponseDTO::getStatus)
+                .containsExactly(PublicationStatus.CLOSED);
+    }
+
+    private FormEntity publishedForm(Long id, LocalDateTime deadline) {
+        return FormEntity.builder()
+                .id(id)
+                .title("폼")
+                .user(user(2L))
+                .deadline(deadline)
+                .status(FormStatus.PUBLISHED)
+                .build();
     }
 
     private FormUpdateDTO updateDtoWithoutQuestions(String title) {
