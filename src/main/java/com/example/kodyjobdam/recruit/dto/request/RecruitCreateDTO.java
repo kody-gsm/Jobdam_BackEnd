@@ -1,8 +1,11 @@
 package com.example.kodyjobdam.recruit.dto.request;
 
 import com.example.kodyjobdam.recruit.dto.RecruitPeriodDTO;
+import com.example.kodyjobdam.recruit.entity.RecruitField;
 import jakarta.validation.constraints.NotBlank;
 import lombok.Getter;
+
+import java.util.List;
 
 @Getter
 public class RecruitCreateDTO {
@@ -25,6 +28,9 @@ public class RecruitCreateDTO {
 
     /** 면접 일정 표기 문자열. interviewPeriod를 함께 보내면 그쪽이 우선한다. */
     private String interviewDate;
+
+    /** 이 공고가 뽑는 직무 분야. 생략하면 비워둔다. */
+    private List<RecruitField> fields;
 
     private String summary;
 }

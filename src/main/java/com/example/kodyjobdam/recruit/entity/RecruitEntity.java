@@ -13,6 +13,10 @@ import org.hibernate.annotations.UpdateTimestamp;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.util.Collection;
+import java.util.EnumSet;
+import java.util.List;
+import java.util.Set;
 
 @Getter
 @Entity
@@ -80,6 +84,15 @@ public class RecruitEntity {
     /** 공개된 공고와 연결된 디스코드 메시지 ID. 공고 수정 시 같은 메시지를 수정하는 데 사용한다. */
     private String discordMessageId;
 
+    /**
+     * 이 공고가 뽑는 직무 분야. 한 공고가 여러 직무를 함께 뽑을 수 있어 목록으로 둔다.
+     * 분석에서 판단하지 못했으면 비어 있고, 선생님이 검토 단계에서 채운다.
+     */
+    @Convert(converter = RecruitFieldConverter.class)
+    @Column(name = "fields", length = 100)
+    @Builder.Default
+    private Set<RecruitField> fields = EnumSet.noneOf(RecruitField.class);
+
     @Column(length = 1000)
     private String summary;
 
@@ -103,6 +116,7 @@ public class RecruitEntity {
                        RecruitPeriod practicalExamPeriod,
                        RecruitPeriod codingTestPeriod,
                        RecruitPeriod interviewPeriod,
+                       Collection<RecruitField> fields,
                        String summary) {
         this.companyName = companyName;
         this.documentPeriod = documentPeriod;
@@ -110,7 +124,22 @@ public class RecruitEntity {
         this.practicalExamPeriod = practicalExamPeriod;
         this.codingTestPeriod = codingTestPeriod;
         this.interviewPeriod = interviewPeriod;
+        replaceFields(fields);
         this.summary = summary;
+    }
+
+    /** 직무 분야를 통째로 갈아끼운다. null을 주면 기존 값을 그대로 둔다. */
+    public void replaceFields(Collection<RecruitField> fields) {
+        if (fields == null) {
+            return;
+        }
+        this.fields.clear();
+        this.fields.addAll(fields);
+    }
+
+    /** 직무 분야를 enum 선언 순서로 돌려준다. 응답 순서가 조회마다 달라지지 않게 한다. */
+    public List<RecruitField> getSortedFields() {
+        return fields.stream().sorted().toList();
     }
 
     /**
