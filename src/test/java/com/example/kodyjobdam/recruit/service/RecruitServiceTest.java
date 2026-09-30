@@ -15,6 +15,7 @@ import com.example.kodyjobdam.recruit.dto.request.RecruitCreateDTO;
 import com.example.kodyjobdam.recruit.dto.request.RecruitUpdateDTO;
 import com.example.kodyjobdam.recruit.dto.response.RecruitResponseDTO;
 import com.example.kodyjobdam.recruit.entity.RecruitEntity;
+import com.example.kodyjobdam.recruit.entity.RecruitField;
 import com.example.kodyjobdam.recruit.entity.RecruitPeriod;
 import com.example.kodyjobdam.recruit.entity.RecruitStatus;
 import com.example.kodyjobdam.recruit.repository.RecruitRepository;
@@ -104,7 +105,8 @@ class RecruitServiceTest {
 
         when(userRepository.findById(2L)).thenReturn(Optional.of(teacher));
         when(geminiClient.analyze(any(), eq("image/png"))).thenReturn(new GeminiAnalysisResult(
-                "잡담", documentPeriod, null, null, null, null, "요약"));
+                "잡담", documentPeriod, null, null, null, null,
+                java.util.Set.of(RecruitField.BACKEND), "요약"));
         when(formService.createForRecruit(
                 eq(teacher), eq("잡담"), eq(LocalDate.of(2026, 9, 10).atTime(LocalTime.of(23, 59, 59)))))
                 .thenReturn(form);
@@ -117,6 +119,7 @@ class RecruitServiceTest {
 
         assertThat(response.getFormId()).isEqualTo(7L);
         assertThat(response.getImageUrl()).isEqualTo("/uploads/recruit/2026/09/uuid.png");
+        assertThat(response.getFields()).containsExactly(RecruitField.BACKEND);
     }
 
     @Test
@@ -430,6 +433,73 @@ class RecruitServiceTest {
         assertThat(recruitService.listForTeacher(2L))
                 .extracting(RecruitResponseDTO::getStatus)
                 .containsExactly(PublicationStatus.CLOSED);
+    }
+
+    @Test
+    void 직접_입력한_공고도_직무_분야를_저장한다() throws Exception {
+        User teacher = user(2L);
+        FormEntity form = FormEntity.builder().id(7L).title("잡담 지원서").status(FormStatus.DRAFT).build();
+
+        when(userRepository.findById(2L)).thenReturn(Optional.of(teacher));
+        when(formService.createForRecruit(eq(teacher), eq("잡담"), eq(null))).thenReturn(form);
+        when(recruitRepository.save(any(RecruitEntity.class))).thenAnswer(returnsFirstArg());
+
+        RecruitCreateDTO dto = objectMapper.readValue(
+                "{\"companyName\":\"잡담\",\"fields\":[\"BACKEND\",\"FRONTEND\",\"BACKEND\"]}",
+                RecruitCreateDTO.class);
+
+        RecruitResponseDTO response = recruitService.create(dto, 2L);
+
+        // 중복은 걷어내고 enum 선언 순서로 내려간다.
+        assertThat(response.getFields()).containsExactly(RecruitField.FRONTEND, RecruitField.BACKEND);
+    }
+
+    @Test
+    void 직무_분야를_보내지_않은_수정은_기존_분야를_유지한다() throws Exception {
+        RecruitEntity recruit = draftRecruitWithFields(RecruitField.IOT);
+        when(recruitRepository.findById(10L)).thenReturn(Optional.of(recruit));
+
+        RecruitUpdateDTO dto = objectMapper.readValue("{\"summary\":\"수정된 요약\"}", RecruitUpdateDTO.class);
+
+        RecruitResponseDTO response = recruitService.update(10L, dto, 2L);
+
+        assertThat(response.getFields()).containsExactly(RecruitField.IOT);
+    }
+
+    @Test
+    void 직무_분야를_빈_배열로_보내면_비운다() throws Exception {
+        RecruitEntity recruit = draftRecruitWithFields(RecruitField.IOT);
+        when(recruitRepository.findById(10L)).thenReturn(Optional.of(recruit));
+
+        RecruitUpdateDTO dto = objectMapper.readValue("{\"fields\":[]}", RecruitUpdateDTO.class);
+
+        RecruitResponseDTO response = recruitService.update(10L, dto, 2L);
+
+        assertThat(response.getFields()).isEmpty();
+    }
+
+    @Test
+    void 직무_분야를_다른_값으로_바꿀_수_있다() throws Exception {
+        RecruitEntity recruit = draftRecruitWithFields(RecruitField.IOT);
+        when(recruitRepository.findById(10L)).thenReturn(Optional.of(recruit));
+
+        RecruitUpdateDTO dto = objectMapper.readValue("{\"fields\":[\"AI\"]}", RecruitUpdateDTO.class);
+
+        RecruitResponseDTO response = recruitService.update(10L, dto, 2L);
+
+        assertThat(response.getFields()).containsExactly(RecruitField.AI);
+    }
+
+    private RecruitEntity draftRecruitWithFields(RecruitField... fields) {
+        RecruitEntity recruit = RecruitEntity.builder()
+                .id(10L)
+                .user(user(2L))
+                .companyName("잡담")
+                .summary("기존 요약")
+                .status(RecruitStatus.DRAFT)
+                .build();
+        recruit.replaceFields(List.of(fields));
+        return recruit;
     }
 
     private RecruitEntity publishedRecruit(Long id, LocalDate documentEndDate) {

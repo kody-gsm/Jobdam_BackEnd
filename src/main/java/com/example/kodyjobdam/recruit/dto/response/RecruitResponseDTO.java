@@ -3,12 +3,14 @@ package com.example.kodyjobdam.recruit.dto.response;
 import com.example.kodyjobdam.common.dto.response.PublicationStatus;
 import com.example.kodyjobdam.recruit.dto.RecruitPeriodDTO;
 import com.example.kodyjobdam.recruit.entity.RecruitEntity;
+import com.example.kodyjobdam.recruit.entity.RecruitField;
 import com.example.kodyjobdam.recruit.entity.RecruitPeriod;
 import lombok.Builder;
 import lombok.Getter;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.util.List;
 
 @Getter
 @Builder
@@ -33,6 +35,9 @@ public class RecruitResponseDTO {
 
     /** 면접 일정 표기용 값. interviewPeriod에서 뽑아낸다. 공고에 없으면 "미정". */
     private String interviewDate;
+
+    /** 이 공고가 뽑는 직무 분야. 분석에서 판단하지 못했으면 빈 배열. */
+    private List<RecruitField> fields;
 
     private String summary;
 
@@ -61,6 +66,7 @@ public class RecruitResponseDTO {
                 .interviewPeriod(RecruitPeriodDTO.from(entity.getInterviewPeriod()))
                 .deadline(orUndecided(entity.getDeadline()))
                 .interviewDate(orUndecided(entity.getInterviewDate()))
+                .fields(entity.getSortedFields())
                 .summary(entity.getSummary())
                 .imageUrl(entity.getImageUrl())
                 .formId(entity.getFormId())

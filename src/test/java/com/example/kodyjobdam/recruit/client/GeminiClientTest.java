@@ -1,5 +1,6 @@
 package com.example.kodyjobdam.recruit.client;
 
+import com.example.kodyjobdam.recruit.entity.RecruitField;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -32,6 +33,52 @@ class GeminiClientTest {
         geminiClient = new GeminiClient(restTemplate, new ObjectMapper());
         ReflectionTestUtils.setField(geminiClient, "apiKey", "test-key");
         ReflectionTestUtils.setField(geminiClient, "model", "gemini-3.1-flash-lite");
+    }
+
+    @Test
+    void 직무_분야를_배열로_읽는다() {
+        stubResponse("""
+                {"companyName":"잡담",
+                 "fields":["FRONTEND","BACKEND"],
+                 "summary":"요약"}
+                """);
+
+        GeminiAnalysisResult result = geminiClient.analyze(new byte[]{1}, "image/png");
+
+        assertThat(result.fields()).containsExactly(RecruitField.FRONTEND, RecruitField.BACKEND);
+    }
+
+    @Test
+    void 직무_분야가_문자열_하나로_와도_읽는다() {
+        stubResponse("""
+                {"companyName":"잡담","fields":"iot","summary":"요약"}
+                """);
+
+        GeminiAnalysisResult result = geminiClient.analyze(new byte[]{1}, "image/png");
+
+        assertThat(result.fields()).containsExactly(RecruitField.IOT);
+    }
+
+    @Test
+    void 알_수_없는_직무_분야는_버리고_나머지를_살린다() {
+        stubResponse("""
+                {"companyName":"잡담","fields":["BACKEND","데브옵스",""],"summary":"요약"}
+                """);
+
+        GeminiAnalysisResult result = geminiClient.analyze(new byte[]{1}, "image/png");
+
+        assertThat(result.fields()).containsExactly(RecruitField.BACKEND);
+    }
+
+    @Test
+    void 직무_분야가_없으면_추측하지_않고_비워둔다() {
+        stubResponse("""
+                {"companyName":"잡담","summary":"요약"}
+                """);
+
+        GeminiAnalysisResult result = geminiClient.analyze(new byte[]{1}, "image/png");
+
+        assertThat(result.fields()).isEmpty();
     }
 
     @Test
