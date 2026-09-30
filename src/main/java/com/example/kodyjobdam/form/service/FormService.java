@@ -102,17 +102,24 @@ public class FormService {
     }
 
     /**
-     * 채용 공고 삭제에 맞춰 딸린 지원 폼도 정리한다.
-     * 이미 제출된 응답이 있으면 지원 기록이 사라지지 않도록 폼을 남겨둔다.
+     * 채용 공고 삭제에 맞춰 딸린 지원 폼을 제출된 응답까지 통째로 지운다.
+     *
+     * <p>학생이 낸 지원서와 올린 파일이 함께 사라지며 되돌릴 수 없다. 공고를 지우면 지원 기록도
+     * 남기지 않는다는 운영 방침에 따른 것이다. 폼 화면에서 직접 지우는 {@link #delete}는
+     * 실수로 기록을 날리지 않도록 응답이 있으면 여전히 거부한다.</p>
      */
     @Transactional
     public void deleteForRecruit(Long formId) {
-        formRepository.findById(formId)
-                .filter(form -> !submissionRepository.existsByFormId(formId))
-                .ifPresent(form -> {
-                    formFileService.deleteAllByForm(formId);
-                    formRepository.delete(form);
-                });
+        formRepository.findById(formId).ifPresent(form -> {
+            // 답변이 질문과 첨부 파일을 참조하므로 제출부터 지운다.
+            // 답변과 고른 선택지는 제출에 걸린 cascade로 함께 사라진다.
+            submissionRepository.deleteAll(submissionRepository.findByFormIdOrderBySubmittedAtDesc(formId));
+            // 답변이 실제로 지워진 뒤에 파일을 지워야 form_answer.file_id 참조가 깨지지 않는다.
+            submissionRepository.flush();
+
+            formFileService.deleteAllByForm(formId);
+            formRepository.delete(form);
+        });
     }
 
     /** 선생님: 폼 생성 (초안 상태로 저장) */
