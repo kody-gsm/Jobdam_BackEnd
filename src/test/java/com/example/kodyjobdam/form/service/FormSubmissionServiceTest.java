@@ -86,7 +86,8 @@ class FormSubmissionServiceTest {
 
         assertThatThrownBy(() -> formSubmissionService.resubmit(1L, submitDto("새 답변"), 3L))
                 .isInstanceOf(FormException.class)
-                .hasMessage("지금은 응답을 받지 않는 폼입니다.");
+                .hasMessage("마감된 폼입니다. 더 이상 응답을 받지 않습니다.")
+                .hasFieldOrPropertyWithValue("code", "FORM_CLOSED");
     }
 
     @Test
@@ -98,7 +99,8 @@ class FormSubmissionServiceTest {
 
         assertThatThrownBy(() -> formSubmissionService.submit(1L, submitDto("답변"), 3L))
                 .isInstanceOf(FormException.class)
-                .hasMessage("제출 기한이 지난 폼입니다.");
+                .hasMessage("마감된 폼입니다. 더 이상 응답을 받지 않습니다.")
+                .hasFieldOrPropertyWithValue("code", "FORM_CLOSED");
         verify(submissionRepository, never()).save(any());
     }
 
@@ -112,7 +114,8 @@ class FormSubmissionServiceTest {
 
         assertThatThrownBy(() -> formSubmissionService.resubmit(1L, submitDto("새 답변"), 3L))
                 .isInstanceOf(FormException.class)
-                .hasMessage("제출 기한이 지난 폼입니다.");
+                .hasMessage("마감된 폼입니다. 더 이상 응답을 받지 않습니다.")
+                .hasFieldOrPropertyWithValue("code", "FORM_CLOSED");
         assertThat(submission.getAnswers().get(0).getTextValue()).isEqualTo("이전 답변");
     }
 
@@ -198,6 +201,19 @@ class FormSubmissionServiceTest {
         assertThatThrownBy(() -> formSubmissionService.resubmit(1L, fileSubmitDto(null), 3L))
                 .isInstanceOf(FormException.class)
                 .hasMessage("필수 질문에 답변해주세요: 포트폴리오");
+    }
+
+    @Test
+    void 아직_공개되지_않은_폼에는_응답을_제출할_수_없다() {
+        FormEntity form = publishedForm();
+        ReflectionTestUtils.setField(form, "status", FormStatus.DRAFT);
+        when(formRepository.findById(1L)).thenReturn(Optional.of(form));
+
+        assertThatThrownBy(() -> formSubmissionService.submit(1L, submitDto("답변"), 3L))
+                .isInstanceOf(FormException.class)
+                .hasMessage("아직 공개되지 않은 폼입니다.")
+                .hasFieldOrPropertyWithValue("code", "FORM_NOT_PUBLISHED");
+        verify(submissionRepository, never()).save(any());
     }
 
     private void fixClock(LocalDateTime now) {

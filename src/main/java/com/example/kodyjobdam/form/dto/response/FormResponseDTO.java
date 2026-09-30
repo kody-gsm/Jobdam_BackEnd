@@ -1,7 +1,7 @@
 package com.example.kodyjobdam.form.dto.response;
 
+import com.example.kodyjobdam.common.dto.response.PublicationStatus;
 import com.example.kodyjobdam.form.entity.FormEntity;
-import com.example.kodyjobdam.form.entity.FormStatus;
 import lombok.Builder;
 import lombok.Getter;
 
@@ -20,7 +20,8 @@ public class FormResponseDTO {
 
     private LocalDateTime deadline;
 
-    private FormStatus status;
+    /** 공개 상태. 마감일이 지났으면 저장된 상태와 무관하게 CLOSED로 나간다. */
+    private PublicationStatus status;
 
     private List<FormQuestionResponseDTO> questions;
 
@@ -28,13 +29,14 @@ public class FormResponseDTO {
 
     private LocalDateTime updatedAt;
 
-    public static FormResponseDTO from(FormEntity entity) {
+    /** @param now 마감 여부를 판단할 기준 시각 (한국 시간) */
+    public static FormResponseDTO from(FormEntity entity, LocalDateTime now) {
         return FormResponseDTO.builder()
                 .id(entity.getId())
                 .title(entity.getTitle())
                 .description(entity.getDescription())
                 .deadline(entity.getDeadline())
-                .status(entity.getStatus())
+                .status(entity.publicationStatus(now))
                 .questions(entity.getQuestions().stream()
                         .map(FormQuestionResponseDTO::from)
                         .toList())

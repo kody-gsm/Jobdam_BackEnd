@@ -35,4 +35,18 @@ public class RecruitException extends BusinessException {
     public static RecruitException internalServerError(String message) {
         return new RecruitException(HttpStatus.INTERNAL_SERVER_ERROR, "RECRUIT_INTERNAL_SERVER_ERROR", message);
     }
+
+    /**
+     * 아직 공개되지 않아 학생에게 보이지 않는 공고.
+     *
+     * <p>프론트가 마감(RECRUIT_CLOSED)과 구분해 안내할 수 있도록 코드를 나눈다.</p>
+     */
+    public static RecruitException notPublished(HttpStatus status, String message) {
+        return new RecruitException(status, "RECRUIT_NOT_PUBLISHED", message);
+    }
+
+    /** 서류 접수가 마감되어 학생에게 보이지 않는 공고. */
+    public static RecruitException closed(HttpStatus status, String message) {
+        return new RecruitException(status, "RECRUIT_CLOSED", message);
+    }
 }

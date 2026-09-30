@@ -1,5 +1,6 @@
 package com.example.kodyjobdam.form.entity;
 
+import com.example.kodyjobdam.common.dto.response.PublicationStatus;
 import com.example.kodyjobdam.user.entity.User;
 import jakarta.persistence.*;
 import lombok.AllArgsConstructor;
@@ -87,13 +88,24 @@ public class FormEntity {
         return this.status == FormStatus.DRAFT;
     }
 
-    /** 응답을 받을 수 있는 상태인지 */
-    public boolean isAcceptingSubmission() {
-        return this.status == FormStatus.PUBLISHED;
-    }
-
     /** 제출 기한이 지났는지. 기한이 없는 폼은 지나지 않은 것으로 본다. */
     public boolean isPastDeadline(LocalDateTime now) {
         return this.deadline != null && now.isAfter(this.deadline);
+    }
+
+    /**
+     * 학생 화면용 공개 상태. 저장된 상태와 제출 기한을 함께 본다.
+     *
+     * <p>기한이 지나도 저장된 상태는 PUBLISHED로 남으므로 마감 판단은 항상 이 메서드를 거친다.
+     * 조회·목록·제출 검사가 같은 기준을 쓰도록 마감 여부를 여기 한 곳에서만 정한다.</p>
+     */
+    public PublicationStatus publicationStatus(LocalDateTime now) {
+        if (this.status == FormStatus.DRAFT) {
+            return PublicationStatus.DRAFT;
+        }
+        if (this.status == FormStatus.CLOSED || isPastDeadline(now)) {
+            return PublicationStatus.CLOSED;
+        }
+        return PublicationStatus.PUBLISHED;
     }
 }

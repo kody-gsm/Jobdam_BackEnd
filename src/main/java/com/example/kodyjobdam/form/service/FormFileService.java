@@ -1,5 +1,6 @@
 package com.example.kodyjobdam.form.service;
 
+import com.example.kodyjobdam.common.dto.response.PublicationStatus;
 import com.example.kodyjobdam.common.exception.FormException;
 import com.example.kodyjobdam.form.dto.response.FormFileDownloadDTO;
 import com.example.kodyjobdam.form.dto.response.FormFileResponseDTO;
@@ -12,6 +13,7 @@ import com.example.kodyjobdam.user.UserRepository;
 import com.example.kodyjobdam.user.entity.User;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.support.TransactionSynchronization;
@@ -84,13 +86,20 @@ public class FormFileService {
         return FormFileResponseDTO.from(saved);
     }
 
-    /** 공개 중이고 제출 기한이 지나지 않은 폼에만 응답을 받는다 */
+    /**
+     * 공개 중이고 제출 기한이 지나지 않은 폼에만 응답을 받는다.
+     *
+     * <p>마감 판단은 조회와 같은 기준(공개 상태)을 쓰고, 프론트가 안내 문구를 나눌 수 있도록
+     * 비공개(FORM_NOT_PUBLISHED)와 마감(FORM_CLOSED)을 에러 코드로 구분한다.</p>
+     */
     private void validateAcceptingSubmission(FormEntity form) {
-        if (!form.isAcceptingSubmission()) {
-            throw FormException.badRequest("지금은 응답을 받지 않는 폼입니다.");
+        PublicationStatus status = form.publicationStatus(LocalDateTime.now(clock));
+
+        if (status == PublicationStatus.DRAFT) {
+            throw FormException.notPublished(HttpStatus.BAD_REQUEST, "아직 공개되지 않은 폼입니다.");
         }
-        if (form.isPastDeadline(LocalDateTime.now(clock))) {
-            throw FormException.badRequest("제출 기한이 지난 폼입니다.");
+        if (status == PublicationStatus.CLOSED) {
+            throw FormException.closed(HttpStatus.BAD_REQUEST, "마감된 폼입니다. 더 이상 응답을 받지 않습니다.");
         }
     }
 
