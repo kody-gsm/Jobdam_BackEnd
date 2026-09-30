@@ -23,6 +23,7 @@ import com.example.kodyjobdam.user.UserRepository;
 import com.example.kodyjobdam.user.entity.User;
 import lombok.RequiredArgsConstructor;
 import org.springframework.context.event.EventListener;
+import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
@@ -305,13 +306,22 @@ public class RecruitService {
                 .toList();
     }
 
-    /** 학생/공개용: 공개 중이고 마감되지 않은 공고 단건 */
+    /**
+     * 학생/공개용: 공개 중이고 마감되지 않은 공고 단건.
+     * 초안·마감된 공고는 보이지 않지만, 프론트가 안내 문구를 나눌 수 있도록 에러 코드로 구분해준다.
+     */
     public RecruitResponseDTO getPublished(Long recruitId) {
         RecruitEntity entity = findOrThrow(recruitId);
         LocalDate today = today();
-        if (entity.publicationStatus(today) != PublicationStatus.PUBLISHED) {
-            throw RecruitException.notFound("공개된 공고가 아닙니다.");
+        PublicationStatus status = entity.publicationStatus(today);
+
+        if (status == PublicationStatus.DRAFT) {
+            throw RecruitException.notPublished(HttpStatus.NOT_FOUND, "아직 공개되지 않은 공고입니다.");
         }
+        if (status == PublicationStatus.CLOSED) {
+            throw RecruitException.closed(HttpStatus.NOT_FOUND, "서류 접수가 마감된 공고입니다.");
+        }
+
         return RecruitResponseDTO.from(entity, today);
     }
 

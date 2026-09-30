@@ -23,6 +23,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.http.HttpStatus;
 import org.springframework.test.util.ReflectionTestUtils;
 
 import java.time.Clock;
@@ -388,20 +389,34 @@ class FormServiceTest {
     }
 
     @Test
+    void 마감된_폼_조회는_마감으로_구분된다() {
+        when(formRepository.findById(1L))
+                .thenReturn(Optional.of(publishedForm(1L, LocalDateTime.of(2026, 8, 31, 23, 59, 59))));
+
+        assertThatThrownBy(() -> formService.getPublished(1L))
+                .isInstanceOf(FormException.class)
+                .hasMessage("마감된 폼입니다.")
+                .hasFieldOrPropertyWithValue("code", "FORM_CLOSED")
+                .hasFieldOrPropertyWithValue("status", HttpStatus.NOT_FOUND);
+    }
+
+    @Test
+    void 초안_폼_조회는_비공개로_구분된다() {
+        when(formRepository.findById(1L)).thenReturn(Optional.of(draftForm()));
+
+        assertThatThrownBy(() -> formService.getPublished(1L))
+                .isInstanceOf(FormException.class)
+                .hasMessage("아직 공개되지 않은 폼입니다.")
+                .hasFieldOrPropertyWithValue("code", "FORM_NOT_PUBLISHED")
+                .hasFieldOrPropertyWithValue("status", HttpStatus.NOT_FOUND);
+    }
+
+    @Test
     void 마감_시각_당일까지는_공개_상태로_본다() {
         when(formRepository.findById(1L))
                 .thenReturn(Optional.of(publishedForm(1L, LocalDateTime.of(2026, 9, 1, 23, 59, 59))));
 
         assertThat(formService.getPublished(1L).getStatus()).isEqualTo(PublicationStatus.PUBLISHED);
-    }
-
-    @Test
-    void 마감일이_지난_폼은_학생에게_보이지_않는다() {
-        when(formRepository.findById(1L))
-                .thenReturn(Optional.of(publishedForm(1L, LocalDateTime.of(2026, 8, 31, 23, 59, 59))));
-
-        assertThatThrownBy(() -> formService.getPublished(1L))
-                .isInstanceOf(FormException.class);
     }
 
     @Test

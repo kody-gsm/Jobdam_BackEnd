@@ -28,6 +28,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.http.HttpStatus;
 import org.springframework.mock.web.MockMultipartFile;
 import org.springframework.test.util.ReflectionTestUtils;
 
@@ -378,20 +379,36 @@ class RecruitServiceTest {
     }
 
     @Test
+    void 마감된_공고_조회는_마감으로_구분된다() {
+        when(recruitRepository.findById(10L))
+                .thenReturn(Optional.of(publishedRecruit(10L, LocalDate.of(2026, 8, 31))));
+
+        assertThatThrownBy(() -> recruitService.getPublished(10L))
+                .isInstanceOf(RecruitException.class)
+                .hasMessage("서류 접수가 마감된 공고입니다.")
+                .hasFieldOrPropertyWithValue("code", "RECRUIT_CLOSED")
+                .hasFieldOrPropertyWithValue("status", HttpStatus.NOT_FOUND);
+    }
+
+    @Test
+    void 초안_공고_조회는_비공개로_구분된다() {
+        RecruitEntity recruit = publishedRecruit(10L, LocalDate.of(2026, 9, 30));
+        ReflectionTestUtils.setField(recruit, "status", RecruitStatus.DRAFT);
+        when(recruitRepository.findById(10L)).thenReturn(Optional.of(recruit));
+
+        assertThatThrownBy(() -> recruitService.getPublished(10L))
+                .isInstanceOf(RecruitException.class)
+                .hasMessage("아직 공개되지 않은 공고입니다.")
+                .hasFieldOrPropertyWithValue("code", "RECRUIT_NOT_PUBLISHED")
+                .hasFieldOrPropertyWithValue("status", HttpStatus.NOT_FOUND);
+    }
+
+    @Test
     void 접수_종료일_당일까지는_공개_상태로_본다() {
         when(recruitRepository.findById(10L))
                 .thenReturn(Optional.of(publishedRecruit(10L, LocalDate.of(2026, 9, 1))));
 
         assertThat(recruitService.getPublished(10L).getStatus()).isEqualTo(PublicationStatus.PUBLISHED);
-    }
-
-    @Test
-    void 접수가_마감된_공고는_학생에게_보이지_않는다() {
-        when(recruitRepository.findById(10L))
-                .thenReturn(Optional.of(publishedRecruit(10L, LocalDate.of(2026, 8, 31))));
-
-        assertThatThrownBy(() -> recruitService.getPublished(10L))
-                .isInstanceOf(RecruitException.class);
     }
 
     @Test

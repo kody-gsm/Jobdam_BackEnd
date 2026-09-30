@@ -24,6 +24,7 @@ import com.example.kodyjobdam.user.UserRepository;
 import com.example.kodyjobdam.user.entity.User;
 import lombok.RequiredArgsConstructor;
 import org.springframework.context.ApplicationEventPublisher;
+import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -280,14 +281,21 @@ public class FormService {
                 .toList();
     }
 
-    /** 학생용: 공개 중이고 마감되지 않은 폼 단건 (초안·마감된 폼은 보이지 않는다) */
+    /**
+     * 학생용: 공개 중이고 마감되지 않은 폼 단건.
+     * 초안·마감된 폼은 보이지 않지만, 프론트가 안내 문구를 나눌 수 있도록 에러 코드로 구분해준다.
+     */
     @Transactional(readOnly = true)
     public FormResponseDTO getPublished(Long formId) {
         FormEntity form = findOrThrow(formId);
         LocalDateTime now = now();
+        PublicationStatus status = form.publicationStatus(now);
 
-        if (form.publicationStatus(now) != PublicationStatus.PUBLISHED) {
-            throw FormException.notFound("공개된 폼이 아닙니다.");
+        if (status == PublicationStatus.DRAFT) {
+            throw FormException.notPublished(HttpStatus.NOT_FOUND, "아직 공개되지 않은 폼입니다.");
+        }
+        if (status == PublicationStatus.CLOSED) {
+            throw FormException.closed(HttpStatus.NOT_FOUND, "마감된 폼입니다.");
         }
 
         return FormResponseDTO.from(form, now);
