@@ -1,5 +1,6 @@
 package com.example.kodyjobdam.recruit.service;
 
+import com.example.kodyjobdam.common.dto.response.PublicationStatus;
 import com.example.kodyjobdam.common.exception.RecruitException;
 import com.example.kodyjobdam.form.entity.FormEntity;
 import com.example.kodyjobdam.form.event.FormPublishedEvent;
@@ -22,14 +23,17 @@ import com.example.kodyjobdam.user.UserRepository;
 import com.example.kodyjobdam.user.entity.User;
 import lombok.RequiredArgsConstructor;
 import org.springframework.context.event.EventListener;
+import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.io.IOException;
+import java.time.Clock;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
+import java.time.ZoneId;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -40,6 +44,14 @@ public class RecruitService {
 
     private static final Set<String> SUPPORTED_IMAGE_TYPES =
             Set.of("image/png", "image/jpeg", "image/webp", "image/heic", "image/heif");
+
+    /**
+     * 지원 폼 마감 시각. 서류 접수 마지막 날의 23:59:59로 잡는다.
+     *
+     * <p>{@link LocalTime#MAX}(23:59:59.999999999)를 쓰면 MySQL DATETIME이 소수점 초를 반올림해
+     * 다음 날 00:00:00으로 올라가면서 공고 종료일과 하루 어긋난다. 그래서 초 단위까지만 쓴다.</p>
+     */
+    private static final LocalTime APPLICATION_DEADLINE_TIME = LocalTime.of(23, 59, 59);
 
     private static final Map<String, String> IMAGE_EXTENSIONS = Map.of(
             "image/png", "png",
@@ -64,6 +76,9 @@ public class RecruitService {
     private final NotificationExpirationService notificationExpirationService;
 
     private final NoticeAnnouncer noticeAnnouncer;
+
+    /** 마감 여부를 판단하는 기준 시계. 마감일은 한국 시간으로 저장된다. */
+    private Clock clock = Clock.system(ZoneId.of("Asia/Seoul"));
 
     /** 선생님: 이미지 분석 → 초안(DRAFT)으로 저장 후 결과 반환 */
     @Transactional
@@ -110,7 +125,7 @@ public class RecruitService {
                 .status(RecruitStatus.DRAFT)
                 .build());
 
-        return RecruitResponseDTO.from(entity);
+        return RecruitResponseDTO.from(entity, today());
     }
 
     /** 선생님: 이미지 없이 직접 입력한 내용으로 초안(DRAFT)을 만든다 */
@@ -137,7 +152,7 @@ public class RecruitService {
                 .status(RecruitStatus.DRAFT)
                 .build());
 
-        return RecruitResponseDTO.from(entity);
+        return RecruitResponseDTO.from(entity, today());
     }
 
     /**
@@ -161,13 +176,16 @@ public class RecruitService {
         if (entity.getFormId() != null) {
             formService.updateDeadlineForRecruit(entity.getFormId(), applicationDeadline(documentPeriod));
         }
-        return RecruitResponseDTO.from(entity);
+        return RecruitResponseDTO.from(entity, today());
     }
 
-    /** 지원 폼 마감은 서류 접수 마지막 날 자정으로 잡는다. 접수 기간을 못 읽었으면 비워둔다. */
+    /**
+     * 지원 폼 마감은 서류 접수 마지막 날 23:59:59로 잡는다. 접수 기간을 못 읽었으면 비워둔다.
+     * 공고와 폼이 같은 날짜를 가리키도록 이 한 곳에서만 계산한다.
+     */
     private LocalDateTime applicationDeadline(RecruitPeriod documentPeriod) {
         LocalDate endDate = documentPeriod == null ? null : documentPeriod.getEndDate();
-        return endDate == null ? null : endDate.atTime(LocalTime.MAX);
+        return endDate == null ? null : endDate.atTime(APPLICATION_DEADLINE_TIME);
     }
 
     /** 요청에 없는 전형 기간은 기존 값을 그대로 둔다. */
@@ -227,8 +245,14 @@ public class RecruitService {
     public RecruitResponseDTO publish(Long recruitId, Long teacherId) {
         RecruitEntity entity = findOrThrow(recruitId);
         validateOwner(entity, teacherId);
+        LocalDate today = today();
         if (entity.getStatus() != RecruitStatus.DRAFT) {
             throw RecruitException.badRequest("초안 상태의 채용 공고만 공개할 수 있습니다.");
+        }
+        // 공개해도 곧바로 마감 상태가 되어 학생에게 보이지 않는다. 공지·알림만 헛되게 나가므로 막는다.
+        if (entity.isPastDeadline(today)) {
+            throw RecruitException.badRequest(
+                    "서류 접수 종료일이 이미 지난 공고는 공개할 수 없습니다. 접수 기간을 먼저 수정해주세요.");
         }
 
         entity.publish();
@@ -244,7 +268,7 @@ public class RecruitService {
                 "/recruit/" + entity.getId(),
                 notificationExpirationService.recruitExpiresAt(entity.getDeadline())
         );
-        return RecruitResponseDTO.from(entity);
+        return RecruitResponseDTO.from(entity, today);
     }
 
     /** 공고에 딸린 폼을 폼 화면에서 공개하면 공고도 함께 공개한다. 폼을 공개한 트랜잭션 안에서 이어 돈다. */
@@ -266,25 +290,44 @@ public class RecruitService {
 
     /** 선생님 관리용: 초안 포함 전체 목록 */
     public List<RecruitResponseDTO> listForTeacher(Long teacherId) {
+        LocalDate today = today();
         return recruitRepository.findByUserIdOrderByCreatedAtDesc(teacherId).stream()
-                .map(RecruitResponseDTO::from)
+                .map(recruit -> RecruitResponseDTO.from(recruit, today))
                 .toList();
     }
 
-    /** 학생/공개용: 공개된 공고 목록 */
+    /** 학생/공개용: 공개 중이고 마감되지 않은 공고 목록 */
     public List<RecruitResponseDTO> listPublished() {
+        LocalDate today = today();
         return recruitRepository.findByStatusOrderByCreatedAtDesc(RecruitStatus.PUBLISHED).stream()
-                .map(RecruitResponseDTO::from)
+                // 마감된 공고는 단건 조회도 막으므로 목록에서도 빼서 눌렀을 때 404가 나지 않게 한다.
+                .filter(recruit -> recruit.publicationStatus(today) == PublicationStatus.PUBLISHED)
+                .map(recruit -> RecruitResponseDTO.from(recruit, today))
                 .toList();
     }
 
-    /** 학생/공개용: 공개된 공고 단건 */
+    /**
+     * 학생/공개용: 공개 중이고 마감되지 않은 공고 단건.
+     * 초안·마감된 공고는 보이지 않지만, 프론트가 안내 문구를 나눌 수 있도록 에러 코드로 구분해준다.
+     */
     public RecruitResponseDTO getPublished(Long recruitId) {
         RecruitEntity entity = findOrThrow(recruitId);
-        if (entity.getStatus() != RecruitStatus.PUBLISHED) {
-            throw RecruitException.notFound("공개된 공고가 아닙니다.");
+        LocalDate today = today();
+        PublicationStatus status = entity.publicationStatus(today);
+
+        if (status == PublicationStatus.DRAFT) {
+            throw RecruitException.notPublished(HttpStatus.NOT_FOUND, "아직 공개되지 않은 공고입니다.");
         }
-        return RecruitResponseDTO.from(entity);
+        if (status == PublicationStatus.CLOSED) {
+            throw RecruitException.closed(HttpStatus.NOT_FOUND, "서류 접수가 마감된 공고입니다.");
+        }
+
+        return RecruitResponseDTO.from(entity, today);
+    }
+
+    /** 마감 판단 기준 날짜 (한국 시간) */
+    private LocalDate today() {
+        return LocalDate.now(clock);
     }
 
     private RecruitEntity findOrThrow(Long recruitId) {
