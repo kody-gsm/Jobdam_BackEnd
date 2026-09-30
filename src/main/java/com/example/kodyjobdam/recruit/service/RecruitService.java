@@ -12,6 +12,7 @@ import com.example.kodyjobdam.recruit.dto.request.RecruitCreateDTO;
 import com.example.kodyjobdam.recruit.dto.request.RecruitUpdateDTO;
 import com.example.kodyjobdam.recruit.dto.response.RecruitResponseDTO;
 import com.example.kodyjobdam.recruit.entity.RecruitEntity;
+import com.example.kodyjobdam.recruit.entity.RecruitField;
 import com.example.kodyjobdam.recruit.entity.RecruitPeriod;
 import com.example.kodyjobdam.recruit.entity.RecruitStatus;
 import com.example.kodyjobdam.recruit.repository.RecruitRepository;
@@ -34,6 +35,8 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.time.ZoneId;
+import java.util.Collection;
+import java.util.EnumSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -147,6 +150,7 @@ public class RecruitService {
                 .practicalExamPeriod(resolvePeriod(dto.getPracticalExamPeriod(), null))
                 .codingTestPeriod(resolvePeriod(dto.getCodingTestPeriod(), null))
                 .interviewPeriod(resolveInterviewPeriod(null, dto.getInterviewPeriod(), dto.getInterviewDate()))
+                .fields(toFieldSet(dto.getFields()))
                 .form(form)
                 .summary(dto.getSummary())
                 .status(RecruitStatus.DRAFT)
@@ -172,6 +176,7 @@ public class RecruitService {
                 resolvePeriod(dto.getPracticalExamPeriod(), entity.getPracticalExamPeriod()),
                 resolvePeriod(dto.getCodingTestPeriod(), entity.getCodingTestPeriod()),
                 resolveInterviewPeriod(entity.getInterviewPeriod(), dto.getInterviewPeriod(), dto.getInterviewDate()),
+                dto.getFields() == null ? null : toFieldSet(dto.getFields()),
                 dto.getSummary() == null ? entity.getSummary() : dto.getSummary());
         if (entity.getFormId() != null) {
             formService.updateDeadlineForRecruit(entity.getFormId(), applicationDeadline(documentPeriod));
@@ -186,6 +191,15 @@ public class RecruitService {
     private LocalDateTime applicationDeadline(RecruitPeriod documentPeriod) {
         LocalDate endDate = documentPeriod == null ? null : documentPeriod.getEndDate();
         return endDate == null ? null : endDate.atTime(APPLICATION_DEADLINE_TIME);
+    }
+
+    /** 중복을 걷어내고 enum 선언 순서로 담는다. 빈 목록은 분야 없음을 뜻한다. */
+    private EnumSet<RecruitField> toFieldSet(Collection<RecruitField> fields) {
+        EnumSet<RecruitField> set = EnumSet.noneOf(RecruitField.class);
+        if (fields != null) {
+            fields.stream().filter(java.util.Objects::nonNull).forEach(set::add);
+        }
+        return set;
     }
 
     /** 요청에 없는 전형 기간은 기존 값을 그대로 둔다. */
