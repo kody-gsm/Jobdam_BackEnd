@@ -136,7 +136,11 @@ public class FormService {
         FormEntity form = findOrThrow(formId);
         validateOwner(form, teacherId);
 
-        form.update(dto.getTitle(), dto.getDescription(), dto.getDeadline());
+        // 요청에 없는(null) 항목은 기존 값을 그대로 둔다. 제목만 보낸 요청이 설명·마감일을 지우지 않도록.
+        form.update(
+                dto.getTitle(),
+                dto.getDescription() == null ? form.getDescription() : dto.getDescription(),
+                resolveDeadline(form, dto.getDeadline()));
 
         if (dto.getQuestions() != null) {
             if (dto.getQuestions().isEmpty()) {
@@ -152,6 +156,23 @@ public class FormService {
         }
 
         return FormResponseDTO.from(form);
+    }
+
+    /**
+     * 요청에 없는(null) 마감일은 기존 값을 그대로 둔다.
+     *
+     * <p>공고에 딸린 지원 폼의 마감일은 공고의 서류 접수 종료일에서만 나온다.
+     * 폼 쪽에서 따로 바꾸면 두 값이 갈라지므로 막고 공고를 고치도록 안내한다.</p>
+     */
+    private LocalDateTime resolveDeadline(FormEntity form, LocalDateTime requested) {
+        if (requested == null || requested.equals(form.getDeadline())) {
+            return form.getDeadline();
+        }
+        if (recruitRepository.existsByForm_Id(form.getId())) {
+            throw FormException.badRequest(
+                    "공고에 딸린 지원 폼의 마감일은 공고의 서류 접수 종료일을 따릅니다. 공고의 서류 접수 기간을 수정해주세요.");
+        }
+        return requested;
     }
 
     /** 선생님: 폼 삭제 (응답이 하나라도 있으면 지울 수 없다) */

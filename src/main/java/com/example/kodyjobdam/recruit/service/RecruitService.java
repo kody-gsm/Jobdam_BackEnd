@@ -41,6 +41,14 @@ public class RecruitService {
     private static final Set<String> SUPPORTED_IMAGE_TYPES =
             Set.of("image/png", "image/jpeg", "image/webp", "image/heic", "image/heif");
 
+    /**
+     * 지원 폼 마감 시각. 서류 접수 마지막 날의 23:59:59로 잡는다.
+     *
+     * <p>{@link LocalTime#MAX}(23:59:59.999999999)를 쓰면 MySQL DATETIME이 소수점 초를 반올림해
+     * 다음 날 00:00:00으로 올라가면서 공고 종료일과 하루 어긋난다. 그래서 초 단위까지만 쓴다.</p>
+     */
+    private static final LocalTime APPLICATION_DEADLINE_TIME = LocalTime.of(23, 59, 59);
+
     private static final Map<String, String> IMAGE_EXTENSIONS = Map.of(
             "image/png", "png",
             "image/jpeg", "jpg",
@@ -164,10 +172,13 @@ public class RecruitService {
         return RecruitResponseDTO.from(entity);
     }
 
-    /** 지원 폼 마감은 서류 접수 마지막 날 자정으로 잡는다. 접수 기간을 못 읽었으면 비워둔다. */
+    /**
+     * 지원 폼 마감은 서류 접수 마지막 날 23:59:59로 잡는다. 접수 기간을 못 읽었으면 비워둔다.
+     * 공고와 폼이 같은 날짜를 가리키도록 이 한 곳에서만 계산한다.
+     */
     private LocalDateTime applicationDeadline(RecruitPeriod documentPeriod) {
         LocalDate endDate = documentPeriod == null ? null : documentPeriod.getEndDate();
-        return endDate == null ? null : endDate.atTime(LocalTime.MAX);
+        return endDate == null ? null : endDate.atTime(APPLICATION_DEADLINE_TIME);
     }
 
     /** 요청에 없는 전형 기간은 기존 값을 그대로 둔다. */

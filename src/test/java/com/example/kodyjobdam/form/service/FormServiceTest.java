@@ -284,6 +284,66 @@ class FormServiceTest {
         verify(formRepository).delete(form);
     }
 
+    @Test
+    void 제목만_보낸_수정은_설명과_마감일을_지우지_않는다() {
+        FormEntity form = FormEntity.builder()
+                .id(1L)
+                .title("이전 제목")
+                .description("이전 설명")
+                .user(user(2L))
+                .deadline(LocalDateTime.of(2026, 9, 10, 23, 59, 59))
+                .status(FormStatus.DRAFT)
+                .build();
+        when(formRepository.findById(1L)).thenReturn(Optional.of(form));
+
+        formService.update(1L, updateDtoWithoutQuestions("새 제목"), 2L);
+
+        assertThat(form.getTitle()).isEqualTo("새 제목");
+        assertThat(form.getDescription()).isEqualTo("이전 설명");
+        assertThat(form.getDeadline()).isEqualTo(LocalDateTime.of(2026, 9, 10, 23, 59, 59));
+    }
+
+    @Test
+    void 공고에_딸린_폼의_마감일은_폼_화면에서_바꿀_수_없다() {
+        FormEntity form = FormEntity.builder()
+                .id(1L)
+                .title("잡담 지원서")
+                .user(user(2L))
+                .deadline(LocalDateTime.of(2026, 9, 10, 23, 59, 59))
+                .status(FormStatus.DRAFT)
+                .build();
+        when(formRepository.findById(1L)).thenReturn(Optional.of(form));
+        when(recruitRepository.existsByForm_Id(1L)).thenReturn(true);
+
+        FormUpdateDTO dto = updateDtoWithoutQuestions("잡담 지원서");
+        ReflectionTestUtils.setField(dto, "deadline", LocalDateTime.of(2026, 9, 20, 23, 59, 59));
+
+        assertThatThrownBy(() -> formService.update(1L, dto, 2L))
+                .isInstanceOf(FormException.class)
+                .hasMessage("공고에 딸린 지원 폼의 마감일은 공고의 서류 접수 종료일을 따릅니다. 공고의 서류 접수 기간을 수정해주세요.");
+        assertThat(form.getDeadline()).isEqualTo(LocalDateTime.of(2026, 9, 10, 23, 59, 59));
+    }
+
+    @Test
+    void 공고에_딸리지_않은_폼은_마감일을_바꿀_수_있다() {
+        FormEntity form = FormEntity.builder()
+                .id(1L)
+                .title("만족도 조사")
+                .user(user(2L))
+                .deadline(LocalDateTime.of(2026, 9, 10, 23, 59, 59))
+                .status(FormStatus.DRAFT)
+                .build();
+        when(formRepository.findById(1L)).thenReturn(Optional.of(form));
+        when(recruitRepository.existsByForm_Id(1L)).thenReturn(false);
+
+        FormUpdateDTO dto = updateDtoWithoutQuestions("만족도 조사");
+        ReflectionTestUtils.setField(dto, "deadline", LocalDateTime.of(2026, 9, 20, 23, 59, 59));
+
+        formService.update(1L, dto, 2L);
+
+        assertThat(form.getDeadline()).isEqualTo(LocalDateTime.of(2026, 9, 20, 23, 59, 59));
+    }
+
     private FormUpdateDTO updateDtoWithoutQuestions(String title) {
         FormUpdateDTO dto = new FormUpdateDTO();
         ReflectionTestUtils.setField(dto, "title", title);

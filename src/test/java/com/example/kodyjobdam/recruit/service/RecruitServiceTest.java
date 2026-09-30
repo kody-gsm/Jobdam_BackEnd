@@ -87,7 +87,7 @@ class RecruitServiceTest {
         when(geminiClient.analyze(any(), eq("image/png"))).thenReturn(new GeminiAnalysisResult(
                 "잡담", documentPeriod, null, null, null, null, "요약"));
         when(formService.createForRecruit(
-                eq(teacher), eq("잡담"), eq(LocalDate.of(2026, 9, 10).atTime(LocalTime.MAX))))
+                eq(teacher), eq("잡담"), eq(LocalDate.of(2026, 9, 10).atTime(LocalTime.of(23, 59, 59)))))
                 .thenReturn(form);
         when(recruitImageStorage.store(any(byte[].class), eq("png")))
                 .thenReturn("/uploads/recruit/2026/09/uuid.png");
@@ -107,7 +107,7 @@ class RecruitServiceTest {
 
         when(userRepository.findById(2L)).thenReturn(Optional.of(teacher));
         when(formService.createForRecruit(
-                eq(teacher), eq("잡담"), eq(LocalDate.of(2026, 9, 12).atTime(LocalTime.MAX))))
+                eq(teacher), eq("잡담"), eq(LocalDate.of(2026, 9, 12).atTime(LocalTime.of(23, 59, 59)))))
                 .thenReturn(form);
         when(recruitRepository.save(any(RecruitEntity.class))).thenAnswer(returnsFirstArg());
 
@@ -321,7 +321,9 @@ class RecruitServiceTest {
         assertThat(response.getDocumentPeriod().startDate()).isEqualTo(LocalDate.of(2026, 9, 1));
         assertThat(response.getDocumentPeriod().endDate()).isEqualTo(LocalDate.of(2026, 9, 12));
         assertThat(response.getCodingTestPeriod().startDate()).isEqualTo(LocalDate.of(2026, 9, 15));
-        verify(formService).updateDeadlineForRecruit(7L, LocalDate.of(2026, 9, 12).atTime(LocalTime.MAX));
+        // 공고 종료일과 폼 마감일이 같은 날짜를 가리켜야 한다. LocalTime.MAX는 MySQL에서 다음 날로 반올림된다.
+        verify(formService).updateDeadlineForRecruit(
+                7L, LocalDate.of(2026, 9, 12).atTime(LocalTime.of(23, 59, 59)));
     }
 
     @Test
