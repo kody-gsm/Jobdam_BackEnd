@@ -3,6 +3,7 @@ package com.example.kodyjobdam.recruit.client;
 import com.example.kodyjobdam.common.exception.BusinessException;
 import com.example.kodyjobdam.common.exception.ConfigException;
 import com.example.kodyjobdam.common.exception.RecruitException;
+import com.example.kodyjobdam.recruit.entity.RecruitField;
 import com.example.kodyjobdam.recruit.entity.RecruitPeriod;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -24,6 +25,8 @@ import org.springframework.web.client.RestTemplate;
 import java.time.DateTimeException;
 import java.time.LocalDate;
 import java.util.Base64;
+import java.util.EnumSet;
+import java.util.Set;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -45,7 +48,24 @@ public class GeminiClient {
             - practicalExamPeriod: 실기 전형 기간
             - codingTestPeriod: 코딩테스트 전형 기간
             - interviewPeriod: 면접 전형 기간. "면접 일정", "면접일"도 여기에 넣으세요.
+            - fields: 이 공고가 뽑는 직무를 아래 목록에서 골라 문자열 배열로 넣으세요.
             - summary: 그 외 지원자가 꼭 알아야 할 중요 정보(준비물, 장소, 상세 시각 등)를 2~3문장으로 요약
+
+            직무(fields)는 아래 값만 쓰세요.
+            - FRONTEND: 웹 프론트엔드. React, Vue, 퍼블리싱, 웹 UI 개발
+            - BACKEND: 서버·API·데이터베이스. Java, Spring, Node.js, 서버 개발
+            - FULLSTACK: 프론트엔드와 백엔드를 한 사람이 함께 맡는 경우
+            - MOBILE: 앱 개발. Android, iOS, Kotlin, Swift, Flutter, React Native
+            - IOT: 임베디드, 펌웨어, 하드웨어 제어, 로봇, 센서, C/C++ 기반 제어
+            - AI: 인공지능, 머신러닝, 딥러닝, 데이터 분석, 데이터 엔지니어링
+            - SECURITY: 정보보안, 보안 관제, 모의해킹, 취약점 진단
+            - ETC: 위 어디에도 넣기 어려운 직무 (기획, 디자인, QA, 일반 사무 등)
+
+            - 여러 직무를 함께 뽑는 공고면 해당하는 값을 모두 배열에 넣으세요.
+            - "웹 개발자"처럼 프론트엔드와 백엔드를 나누지 않고 한 사람이 다 맡는 공고는 FULLSTACK 하나만 넣으세요.
+            - 프론트엔드 직무와 백엔드 직무를 따로 모집하는 공고는 FRONTEND와 BACKEND를 각각 넣으세요.
+            - 직무가 적혀 있지만 위 분류에 없으면 ETC를 넣으세요.
+            - 직무를 전혀 알 수 없으면 빈 배열([])로 두세요. 추측해서 아무 값이나 넣지 마세요.
 
             기간 항목은 {"startDate": "YYYY-MM-DD", "endDate": "YYYY-MM-DD"} 형태의 객체로만 작성하세요.
             - 날짜는 반드시 YYYY-MM-DD 형식이어야 하며 다른 형식이나 설명을 덧붙이지 마세요.
@@ -56,7 +76,7 @@ public class GeminiClient {
             - 시각(예: 14:00)은 기간에 넣지 말고 summary에 적으세요.
 
             반드시 아래 JSON 형식으로만 응답하세요.
-            {"companyName": string|null, "documentPeriod": object|null, "writtenExamPeriod": object|null, "practicalExamPeriod": object|null, "codingTestPeriod": object|null, "interviewPeriod": object|null, "summary": string|null}
+            {"companyName": string|null, "documentPeriod": object|null, "writtenExamPeriod": object|null, "practicalExamPeriod": object|null, "codingTestPeriod": object|null, "interviewPeriod": object|null, "fields": string[], "summary": string|null}
             """;
 
     /** 연-월-일 사이에 무엇이 끼어 있어도 숫자만 뽑아낸다. */
@@ -140,11 +160,15 @@ public class GeminiClient {
                     readPeriod(data, "practicalExamPeriod"),
                     readPeriod(data, "codingTestPeriod"),
                     readPeriod(data, "interviewPeriod"),
+                    readFields(data),
                     readText(data, "summary")
             );
 
             if (result.documentPeriod() == null || result.interviewPeriod() == null) {
                 log.warn("Gemini가 서류 접수/면접 기간을 채우지 않았습니다: model={}, 응답={}", model, text);
+            }
+            if (result.fields().isEmpty()) {
+                log.warn("Gemini가 직무 분야를 채우지 않았습니다: model={}, 응답={}", model, text);
             }
 
             return result;
@@ -166,6 +190,44 @@ public class GeminiClient {
             text.append(part.path("text").asText(""));
         }
         return text.toString().trim();
+    }
+
+    /**
+     * 직무 분야를 읽는다. 배열 대신 문자열 하나로 돌아온 응답도 받아준다.
+     *
+     * <p>모르는 값은 버리고 나머지는 살린다. 하나도 못 읽으면 비워두고 선생님이 채우게 한다.
+     * 임의로 ETC를 넣으면 분류하지 못한 공고와 정말 기타인 공고를 구분할 수 없다.</p>
+     */
+    private Set<RecruitField> readFields(JsonNode data) {
+        JsonNode node = data.path("fields");
+        Set<RecruitField> fields = EnumSet.noneOf(RecruitField.class);
+
+        if (node.isTextual()) {
+            addField(fields, node.asText());
+            return fields;
+        }
+        if (!node.isArray()) {
+            return fields;
+        }
+
+        for (JsonNode element : node) {
+            if (element.isTextual()) {
+                addField(fields, element.asText());
+            }
+        }
+        return fields;
+    }
+
+    private void addField(Set<RecruitField> fields, String value) {
+        if (value == null || value.isBlank()) {
+            return;
+        }
+
+        try {
+            fields.add(RecruitField.valueOf(value.trim().toUpperCase()));
+        } catch (IllegalArgumentException e) {
+            log.warn("Gemini가 알 수 없는 직무 분야를 반환했습니다: {}", value);
+        }
     }
 
     /** 날짜 형식이 어긋난 항목은 버리고 나머지는 살린다. */

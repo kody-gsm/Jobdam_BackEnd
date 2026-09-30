@@ -105,7 +105,8 @@ class RecruitServiceTest {
 
         when(userRepository.findById(2L)).thenReturn(Optional.of(teacher));
         when(geminiClient.analyze(any(), eq("image/png"))).thenReturn(new GeminiAnalysisResult(
-                "잡담", documentPeriod, null, null, null, null, "요약"));
+                "잡담", documentPeriod, null, null, null, null,
+                java.util.Set.of(RecruitField.BACKEND), "요약"));
         when(formService.createForRecruit(
                 eq(teacher), eq("잡담"), eq(LocalDate.of(2026, 9, 10).atTime(LocalTime.of(23, 59, 59)))))
                 .thenReturn(form);
@@ -118,6 +119,7 @@ class RecruitServiceTest {
 
         assertThat(response.getFormId()).isEqualTo(7L);
         assertThat(response.getImageUrl()).isEqualTo("/uploads/recruit/2026/09/uuid.png");
+        assertThat(response.getFields()).containsExactly(RecruitField.BACKEND);
     }
 
     @Test

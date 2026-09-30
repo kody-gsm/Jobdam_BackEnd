@@ -122,6 +122,7 @@ public class RecruitService {
                 .practicalExamPeriod(result.practicalExamPeriod())
                 .codingTestPeriod(result.codingTestPeriod())
                 .interviewPeriod(result.interviewPeriod())
+                .fields(toFieldSet(result.fields()))
                 .form(form)
                 .summary(result.summary())
                 .imageUrl(imageUrl)
