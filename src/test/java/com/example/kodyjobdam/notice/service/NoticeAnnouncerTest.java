@@ -39,6 +39,29 @@ class NoticeAnnouncerTest {
         NoticeRequestDto notice = captor.getValue();
         assertThat(notice.getTitle()).isEqualTo("잡담 공고");
         assertThat(notice.getContent()).isEqualTo("요약");
+        assertThat(notice.getField()).isNull();
+        assertThat(notice.getLink()).isEqualTo("https://jobdam.test/recruit/10");
+    }
+
+    @Test
+    void 분야를_함께_보낸다() {
+        noticeAnnouncer.announce("잡담 공고", "요약", "백엔드, AI", "/recruit/10");
+
+        ArgumentCaptor<NoticeRequestDto> captor = ArgumentCaptor.forClass(NoticeRequestDto.class);
+        verify(discordNoticeService).sendNotice(captor.capture());
+        assertThat(captor.getValue().getField()).isEqualTo("백엔드, AI");
+    }
+
+    @Test
+    void 기존_메시지를_수정한다() {
+        noticeAnnouncer.update("1234567890", "잡담 공고", "수정된 요약", "백엔드", "/recruit/10");
+
+        ArgumentCaptor<NoticeRequestDto> captor = ArgumentCaptor.forClass(NoticeRequestDto.class);
+        verify(discordNoticeService).updateNotice(org.mockito.ArgumentMatchers.eq("1234567890"), captor.capture());
+        NoticeRequestDto notice = captor.getValue();
+        assertThat(notice.getTitle()).isEqualTo("잡담 공고");
+        assertThat(notice.getContent()).isEqualTo("수정된 요약");
+        assertThat(notice.getField()).isEqualTo("백엔드");
         assertThat(notice.getLink()).isEqualTo("https://jobdam.test/recruit/10");
     }
 

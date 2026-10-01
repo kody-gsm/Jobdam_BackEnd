@@ -10,12 +10,22 @@ package com.example.kodyjobdam.recruit.entity;
  * 설명이 없으면 AI가 그 값을 고르지 못한다.</p>
  */
 public enum RecruitField {
-    FRONTEND,   // 웹 프론트엔드
-    BACKEND,    // 서버·API·DB
-    FULLSTACK,  // 프론트엔드와 백엔드를 함께
-    MOBILE,     // Android·iOS·Flutter 앱
-    IOT,        // 임베디드·펌웨어·하드웨어 제어
-    AI,         // 인공지능·머신러닝·데이터 분석
-    SECURITY,   // 정보보안·보안 관제
-    ETC         // 위 어디에도 넣기 어려운 직무
+    FRONTEND("프론트엔드"),   // 웹 프론트엔드
+    BACKEND("백엔드"),       // 서버·API·DB
+    FULLSTACK("풀스택"),     // 프론트엔드와 백엔드를 함께
+    MOBILE("모바일"),        // Android·iOS·Flutter 앱
+    IOT("임베디드·IoT"),     // 임베디드·펌웨어·하드웨어 제어
+    AI("AI"),                // 인공지능·머신러닝·데이터 분석
+    SECURITY("보안"),        // 정보보안·보안 관제
+    ETC("기타");             // 위 어디에도 넣기 어려운 직무
+
+    private final String displayName;
+
+    RecruitField(String displayName) {
+        this.displayName = displayName;
+    }
+
+    public String getDisplayName() {
+        return displayName;
+    }
 }
