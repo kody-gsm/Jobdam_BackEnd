@@ -16,6 +16,9 @@ public class NoticeRequestDto {
     @Size(max = 4096, message = "공지 내용은 4096자 이하로 입력해주세요.")
     private String content;
 
+    @Size(max = 1024, message = "공지 분야는 1024자 이하로 입력해주세요.")
+    private String field;
+
     @Size(max = 2048, message = "공지 링크는 2048자 이하로 입력해주세요.")
     private String link;
 }

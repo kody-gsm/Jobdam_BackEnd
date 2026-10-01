@@ -179,11 +179,13 @@ class RecruitServiceTest {
                 .status(RecruitStatus.DRAFT)
                 .build();
         when(recruitRepository.findById(10L)).thenReturn(Optional.of(recruit));
+        when(noticeAnnouncer.announce("잡담 공고", "새로운 취업 공고가 등록되었습니다.", "미정", "/recruit/10"))
+                .thenReturn("1234567890");
 
         recruitService.publish(10L, 2L);
 
         verify(formService).publishForRecruit(7L);
-        verify(discordNoticeService, never()).sendNotice(any());
+        assertThat(recruit.getDiscordMessageId()).isEqualTo("1234567890");
     }
 
     @Test
@@ -203,8 +205,7 @@ class RecruitServiceTest {
         assertThat(recruit.getStatus()).isEqualTo(RecruitStatus.PUBLISHED);
         verify(notificationService).notifyAllStudents(
                 eq(NotificationType.RECRUIT_PUBLISHED), any(), any(), eq(10L), any(), any());
-        // 이 경로에는 프론트의 디스코드 발송 호출이 없어 백엔드가 보낸다.
-        verify(noticeAnnouncer).announce("잡담 공고", "새로운 취업 공고가 등록되었습니다.", "/recruit/10");
+        verify(noticeAnnouncer).announce("잡담 공고", "새로운 취업 공고가 등록되었습니다.", "미정", "/recruit/10");
     }
 
     @Test
@@ -266,7 +267,7 @@ class RecruitServiceTest {
     }
 
     @Test
-    void updatePublishedRecruitDoesNotSendDiscordMessage() throws Exception {
+    void updatePublishedRecruitUpdatesDiscordMessage() throws Exception {
         RecruitEntity recruit = RecruitEntity.builder()
                 .id(10L)
                 .user(user(2L))
@@ -282,7 +283,7 @@ class RecruitServiceTest {
 
         recruitService.update(10L, dto, 2L);
 
-        verify(discordNoticeService, never()).updateNotice(any(), any());
+        verify(noticeAnnouncer).update("1234567890", "잡담 공고", "수정된 요약", "미정", "/recruit/10");
     }
 
     @Test

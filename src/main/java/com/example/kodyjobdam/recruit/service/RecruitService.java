@@ -40,6 +40,7 @@ import java.util.EnumSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
@@ -182,6 +183,7 @@ public class RecruitService {
         if (entity.getFormId() != null) {
             formService.updateDeadlineForRecruit(entity.getFormId(), applicationDeadline(documentPeriod));
         }
+        updateDiscordNoticeIfPublished(entity);
         return RecruitResponseDTO.from(entity, today());
     }
 
@@ -283,6 +285,14 @@ public class RecruitService {
                 "/recruit/" + entity.getId(),
                 notificationExpirationService.recruitExpiresAt(entity.getDeadline())
         );
+        String messageId = noticeAnnouncer.announce(
+                recruitNoticeTitle(entity),
+                recruitNoticeContent(entity),
+                recruitNoticeField(entity),
+                recruitNoticePath(entity));
+        if (messageId != null && !messageId.isBlank()) {
+            entity.linkDiscordMessage(messageId);
+        }
         return RecruitResponseDTO.from(entity, today);
     }
 
@@ -293,14 +303,47 @@ public class RecruitService {
                 .filter(recruit -> recruit.getStatus() == RecruitStatus.DRAFT)
                 .ifPresent(recruit -> {
                     publish(recruit.getId(), recruit.getUser().getId());
-                    // 공고 화면에서 공개할 때는 프론트가 디스코드로 보내지만, 이 경로에는 그 호출이 없다.
-                    noticeAnnouncer.announce(
-                            recruit.getCompanyName() + " 공고",
-                            recruit.getSummary() == null || recruit.getSummary().isBlank()
-                                    ? "새로운 취업 공고가 등록되었습니다."
-                                    : recruit.getSummary(),
-                            "/recruit/" + recruit.getId());
                 });
+    }
+
+    private void updateDiscordNoticeIfPublished(RecruitEntity entity) {
+        if (entity.getStatus() != RecruitStatus.PUBLISHED) {
+            return;
+        }
+        if (entity.getDiscordMessageId() == null || entity.getDiscordMessageId().isBlank()) {
+            return;
+        }
+
+        noticeAnnouncer.update(
+                entity.getDiscordMessageId(),
+                recruitNoticeTitle(entity),
+                recruitNoticeContent(entity),
+                recruitNoticeField(entity),
+                recruitNoticePath(entity));
+    }
+
+    private String recruitNoticeTitle(RecruitEntity entity) {
+        return entity.getCompanyName() + " 공고";
+    }
+
+    private String recruitNoticeContent(RecruitEntity entity) {
+        return entity.getSummary() == null || entity.getSummary().isBlank()
+                ? "새로운 취업 공고가 등록되었습니다."
+                : entity.getSummary();
+    }
+
+    private String recruitNoticeField(RecruitEntity entity) {
+        List<RecruitField> fields = entity.getSortedFields();
+        if (fields.isEmpty()) {
+            return "미정";
+        }
+        return fields.stream()
+                .map(RecruitField::getDisplayName)
+                .collect(Collectors.joining(", "));
+    }
+
+    private String recruitNoticePath(RecruitEntity entity) {
+        return "/recruit/" + entity.getId();
     }
 
     /** 선생님 관리용: 초안 포함 전체 목록 */
