@@ -17,16 +17,36 @@ public class NoticeAnnouncer {
     @Value("${app.frontend-base-url}")
     private String frontendBaseUrl;
 
-    public void announce(String title, String content, String path) {
+    public String announce(String title, String content, String path) {
+        return announce(title, content, null, path);
+    }
+
+    public String announce(String title, String content, String field, String path) {
         NoticeRequestDto notice = new NoticeRequestDto();
         notice.setTitle(title);
         notice.setContent(content);
+        notice.setField(field);
         notice.setLink(frontendBaseUrl.replaceAll("/+$", "") + path);
 
         try {
-            discordNoticeService.sendNotice(notice);
+            return discordNoticeService.sendNotice(notice);
         } catch (RuntimeException e) {
             log.warn("디스코드 공지를 보내지 못했습니다. link={}", notice.getLink(), e);
+            return null;
+        }
+    }
+
+    public void update(String messageId, String title, String content, String field, String path) {
+        NoticeRequestDto notice = new NoticeRequestDto();
+        notice.setTitle(title);
+        notice.setContent(content);
+        notice.setField(field);
+        notice.setLink(frontendBaseUrl.replaceAll("/+$", "") + path);
+
+        try {
+            discordNoticeService.updateNotice(messageId, notice);
+        } catch (RuntimeException e) {
+            log.warn("디스코드 공지를 수정하지 못했습니다. messageId={}, link={}", messageId, notice.getLink(), e);
         }
     }
 }
