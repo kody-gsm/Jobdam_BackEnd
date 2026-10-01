@@ -58,6 +58,10 @@ public class DiscordNoticeService {
         // 내용 설정 (프론트에서 전송한 마크다운 원본 그대로 주입)
         embed.setDescription(dto.getContent());
 
+        if (dto.getField() != null && !dto.getField().isBlank()) {
+            embed.addField("분야", dto.getField(), false);
+        }
+
         // 디자인 포인트 설정
         embed.setColor(new Color(88, 101, 242)); // 색 rgb값
 
