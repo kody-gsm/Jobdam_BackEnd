@@ -23,11 +23,15 @@ public class StudentReadDTO {
 
     private CounselingCategoryEnum category;
 
+    private String title;
+
+    private String content;
+
     /** 대기중(WAITING)·확정(RESERVED)·취소(CANCELED)를 구분한다. */
     private ReservationStatus status;
 
     public StudentReadDTO(Long id, String name, Long teacherId, String teacherName, LocalDate date, String period,
-                          CounselingCategoryEnum category, ReservationStatus status) {
+                          CounselingCategoryEnum category, String title, String content, ReservationStatus status) {
         this.id = id;
         this.name = name;
         this.teacherId = teacherId;
@@ -35,6 +39,8 @@ public class StudentReadDTO {
         this.date = date;
         this.period = period;
         this.category = category;
+        this.title = title;
+        this.content = content;
         this.status = status;
     }
 }
