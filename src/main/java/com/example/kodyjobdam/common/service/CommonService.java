@@ -552,6 +552,8 @@ public class CommonService {
                         e.getDate(),
                         e.getPeriod(),
                         e.getCategory(),
+                        cryptoService.decrypt(e.getEncryptedTitle()),
+                        cryptoService.decrypt(e.getEncryptedContent()),
                         ReservationStatus.from(e.getState())
                 ))
                 .toList();
