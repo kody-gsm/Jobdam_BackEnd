@@ -107,7 +107,7 @@ public class EmailVerificationService {
                             <td align="center">
                                 <table role="presentation" width="100%%" cellpadding="0" cellspacing="0" style="max-width:520px;background:#ffffff;border:1px solid #e5ebf3;border-radius:8px;overflow:hidden;">
                                     <tr>
-                                        <td style="padding:28px 32px 18px;background:#123b7a;color:#ffffff;">
+                                        <td style="padding:28px 32px 18px;background:#68c160;color:#ffffff;">
                                             <div style="font-size:13px;font-weight:700;letter-spacing:0;">JOBDAM</div>
                                             <h1 style="margin:16px 0 0;font-size:24px;line-height:1.35;font-weight:700;">%s</h1>
                                         </td>
@@ -119,7 +119,7 @@ public class EmailVerificationService {
                                             </p>
                                             <div style="margin:0 0 22px;padding:22px 16px;background:#f8fafc;border:1px solid #dbe4ee;border-radius:8px;text-align:center;">
                                                 <div style="font-size:13px;color:#667085;margin-bottom:8px;">인증코드</div>
-                                                <div style="font-size:34px;line-height:1;font-weight:800;letter-spacing:6px;color:#123b7a;">%s</div>
+                                                <div style="font-size:34px;line-height:1;font-weight:800;letter-spacing:6px;color:#68c160;">%s</div>
                                             </div>
                                             <p style="margin:0 0 18px;font-size:14px;line-height:1.7;color:#475467;">
                                                 이 코드는 <strong style="color:#172033;">%d분</strong> 동안만 유효합니다.
