@@ -20,6 +20,10 @@ public interface CommonRepository extends JpaRepository<CommonEntity, Long> {
 
     List<CommonEntity> findAllByDateAndPeriod(LocalDate date, String period);
 
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("select c from CommonEntity c where c.reservation_id = :id")
+    Optional<CommonEntity> findByIdForUpdate(@Param("id") Long id);
+
     List<CommonEntity> findAllByDateAndPeriodAndTeacher_Id(LocalDate date, String period, Long teacherId);
 
     /** 예약이 걸린 시간만 읽는다. 엔티티로 읽지 않아야 뒤이은 잠금 조회가 최신 상태를 가져온다. */
