@@ -50,6 +50,12 @@ public class CommonController {
         return ResponseEntity.ok().body("취소되었습니다.");
     }
 
+    @PatchMapping("/student/common/{reservationId}")
+    public ResponseEntity<?> updateReservation(@PathVariable Long reservationId, @RequestBody CreateDTO dto) {
+        commonService.updateReservation(reservationId, dto, securityUtil.getCurrentUserId());
+        return ResponseEntity.ok().body("상담 신청이 수정되었습니다.");
+    }
+
     @PatchMapping("/teacher/common/allow/{id}")
     public ResponseEntity<?> reservationAllow(@PathVariable Long id) {
         commonService.allow(id, securityUtil.getCurrentUserId());

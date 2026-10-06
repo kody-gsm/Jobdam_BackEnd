@@ -21,6 +21,10 @@ public interface CourseRepository extends JpaRepository<CourseEntity, Long> {
 
     List<CourseEntity> findAllByDateAndPeriod(LocalDate date, String period);
 
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("select c from CourseEntity c where c.reservation_id = :id")
+    Optional<CourseEntity> findByIdForUpdate(@Param("id") Long id);
+
     List<CourseEntity> findAllByDateAndPeriodAndTeacher_Id(LocalDate date, String period, Long teacherId);
 
     /** 예약이 걸린 시간만 읽는다. 엔티티로 읽지 않아야 뒤이은 잠금 조회가 최신 상태를 가져온다. */
