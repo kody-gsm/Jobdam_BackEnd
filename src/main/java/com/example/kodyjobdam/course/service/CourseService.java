@@ -223,7 +223,6 @@ public class CourseService {
         String period = validateReservationSlot(dto.getDate(), dto.getPeriod());
         validateBeforeApplyDeadline(dto.getDate(), period);
         validateNotHoliday(dto.getDate());
-        validateNotLockedPeriod(period);
         validateCategory(dto.getCategory());
         User teacher = findTeacher(dto.getTeacherId(), userId);
         validateNotWeeklyLocked(dto.getDate(), period, teacher.getId());
