@@ -79,4 +79,14 @@ public class CommonEntity {
     public void setState(StateEnum state) {
         this.state = state;
     }
+
+    public void updateRequest(LocalDate date, String period, String encryptedTitle, String encryptedContent,
+                              CounselingCategoryEnum category, User teacher) {
+        this.date = date;
+        this.period = period;
+        this.encryptedTitle = encryptedTitle;
+        this.encryptedContent = encryptedContent;
+        this.category = category;
+        this.teacher = teacher;
+    }
 }

@@ -210,6 +210,47 @@ public class CourseService {
     }
 
     @Transactional
+    public void updateReservation(Long reservationId, CreateDTO dto, Long userId) {
+        CourseEntity entity = courseRepository.findByIdForUpdate(reservationId)
+                .orElseThrow(() -> ReservationException.notFound("상담 신청을 찾을 수 없습니다."));
+        if (!cryptoService.submitterHash(userId).equals(entity.getSubmitterHash())) {
+            throw ReservationException.forbidden("권한이 없습니다.");
+        }
+        if (entity.getState() != StateEnum.WAITING) {
+            throw ReservationException.conflict("상담이 확정되었거나 처리된 신청은 수정할 수 없습니다.");
+        }
+
+        String period = validateReservationSlot(dto.getDate(), dto.getPeriod());
+        validateBeforeApplyDeadline(dto.getDate(), period);
+        validateNotHoliday(dto.getDate());
+        validateNotLockedPeriod(period);
+        validateCategory(dto.getCategory());
+        User teacher = findTeacher(dto.getTeacherId(), userId);
+        validateNotWeeklyLocked(dto.getDate(), period, teacher.getId());
+        String submitterHash = entity.getSubmitterHash();
+        for (CourseEntity other : courseRepository.findAllByDateAndPeriod(dto.getDate(), period)) {
+            if (!other.getReservation_id().equals(reservationId)
+                    && submitterHash.equals(other.getSubmitterHash()) && other.getState() != StateEnum.CANCEL) {
+                throw ReservationException.conflict("이미 예약한 시간입니다.");
+            }
+        }
+        if (commonRepository.existsActiveReservation(submitterHash, dto.getDate(), period)) {
+            throw ReservationException.conflict("같은 시간에 신청한 일반 상담이 있습니다.");
+        }
+        List<CourseEntity> slot = courseRepository.findAllForUpdateByDateAndPeriodAndTeacherId(
+                dto.getDate(), period, teacher.getId());
+        for (CourseEntity other : slot) {
+            if (other.getReservation_id().equals(reservationId)) continue;
+            if (other.getState() == StateEnum.LOCKED) throw ReservationException.locked("잠긴 날짜 입니다.");
+            if (other.getState() == StateEnum.RESERVED) throw ReservationException.conflict("누군가 예약한 시간입니다.");
+        }
+
+        entity.updateRequest(dto.getDate(), period, cryptoService.encrypt(dto.getTitle()),
+                cryptoService.encrypt(dto.getContent()), dto.getCategory(), teacher);
+        publishReservationChange(entity, userId, "UPDATED");
+    }
+
+    @Transactional
     public void allow(Long reservationId, Long teacherId) {
         ReservationSlot slot = courseRepository.findSlotByReservationId(reservationId)
                 .orElseThrow(() -> ReservationException.notFound("값을 찾을 수 없습니다."));

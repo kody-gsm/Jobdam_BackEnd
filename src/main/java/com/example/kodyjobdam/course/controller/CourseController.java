@@ -50,6 +50,12 @@ public class CourseController {
         return ResponseEntity.ok().body("취소되었습니다.");
     }
 
+    @PatchMapping("/student/course/{reservationId}")
+    public ResponseEntity<?> updateReservation(@PathVariable Long reservationId, @RequestBody CreateDTO dto) {
+        courseService.updateReservation(reservationId, dto, securityUtil.getCurrentUserId());
+        return ResponseEntity.ok().body("상담 신청이 수정되었습니다.");
+    }
+
     @PatchMapping("/teacher/course/allow/{id}")
     public ResponseEntity<?> reservationAllow(@PathVariable Long id) {
         courseService.allow(id, securityUtil.getCurrentUserId());
