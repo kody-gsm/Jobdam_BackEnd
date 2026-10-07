@@ -206,6 +206,15 @@ public class CourseService {
         validateCancelDeadline(entity.getDate(), entity.getPeriod());
 
         entity.setState(StateEnum.CANCEL);
+        notificationService.notifyUser(
+                entity.getTeacher(),
+                NotificationType.COUNSELING_CANCELED_BY_STUDENT,
+                "상담 신청 취소",
+                "학생이 상담 신청을 취소했습니다.",
+                entity.getReservation_id(),
+                "/teacher/course/" + entity.getReservation_id(),
+                notificationExpirationService.counselingExpiresAt(entity.getDate())
+        );
         publishReservationChange(entity, userId, "CANCELED_BY_STUDENT");
     }
 

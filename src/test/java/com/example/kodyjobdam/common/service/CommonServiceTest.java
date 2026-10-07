@@ -689,8 +689,10 @@ class CommonServiceTest {
     @Test
     void cancelBeforeDeadlineIsAllowed() {
         LocalDate date = LocalDate.of(2026, 9, 10);
+        User teacher = user(2L, UserRole.WEE_TEACHER);
         CommonEntity entity = CommonEntity.builder()
                 .reservation_id(100L)
+                .teacher(teacher)
                 .date(date)
                 .period("3교시")
                 .submitterHash("student-hash")
@@ -700,10 +702,17 @@ class CommonServiceTest {
         fixClock(LocalDateTime.of(2026, 9, 10, 9, 39));
         when(commonRepository.findById(100L)).thenReturn(Optional.of(entity));
         when(cryptoService.submitterHash(1L)).thenReturn("student-hash");
+        LocalDateTime expiresAt = date.plusDays(90).atStartOfDay();
+        when(notificationExpirationService.counselingExpiresAt(date)).thenReturn(expiresAt);
 
         commonService.cancelReservation(100L, 1L);
 
         assertThat(entity.getState()).isEqualTo(StateEnum.CANCEL);
+        verify(notificationService).notifyUser(
+                eq(teacher), eq(NotificationType.COUNSELING_CANCELED_BY_STUDENT),
+                eq("상담 신청 취소"), eq("학생이 상담 신청을 취소했습니다."),
+                eq(100L), eq("/teacher/common/100"),
+                eq(expiresAt));
     }
 
     @Test
