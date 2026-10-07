@@ -43,6 +43,8 @@ public interface CourseRepository extends JpaRepository<CourseEntity, Long> {
 
     List<CourseEntity> findAllByStateAndDateLessThanEqual(StateEnum state, LocalDate date);
 
+    List<CourseEntity> findAllByStateAndDate(StateEnum state, LocalDate date);
+
     /** 만료할 신청을 잠가서 다시 읽는다. 그사이 선생님이 수락해 상태가 바뀐 신청은 빠진다. */
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("select c from CourseEntity c where c.reservation_id in :ids and c.state = :state order by c.reservation_id")

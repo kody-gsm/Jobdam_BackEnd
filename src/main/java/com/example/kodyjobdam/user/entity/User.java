@@ -25,6 +25,9 @@ public class User {
     @Column(nullable = false, length = 255)
     private String student_number;
 
+    @Column(unique = true, length = 32)
+    private String discordUserId;
+
     @Column(nullable = false, unique = true, length = 255)
     private String email;
 

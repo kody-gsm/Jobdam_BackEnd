@@ -3,6 +3,8 @@ import com.example.kodyjobdam.notice.dto.NoticeRequestDto;
 import net.dv8tion.jda.api.EmbedBuilder;
 import net.dv8tion.jda.api.JDA;
 import net.dv8tion.jda.api.JDABuilder;
+import net.dv8tion.jda.api.requests.GatewayIntent;
+import net.dv8tion.jda.api.utils.MemberCachePolicy;
 import net.dv8tion.jda.api.entities.Message;
 import net.dv8tion.jda.api.entities.channel.concrete.TextChannel;
 import org.springframework.beans.factory.annotation.Value;
@@ -20,7 +22,10 @@ public class DiscordNoticeService {
             @Value("${discord.bot.token}") String token,
             @Value("${discord.bot.channel-id}") String channelId) throws Exception {
 
-        this.jda = JDABuilder.createDefault(token).build().awaitReady();
+        this.jda = JDABuilder.createDefault(token)
+                .enableIntents(GatewayIntent.GUILD_MEMBERS)
+                .setMemberCachePolicy(MemberCachePolicy.ALL)
+                .build().awaitReady();
         this.channelId = channelId;
     }
 
@@ -43,6 +48,20 @@ public class DiscordNoticeService {
         }
 
         return channel;
+    }
+
+    public JDA getJda() {
+        return jda;
+    }
+
+    public String getGuildId() {
+        return getNoticeChannel().getGuild().getId();
+    }
+
+    public void sendDirectMessage(String userId, String content) {
+        jda.openPrivateChannelById(userId)
+                .flatMap(channel -> channel.sendMessage(content))
+                .complete();
     }
 
     private EmbedBuilder buildNoticeEmbed(NoticeRequestDto dto) {
