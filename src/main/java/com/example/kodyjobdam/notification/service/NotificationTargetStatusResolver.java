@@ -61,6 +61,7 @@ public class NotificationTargetStatusResolver {
         if (type == NotificationType.COUNSELING_APPROVED
                 || type == NotificationType.COUNSELING_REJECTED
                 || type == NotificationType.COUNSELING_AUTO_CANCELED
+                || type == NotificationType.COUNSELING_CANCELED_BY_STUDENT
                 || type == NotificationType.COUNSELING_EXPIRED) {
             if (notification.getTargetUrl() != null && notification.getTargetUrl().contains("/course/")) {
                 return courseRepository.findById(notification.getTargetId())

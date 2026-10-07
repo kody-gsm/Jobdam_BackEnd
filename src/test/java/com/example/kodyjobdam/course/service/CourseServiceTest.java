@@ -81,6 +81,36 @@ class CourseServiceTest {
     private CourseService courseService;
 
     @Test
+    void studentCancellationNotifiesTeacher() {
+        LocalDate date = LocalDate.of(2026, 12, 10);
+        User teacher = user(2L, UserRole.TEACHER);
+        CourseEntity entity = CourseEntity.builder()
+                .reservation_id(100L)
+                .teacher(teacher)
+                .date(date)
+                .period("3교시")
+                .submitterHash("student-hash")
+                .state(StateEnum.WAITING)
+                .build();
+        ZoneId zone = ZoneId.of("Asia/Seoul");
+        ReflectionTestUtils.setField(courseService, "clock",
+                Clock.fixed(date.atTime(9, 0).atZone(zone).toInstant(), zone));
+        when(courseRepository.findById(100L)).thenReturn(Optional.of(entity));
+        when(cryptoService.submitterHash(1L)).thenReturn("student-hash");
+        LocalDateTime expiresAt = date.plusDays(90).atStartOfDay();
+        when(notificationExpirationService.counselingExpiresAt(date)).thenReturn(expiresAt);
+
+        courseService.cancelReservation(100L, 1L);
+
+        assertThat(entity.getState()).isEqualTo(StateEnum.CANCEL);
+        verify(notificationService).notifyUser(
+                eq(teacher), eq(NotificationType.COUNSELING_CANCELED_BY_STUDENT),
+                eq("상담 신청 취소"), eq("학생이 상담 신청을 취소했습니다."),
+                eq(100L), eq("/teacher/course/100"),
+                eq(expiresAt));
+    }
+
+    @Test
     void createReservationRejectsWhenCommonReservationExistsAtSameTime() {
         CreateDTO dto = createDto(2L);
 
