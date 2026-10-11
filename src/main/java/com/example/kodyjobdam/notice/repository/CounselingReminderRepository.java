@@ -9,6 +9,7 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
 import java.time.LocalDateTime;
+import java.util.List;
 import java.util.Optional;
 
 public interface CounselingReminderRepository extends JpaRepository<CounselingReminder, Long> {
@@ -22,4 +23,7 @@ public interface CounselingReminderRepository extends JpaRepository<CounselingRe
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("select r from CounselingReminder r where r.id = :id")
     Optional<CounselingReminder> findByIdForUpdate(@Param("id") Long id);
+
+    List<CounselingReminder> findBySentAtLessThanEqualAndDeletedAtIsNullAndDiscordMessageIdIsNotNull(
+            LocalDateTime cutoff);
 }

@@ -2,6 +2,7 @@ package com.example.kodyjobdam.notice.service;
 
 import com.example.kodyjobdam.notice.entity.ReservationKind;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDate;
@@ -10,6 +11,7 @@ import java.time.ZoneId;
 import java.util.List;
 
 @Service
+@Slf4j
 @RequiredArgsConstructor
 public class CounselingReminderService {
 
@@ -28,12 +30,27 @@ public class CounselingReminderService {
         CounselingReminderClaimService.Delivery delivery = claimService.claim(kind, reservationId, hoursBefore, now);
         if (delivery == null) return;
 
+        String messageId;
         try {
-            discordNoticeService.sendDirectMessage(delivery.discordUserId(), delivery.message());
+            messageId = discordNoticeService.sendDirectMessage(delivery.discordUserId(), delivery.message());
         } catch (RuntimeException e) {
             claimService.release(delivery.reminderId(), delivery.token());
             throw e;
         }
-        claimService.markSent(delivery.reminderId(), delivery.token(), LocalDateTime.now(ZoneId.of("Asia/Seoul")));
+        claimService.markSent(delivery.reminderId(), delivery.token(), delivery.discordUserId(), messageId,
+                LocalDateTime.now(ZoneId.of("Asia/Seoul")));
+    }
+
+    public void deleteExpiredMessages(LocalDateTime now) {
+        for (CounselingReminderClaimService.SentMessage message :
+                claimService.sentMessagesBefore(now.minusDays(1))) {
+            try {
+                discordNoticeService.deleteDirectMessage(message.discordUserId(), message.discordMessageId());
+                claimService.markDeleted(message.reminderId(), message.discordMessageId(),
+                        LocalDateTime.now(ZoneId.of("Asia/Seoul")));
+            } catch (RuntimeException e) {
+                log.error("상담 디스코드 DM 삭제 실패: 알림={}", message.reminderId(), e);
+            }
+        }
     }
 }

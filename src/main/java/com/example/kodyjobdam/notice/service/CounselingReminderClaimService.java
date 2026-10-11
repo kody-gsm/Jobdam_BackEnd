@@ -83,10 +83,28 @@ public class CounselingReminderClaimService {
     }
 
     @Transactional
-    public void markSent(Long reminderId, String token, LocalDateTime now) {
+    public void markSent(Long reminderId, String token, String discordUserId,
+                         String discordMessageId, LocalDateTime now) {
         reminderRepository.findByIdForUpdate(reminderId)
                 .filter(reminder -> reminder.isClaimedBy(token))
-                .ifPresent(reminder -> reminder.markSent(now));
+                .ifPresent(reminder -> reminder.markSent(now, discordUserId, discordMessageId));
+    }
+
+    @Transactional(readOnly = true)
+    public List<SentMessage> sentMessagesBefore(LocalDateTime cutoff) {
+        return reminderRepository.findBySentAtLessThanEqualAndDeletedAtIsNullAndDiscordMessageIdIsNotNull(cutoff)
+                .stream()
+                .map(reminder -> new SentMessage(reminder.getId(), reminder.getDiscordUserId(),
+                        reminder.getDiscordMessageId()))
+                .toList();
+    }
+
+    @Transactional
+    public void markDeleted(Long reminderId, String discordMessageId, LocalDateTime now) {
+        reminderRepository.findByIdForUpdate(reminderId)
+                .filter(reminder -> reminder.getDeletedAt() == null
+                        && discordMessageId.equals(reminder.getDiscordMessageId()))
+                .ifPresent(reminder -> reminder.markDeleted(now));
     }
 
     @Transactional
@@ -110,6 +128,9 @@ public class CounselingReminderClaimService {
     }
 
     public record Delivery(Long reminderId, String token, String discordUserId, String message) {
+    }
+
+    public record SentMessage(Long reminderId, String discordUserId, String discordMessageId) {
     }
 
     private record ReminderTarget(LocalDate date, String period, String submitterHash, String encryptedUserId) {

@@ -7,6 +7,7 @@ import net.dv8tion.jda.api.requests.GatewayIntent;
 import net.dv8tion.jda.api.utils.MemberCachePolicy;
 import net.dv8tion.jda.api.entities.Message;
 import net.dv8tion.jda.api.entities.channel.concrete.TextChannel;
+import net.dv8tion.jda.api.exceptions.ErrorResponseException;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
@@ -58,10 +59,21 @@ public class DiscordNoticeService {
         return getNoticeChannel().getGuild().getId();
     }
 
-    public void sendDirectMessage(String userId, String content) {
-        jda.openPrivateChannelById(userId)
+    public String sendDirectMessage(String userId, String content) {
+        return jda.openPrivateChannelById(userId)
                 .flatMap(channel -> channel.sendMessage(content))
-                .complete();
+                .complete().getId();
+    }
+
+    public void deleteDirectMessage(String userId, String messageId) {
+        try {
+            jda.openPrivateChannelById(userId)
+                    .flatMap(channel -> channel.deleteMessageById(messageId))
+                    .complete();
+        } catch (ErrorResponseException e) {
+            // 사용자가 이미 지운 메시지도 정리 완료로 취급한다.
+            if (e.getErrorCode() != 10008) throw e;
+        }
     }
 
     private EmbedBuilder buildNoticeEmbed(NoticeRequestDto dto) {

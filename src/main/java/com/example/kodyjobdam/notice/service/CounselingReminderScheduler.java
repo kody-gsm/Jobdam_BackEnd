@@ -27,6 +27,12 @@ public class CounselingReminderScheduler {
         send(ReservationKind.COURSE, reminderService.courseReservationIds(now.toLocalDate()));
     }
 
+    @Scheduled(cron = "${discord.counseling-reminder.cleanup-cron:0 0 * * * *}",
+            zone = "Asia/Seoul", scheduler = "discordReminderTaskScheduler")
+    public void deleteExpiredMessages() {
+        reminderService.deleteExpiredMessages(LocalDateTime.now(clock));
+    }
+
     private void send(ReservationKind kind, List<Long> ids) {
         for (Long id : ids) {
             for (int hoursBefore : new int[]{2, 1}) {

@@ -100,10 +100,14 @@ class CounselingReminderClaimServiceTest {
         CounselingReminderClaimService.Delivery delivery = claimService.claim(
                 ReservationKind.COMMON, 5L, 2, LocalDateTime.of(2026, 10, 6, 6, 51));
         assertNotNull(delivery);
-        claimService.markSent(7L, "old-token", LocalDateTime.of(2026, 10, 6, 6, 52));
+        claimService.markSent(7L, "old-token", "123456789", "message-1",
+                LocalDateTime.of(2026, 10, 6, 6, 52));
         assertNull(reminder.getSentAt());
-        claimService.markSent(7L, delivery.token(), LocalDateTime.of(2026, 10, 6, 6, 52));
+        claimService.markSent(7L, delivery.token(), "123456789", "message-1",
+                LocalDateTime.of(2026, 10, 6, 6, 52));
         assertNotNull(reminder.getSentAt());
+        assertEquals("123456789", reminder.getDiscordUserId());
+        assertEquals("message-1", reminder.getDiscordMessageId());
     }
 
     private void prepareReservedStudent() {

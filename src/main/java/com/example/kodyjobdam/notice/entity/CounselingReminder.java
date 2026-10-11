@@ -41,6 +41,15 @@ public class CounselingReminder {
     @Column(name = "sent_at")
     private LocalDateTime sentAt;
 
+    @Column(name = "discord_user_id", length = 32)
+    private String discordUserId;
+
+    @Column(name = "discord_message_id", length = 32)
+    private String discordMessageId;
+
+    @Column(name = "deleted_at")
+    private LocalDateTime deletedAt;
+
     @Column(name = "claimed_at")
     private LocalDateTime claimedAt;
 
@@ -64,9 +73,15 @@ public class CounselingReminder {
         return token != null && token.equals(claimToken);
     }
 
-    public void markSent(LocalDateTime at) {
+    public void markSent(LocalDateTime at, String discordUserId, String discordMessageId) {
         this.sentAt = at;
+        this.discordUserId = discordUserId;
+        this.discordMessageId = discordMessageId;
         release();
+    }
+
+    public void markDeleted(LocalDateTime at) {
+        this.deletedAt = at;
     }
 
     public void release() {
