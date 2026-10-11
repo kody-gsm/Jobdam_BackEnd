@@ -65,6 +65,7 @@ public class SecurityConfig {
                         // 일반 선생님에게 걸려 있으므로 두 역할 모두 처리할 수 있게 둔다.
                         .requestMatchers(HttpMethod.GET, "/teacher/students").hasAnyRole("TEACHER", "WEE_TEACHER")
                         .requestMatchers("/teacher/common/**").hasAnyRole("TEACHER", "WEE_TEACHER")
+                        .requestMatchers("/teacher/banner").hasAnyRole("TEACHER", "WEE_TEACHER")
                         .requestMatchers("/teacher/**").hasRole("TEACHER")
                         .requestMatchers("/student/**").hasRole("STUDENT")
                         .anyRequest().authenticated()
