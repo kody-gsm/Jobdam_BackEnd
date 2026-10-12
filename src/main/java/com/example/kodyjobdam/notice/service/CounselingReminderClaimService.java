@@ -78,7 +78,8 @@ public class CounselingReminderClaimService {
         String category = kind == ReservationKind.COMMON ? "일반" : "진로";
         String prefix = now.isBefore(dueAt.plusMinutes(5))
                 ? "상담 시작 " + hoursBefore + "시간 전입니다. " : "상담 일정 알림입니다. ";
-        String message = prefix + target.date() + " " + target.period() + " " + category + " 상담 일정이 있습니다.";
+        String message = prefix + target.date() + " " + target.period() + " " + category + " 상담 일정이 있습니다."
+                + (kind == ReservationKind.COMMON ? " Wee클래스에서 상담 확인서를 받아가세요." : "");
         return new Delivery(reminder.getId(), token, student.getDiscordUserId(), message);
     }
 
