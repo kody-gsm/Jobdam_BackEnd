@@ -54,7 +54,22 @@ class CounselingReminderClaimServiceTest {
         assertNotNull(delivery);
         assertEquals(7L, delivery.reminderId());
         assertEquals("123456789", delivery.discordUserId());
-        assertEquals("상담 일정 알림입니다. 2026-10-06 1교시 일반 상담 일정이 있습니다.", delivery.message());
+        assertEquals("상담 일정 알림입니다. 2026-10-06 1교시 일반 상담 일정이 있습니다. "
+                + "Wee클래스에서 상담 확인서를 받아가세요.", delivery.message());
+    }
+
+    @Test
+    void 일반_상담_두_시간_전_알림에_상담_확인서_안내를_넣는다() {
+        prepareReservedStudent();
+        when(reminderRepository.saveAndFlush(any(CounselingReminder.class)))
+                .thenAnswer(invocation -> invocation.getArgument(0));
+
+        CounselingReminderClaimService.Delivery delivery = claimService.claim(
+                ReservationKind.COMMON, 5L, 2, LocalDateTime.of(2026, 10, 6, 6, 40));
+
+        assertNotNull(delivery);
+        assertEquals("상담 시작 2시간 전입니다. 2026-10-06 1교시 일반 상담 일정이 있습니다. "
+                + "Wee클래스에서 상담 확인서를 받아가세요.", delivery.message());
     }
 
     @Test
