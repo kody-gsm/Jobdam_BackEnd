@@ -27,6 +27,8 @@ public interface UserRepository extends JpaRepository<User, Long> {
 
     List<User> findByRole(UserRole role);
 
+    List<User> findByRoleAndName(UserRole role, String name);
+
     @Query("select u from User u where u.role = com.example.kodyjobdam.user.UserRole.STUDENT "
             + "and u.student_number = :number and u.name = :name")
     List<User> findStudentsByIdentity(@Param("number") String number, @Param("name") String name);
