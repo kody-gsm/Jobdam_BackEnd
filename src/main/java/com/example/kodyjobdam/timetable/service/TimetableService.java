@@ -18,18 +18,24 @@ import java.time.Instant;
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
 import java.time.format.DateTimeParseException;
+import java.util.Collection;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
+import java.util.TreeMap;
+import java.util.TreeSet;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.stream.Collectors;
 
 /**
- * 학생 본인이 속한 학급의 시간표를 읽는다.
+ * 나이스 시간표를 읽는다.
  *
- * <p>상담 신청 화면에 "그 교시에 무슨 수업이 있는지"를 참고로 보여주기 위한 것이다.
- * 예약을 막는 근거로는 쓰지 않는다. 수업을 빼고 상담을 갈지는 학교가 정할 일이고,
- * 잠그는 일은 선생님의 잠금 기능이 맡는다.</p>
+ * <p>학생 본인의 학급 시간표는 상담 신청 화면에 "그 교시에 무슨 수업이 있는지"를 참고로 보여주기 위한 것이다.
+ * 학생 예약을 막는 근거로는 쓰지 않는다. 수업을 빼고 상담을 갈지는 학교가 정할 일이다.</p>
+ *
+ * <p>학교 전체 시간표는 선생님이 수업에 들어가 상담을 받을 수 없는 시간을 찾는 데 쓴다.</p>
  */
 @Slf4j
 @Service
@@ -72,6 +78,20 @@ public class TimetableService {
         }
 
         return findCached(user.getGrade(), user.getClassNum(), from, to);
+    }
+
+    /**
+     * 기간 안에 학교 전체 학급 중 한 곳이라도 주어진 과목 수업이 있는 날짜별 교시.
+     *
+     * <p>나이스 조회에 실패하면 예외를 그대로 던진다. 일부만 받은 시간표로 판단하지 않도록 호출한 쪽에서 건너뛴다.</p>
+     */
+    public Map<LocalDate, Set<String>> findSubjectPeriods(LocalDate from, LocalDate to, Collection<String> subjects) {
+        return neisTimetableClient.fetchSchoolTimetables(from, to).stream()
+                .map(this::toDTO)
+                .filter(Objects::nonNull)
+                .filter(timetable -> subjects.contains(timetable.getSubject()))
+                .collect(Collectors.groupingBy(TimetableReadDTO::getDate, TreeMap::new,
+                        Collectors.mapping(TimetableReadDTO::getPeriod, Collectors.toCollection(TreeSet::new))));
     }
 
     private List<TimetableReadDTO> findCached(int grade, int classNum, LocalDate from, LocalDate to) {

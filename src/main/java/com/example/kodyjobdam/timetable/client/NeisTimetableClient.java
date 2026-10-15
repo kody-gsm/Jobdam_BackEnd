@@ -18,11 +18,13 @@ import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
+import java.util.Optional;
 
 /**
  * 나이스 교육정보 개방 포털의 고등학교 시간표(hisTimetable) API 클라이언트.
  *
- * <p>시간표는 학급 단위라 학년·반으로만 조회할 수 있다. 교사별 시간표는 제공되지 않는다.</p>
+ * <p>시간표는 학급 단위로 내려온다. 학년·반을 빼고 부르면 학교 전체 학급의 시간표를 받는다.
+ * 교사별 시간표는 제공되지 않는다.</p>
  */
 @Slf4j
 @Component
@@ -47,6 +49,15 @@ public class NeisTimetableClient {
 
     /** 학년도·학기는 조회 기간으로 정해지므로 따로 넘기지 않는다. */
     public List<NeisTimetableRow> fetchTimetables(int grade, int classNum, LocalDate from, LocalDate to) {
+        return fetchAll(grade, classNum, from, to);
+    }
+
+    /** 학교 전체 학급의 시간표. 교사 정보가 없으므로 과목으로 수업 시간을 찾을 때 쓴다. */
+    public List<NeisTimetableRow> fetchSchoolTimetables(LocalDate from, LocalDate to) {
+        return fetchAll(null, null, from, to);
+    }
+
+    private List<NeisTimetableRow> fetchAll(Integer grade, Integer classNum, LocalDate from, LocalDate to) {
         if (apiKey == null || apiKey.isBlank()) {
             throw ConfigException.serviceUnavailable("NEIS API key is not configured.");
         }
@@ -63,7 +74,7 @@ public class NeisTimetableClient {
         return rows;
     }
 
-    private List<NeisTimetableRow> fetchPage(int grade, int classNum, LocalDate from, LocalDate to, int page) {
+    private List<NeisTimetableRow> fetchPage(Integer grade, Integer classNum, LocalDate from, LocalDate to, int page) {
         URI uri = UriComponentsBuilder.fromHttpUrl(BASE_URL)
                 .path("/hub/hisTimetable")
                 .queryParam("KEY", apiKey)
@@ -72,8 +83,8 @@ public class NeisTimetableClient {
                 .queryParam("pSize", PAGE_SIZE)
                 .queryParam("ATPT_OFCDC_SC_CODE", OFFICE_CODE)
                 .queryParam("SD_SCHUL_CODE", SCHOOL_CODE)
-                .queryParam("GRADE", grade)
-                .queryParam("CLASS_NM", classNum)
+                .queryParamIfPresent("GRADE", Optional.ofNullable(grade))
+                .queryParamIfPresent("CLASS_NM", Optional.ofNullable(classNum))
                 .queryParam("TI_FROM_YMD", from.format(YMD))
                 .queryParam("TI_TO_YMD", to.format(YMD))
                 .build()
