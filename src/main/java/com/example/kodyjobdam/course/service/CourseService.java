@@ -455,6 +455,71 @@ public class CourseService {
     }
 
     /**
+     * 진로 선생님이 수업에 들어가는 교시를 잠근다.
+     *
+     * <p>휴업일과 달리 걸려 있는 신청은 취소하지 않고 그 교시를 건너뛴다. 시간표가 올라오기 전에 잡힌 신청이라
+     * 수업을 빼고 상담할지는 선생님이 정한다. 선생님이 잠금을 풀었던 교시도 다시 잠그지 않는다.</p>
+     *
+     * @param teacherName   잠글 진로 선생님 이름
+     * @param periodsByDate 날짜별 수업 교시
+     * @return 새로 잠근 시간 수
+     */
+    @Transactional
+    public int lockClassPeriods(String teacherName, Map<LocalDate, Set<String>> periodsByDate) {
+        if (periodsByDate.isEmpty()) {
+            return 0;
+        }
+
+        List<User> teachers = userRepository.findByRoleAndName(UserRole.TEACHER, teacherName);
+        if (teachers.isEmpty()) {
+            log.warn("수업 시간을 잠글 진로 선생님을 찾지 못했습니다. name={}", teacherName);
+            return 0;
+        }
+
+        Map<ReservationSlot, List<CourseEntity>> reservationsBySlot = courseRepository
+                .findAllByDateInAndTeacher_IdIn(periodsByDate.keySet(), teachers.stream().map(User::getId).toList())
+                .stream()
+                .collect(Collectors.groupingBy(entity -> new ReservationSlot(
+                        entity.getDate(), entity.getPeriod(), entity.getTeacher().getId())));
+
+        List<CourseEntity> locks = new ArrayList<>();
+        periodsByDate.forEach((date, periods) -> {
+            for (User teacher : teachers) {
+                for (String period : periods) {
+                    List<CourseEntity> reservations = reservationsBySlot.getOrDefault(
+                            new ReservationSlot(date, period, teacher.getId()), List.of());
+                    if (reservations.stream().anyMatch(this::keepsClassPeriodOpen)) {
+                        continue;
+                    }
+
+                    locks.add(CourseEntity.builder()
+                            .teacher(teacher)
+                            .date(date)
+                            .period(period)
+                            .state(StateEnum.LOCKED)
+                            .build());
+                }
+            }
+        });
+
+        courseRepository.saveAll(locks);
+        return locks.size();
+    }
+
+    /**
+     * 수업 시간이어도 새로 잠그지 않을 시간인지.
+     * 이미 잠겼거나, 대기 중·수락된 신청이 있거나, 선생님이 잠금을 풀었던 시간이다.
+     * 잠금을 풀면 신청자 없는 취소 행이 남는다.
+     */
+    private boolean keepsClassPeriodOpen(CourseEntity entity) {
+        return switch (entity.getState()) {
+            case LOCKED, WAITING, RESERVED -> true;
+            case CANCEL -> entity.getSubmitterHash() == null;
+            default -> false;
+        };
+    }
+
+    /**
      * 잠가 둔 시간을 다시 예약 가능하게 되돌린다.
      * 잠금과 함께 취소된 예약은 되살리지 않는다. 학생이 다시 신청해야 한다.
      */
