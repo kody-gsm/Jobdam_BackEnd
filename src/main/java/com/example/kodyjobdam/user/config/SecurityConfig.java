@@ -59,6 +59,7 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.GET, "/backend/uploads/banner/**").permitAll()
                         .requestMatchers("/auth/profile").authenticated()
                         .requestMatchers("/auth/profile/**").authenticated()
+                        .requestMatchers("/auth/tutorial", "/auth/tutorial/**").authenticated()
                         .requestMatchers("/auth/**").permitAll()
                         .requestMatchers("/admin/**").hasRole("ADMIN")
                         // 일반 상담은 Wee 클래스 선생님이 담당한다. 역할 분리 이전에 쌓인 예약이
