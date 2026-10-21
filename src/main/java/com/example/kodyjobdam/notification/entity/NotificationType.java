@@ -9,5 +9,7 @@ public enum NotificationType {
     COUNSELING_REJECTED,
     COUNSELING_AUTO_CANCELED,
     COUNSELING_CANCELED_BY_STUDENT,
-    COUNSELING_EXPIRED
+    COUNSELING_EXPIRED,
+    /** 학생이 서류·면접 합격을 진로 선생님에게 알렸다 */
+    PASS_REPORTED
 }
