@@ -57,4 +57,11 @@ public class User {
     @Column(length = 512)
     private String profileImageUrl;
 
+    @Column(nullable = false, columnDefinition = "boolean default false")
+    private boolean tutorialCompleted;
+
+    public void completeTutorial() {
+        this.tutorialCompleted = true;
+    }
+
 }
