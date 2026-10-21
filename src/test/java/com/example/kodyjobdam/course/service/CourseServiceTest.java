@@ -26,6 +26,7 @@ import com.example.kodyjobdam.user.UserRole;
 import com.example.kodyjobdam.user.entity.User;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
@@ -37,7 +38,10 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
+import java.util.TreeSet;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -263,6 +267,55 @@ class CourseServiceTest {
 
         assertThat(created).isEqualTo(CounselingPeriod.values().length);
         verify(userRepository, never()).findByRole(UserRole.WEE_TEACHER);
+    }
+
+    @Test
+    void lockClassPeriodsLocksOnlyOpenSlotsOfNamedCareerTeacher() {
+        LocalDate date = LocalDate.of(2026, 10, 20);
+        User teacher = user(2L, UserRole.TEACHER);
+        CourseEntity waiting = CourseEntity.builder()
+                .reservation_id(10L).teacher(teacher).date(date).period("2교시")
+                .submitterHash("hash-1").state(StateEnum.WAITING).build();
+        CourseEntity releasedLock = CourseEntity.builder()
+                .reservation_id(11L).teacher(teacher).date(date).period("3교시")
+                .state(StateEnum.CANCEL).build();
+        CourseEntity canceledRequest = CourseEntity.builder()
+                .reservation_id(12L).teacher(teacher).date(date).period("4교시")
+                .submitterHash("hash-1").state(StateEnum.CANCEL).build();
+        CourseEntity locked = CourseEntity.builder()
+                .reservation_id(13L).teacher(teacher).date(date).period("5교시")
+                .state(StateEnum.LOCKED).build();
+
+        when(userRepository.findByRoleAndName(UserRole.TEACHER, "임경원")).thenReturn(List.of(teacher));
+        when(courseRepository.findAllByDateInAndTeacher_IdIn(Set.of(date), List.of(2L)))
+                .thenReturn(List.of(waiting, releasedLock, canceledRequest, locked));
+
+        int created = courseService.lockClassPeriods("임경원",
+                Map.of(date, new TreeSet<>(Set.of("1교시", "2교시", "3교시", "4교시", "5교시"))));
+
+        assertThat(created).isEqualTo(2);
+        assertThat(waiting.getState()).isEqualTo(StateEnum.WAITING);
+        ArgumentCaptor<List<CourseEntity>> saved = ArgumentCaptor.forClass(List.class);
+        verify(courseRepository).saveAll(saved.capture());
+        assertThat(saved.getValue())
+                .allSatisfy(lock -> {
+                    assertThat(lock.getTeacher()).isEqualTo(teacher);
+                    assertThat(lock.getDate()).isEqualTo(date);
+                    assertThat(lock.getState()).isEqualTo(StateEnum.LOCKED);
+                })
+                .extracting(CourseEntity::getPeriod)
+                .containsExactly("1교시", "4교시");
+    }
+
+    @Test
+    void lockClassPeriodsSkipsWhenTeacherIsMissing() {
+        when(userRepository.findByRoleAndName(UserRole.TEACHER, "임경원")).thenReturn(List.of());
+
+        int created = courseService.lockClassPeriods("임경원",
+                Map.of(LocalDate.of(2026, 10, 20), Set.of("2교시")));
+
+        assertThat(created).isZero();
+        verify(courseRepository, never()).saveAll(any());
     }
 
     @Test
