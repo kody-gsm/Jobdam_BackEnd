@@ -3,16 +3,20 @@ package com.example.kodyjobdam.form.controller;
 import com.example.kodyjobdam.form.dto.request.FormCreateDTO;
 import com.example.kodyjobdam.form.dto.request.FormSubmitDTO;
 import com.example.kodyjobdam.form.dto.request.FormUpdateDTO;
+import com.example.kodyjobdam.form.dto.response.FormExcelDownloadDTO;
+import com.example.kodyjobdam.form.dto.response.FormFileArchiveDTO;
 import com.example.kodyjobdam.form.dto.response.FormFileDownloadDTO;
 import com.example.kodyjobdam.form.dto.response.FormFileResponseDTO;
 import com.example.kodyjobdam.form.dto.response.FormResponseDTO;
 import com.example.kodyjobdam.form.dto.response.FormSubmissionResponseDTO;
 import com.example.kodyjobdam.form.dto.response.FormSubmissionSummaryResponseDTO;
 import com.example.kodyjobdam.form.dto.response.FormSummaryResponseDTO;
+import com.example.kodyjobdam.form.service.FormExportService;
 import com.example.kodyjobdam.form.service.FormFileService;
 import com.example.kodyjobdam.form.service.FormService;
 import com.example.kodyjobdam.form.service.FormSubmissionService;
 import com.example.kodyjobdam.user.security.SecurityUtil;
+import jakarta.servlet.http.HttpServletResponse;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.core.io.Resource;
@@ -23,6 +27,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
+import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
 
@@ -36,7 +41,12 @@ public class FormController {
 
     private final FormFileService formFileService;
 
+    private final FormExportService formExportService;
+
     private final SecurityUtil securityUtil;
+
+    private static final MediaType XLSX =
+            MediaType.parseMediaType("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
 
     // ===== 선생님(TEACHER) 전용 =====
 
@@ -95,6 +105,31 @@ public class FormController {
     public ResponseEntity<FormSubmissionResponseDTO> getSubmission(@PathVariable Long id,
                                                                    @PathVariable Long submissionId) {
         return ResponseEntity.ok(formSubmissionService.getSubmission(id, submissionId, securityUtil.getCurrentUserId()));
+    }
+
+    /** 폼의 모든 응답을 엑셀(xlsx)로 내려받기. 파일 칸에는 첨부 파일 ZIP 안의 파일 이름이 들어간다. */
+    @GetMapping("/teacher/form/{id}/submission/excel")
+    public ResponseEntity<byte[]> downloadSubmissionExcel(@PathVariable Long id) {
+        FormExcelDownloadDTO excel = formExportService.exportExcel(id, securityUtil.getCurrentUserId());
+
+        return ResponseEntity.ok()
+                .header(HttpHeaders.CONTENT_DISPOSITION, attachment(excel.fileName()))
+                .contentType(XLSX)
+                .contentLength(excel.content().length)
+                .body(excel.content());
+    }
+
+    /**
+     * 폼에 첨부된 파일(포트폴리오)을 ZIP 하나로 내려받기.
+     * 파일이 많으면 오래 걸리므로 비동기 응답의 시간 제한을 받지 않도록 응답 스트림에 바로 쓴다.
+     */
+    @GetMapping("/teacher/form/{id}/submission/files")
+    public void downloadSubmissionFiles(@PathVariable Long id, HttpServletResponse response) throws IOException {
+        FormFileArchiveDTO archive = formExportService.prepareFileArchive(id, securityUtil.getCurrentUserId());
+
+        response.setContentType("application/zip");
+        response.setHeader(HttpHeaders.CONTENT_DISPOSITION, attachment(archive.fileName()));
+        formExportService.writeFileArchive(archive, response.getOutputStream());
     }
 
     /** 지원자 확정 */
@@ -169,5 +204,12 @@ public class FormController {
     @GetMapping("/form/{id}")
     public ResponseEntity<FormResponseDTO> get(@PathVariable Long id) {
         return ResponseEntity.ok(formService.getPublished(id));
+    }
+
+    private static String attachment(String fileName) {
+        return ContentDisposition.attachment()
+                .filename(fileName, StandardCharsets.UTF_8)
+                .build()
+                .toString();
     }
 }
