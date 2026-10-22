@@ -1,11 +1,15 @@
 package com.example.kodyjobdam.notice.controller;
 
 import com.example.kodyjobdam.notice.dto.NoticeRequestDto;
+import com.example.kodyjobdam.notice.dto.DiscordChannelResponse;
+import com.example.kodyjobdam.notice.dto.ChannelNoticeRequestDto;
 import com.example.kodyjobdam.notice.service.NoticeService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
+
+import java.util.List;
 
 @RestController
 @RequestMapping("/api/notices")
@@ -13,6 +17,16 @@ import org.springframework.web.bind.annotation.*;
 public class NoticeController {
 
     private final NoticeService noticeService;
+
+    @GetMapping("/channels")
+    public ResponseEntity<List<DiscordChannelResponse>> getSendableChannels() {
+        return ResponseEntity.ok(noticeService.getSendableChannels());
+    }
+
+    @PostMapping("/send")
+    public ResponseEntity<String> sendToChannel(@Valid @RequestBody ChannelNoticeRequestDto requestDto) {
+        return ResponseEntity.ok(noticeService.sendNoticeToChannel(requestDto));
+    }
 
     @PostMapping
     public ResponseEntity<String> createNotice(@Valid @RequestBody NoticeRequestDto requestDto) {

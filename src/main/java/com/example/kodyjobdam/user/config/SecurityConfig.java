@@ -49,6 +49,8 @@ public class SecurityConfig {
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers("/error").permitAll()
                         .requestMatchers(HttpMethod.POST, "/api/notices").hasRole("TEACHER")
+                        .requestMatchers(HttpMethod.GET, "/api/notices/channels").hasRole("TEACHER")
+                        .requestMatchers(HttpMethod.POST, "/api/notices/send").hasRole("TEACHER")
                         .requestMatchers(HttpMethod.PATCH, "/api/notices/**").hasRole("TEACHER")
                         .requestMatchers(HttpMethod.GET, "/api/notifications/subscribe").permitAll()
                         .requestMatchers(HttpMethod.GET, "/uploads/profile-images/**").permitAll()
