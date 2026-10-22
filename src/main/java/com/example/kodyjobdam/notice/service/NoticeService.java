@@ -1,6 +1,8 @@
 package com.example.kodyjobdam.notice.service;
 
 import com.example.kodyjobdam.notice.dto.NoticeRequestDto;
+import com.example.kodyjobdam.notice.dto.DiscordChannelResponse;
+import com.example.kodyjobdam.notice.dto.ChannelNoticeRequestDto;
 import com.example.kodyjobdam.recruit.entity.RecruitEntity;
 import com.example.kodyjobdam.recruit.entity.RecruitField;
 import com.example.kodyjobdam.recruit.repository.RecruitRepository;
@@ -19,6 +21,14 @@ public class NoticeService {
 
     private final DiscordNoticeService discordNoticeService;
     private final RecruitRepository recruitRepository;
+
+    public List<DiscordChannelResponse> getSendableChannels() {
+        return discordNoticeService.getSendableChannels();
+    }
+
+    public String sendNoticeToChannel(ChannelNoticeRequestDto dto) {
+        return discordNoticeService.sendNoticeToChannel(dto.getChannelId(), dto);
+    }
 
     @Transactional
     public String createNotice(NoticeRequestDto dto) {
