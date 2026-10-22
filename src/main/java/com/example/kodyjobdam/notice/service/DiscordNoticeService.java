@@ -2,6 +2,7 @@ package com.example.kodyjobdam.notice.service;
 import com.example.kodyjobdam.notice.dto.NoticeRequestDto;
 import com.example.kodyjobdam.notice.dto.DiscordChannelResponse;
 import com.example.kodyjobdam.common.exception.NotificationException;
+import com.example.kodyjobdam.statistics.service.StatisticRecorder;
 import net.dv8tion.jda.api.EmbedBuilder;
 import net.dv8tion.jda.api.JDA;
 import net.dv8tion.jda.api.JDABuilder;
@@ -24,6 +25,12 @@ public class DiscordNoticeService {
 
     private final JDA jda;
     private final String channelId;
+    private StatisticRecorder statisticRecorder;
+
+    @Autowired
+    void setStatisticRecorder(StatisticRecorder statisticRecorder) {
+        this.statisticRecorder = statisticRecorder;
+    }
 
     @Autowired
     public DiscordNoticeService(
@@ -41,9 +48,15 @@ public class DiscordNoticeService {
     }
 
     public String sendNotice(NoticeRequestDto dto) {
-        TextChannel channel = getNoticeChannel();
-        Message message = channel.sendMessageEmbeds(buildNoticeEmbed(dto).build()).complete();
-        return message.getId();
+        try {
+            TextChannel channel = getNoticeChannel();
+            Message message = channel.sendMessageEmbeds(buildNoticeEmbed(dto).build()).complete();
+            recordSend("NOTICE_DEFAULT", true);
+            return message.getId();
+        } catch (RuntimeException e) {
+            recordSend("NOTICE_DEFAULT", false);
+            throw e;
+        }
     }
 
     public List<DiscordChannelResponse> getSendableChannels() {
@@ -58,12 +71,19 @@ public class DiscordNoticeService {
     }
 
     public String sendNoticeToChannel(String selectedChannelId, NoticeRequestDto dto) {
-        var guildChannel = jda.getGuildChannelById(selectedChannelId);
-        if (!(guildChannel instanceof StandardGuildMessageChannel channel)
-                || !channel.getGuild().getId().equals(getGuildId()) || !canSendNotice(channel)) {
-            throw NotificationException.badRequest("선택한 디스코드 채널에 공지를 보낼 수 없습니다.");
+        try {
+            var guildChannel = jda.getGuildChannelById(selectedChannelId);
+            if (!(guildChannel instanceof StandardGuildMessageChannel channel)
+                    || !channel.getGuild().getId().equals(getGuildId()) || !canSendNotice(channel)) {
+                throw NotificationException.badRequest("선택한 디스코드 채널에 공지를 보낼 수 없습니다.");
+            }
+            String messageId = channel.sendMessageEmbeds(buildNoticeEmbed(dto).build()).complete().getId();
+            recordSend("NOTICE_SELECTED", true);
+            return messageId;
+        } catch (RuntimeException e) {
+            recordSend("NOTICE_SELECTED", false);
+            throw e;
         }
-        return channel.sendMessageEmbeds(buildNoticeEmbed(dto).build()).complete().getId();
     }
 
     private boolean canSendNotice(StandardGuildMessageChannel channel) {
@@ -95,9 +115,19 @@ public class DiscordNoticeService {
     }
 
     public void sendDirectMessage(String userId, String content) {
-        jda.openPrivateChannelById(userId)
-                .flatMap(channel -> channel.sendMessage(content))
-                .complete();
+        try {
+            jda.openPrivateChannelById(userId)
+                    .flatMap(channel -> channel.sendMessage(content))
+                    .complete();
+            recordSend("DIRECT_MESSAGE", true);
+        } catch (RuntimeException e) {
+            recordSend("DIRECT_MESSAGE", false);
+            throw e;
+        }
+    }
+
+    private void recordSend(String type, boolean success) {
+        if (statisticRecorder != null) statisticRecorder.recordDiscord(type, success);
     }
 
     private EmbedBuilder buildNoticeEmbed(NoticeRequestDto dto) {
