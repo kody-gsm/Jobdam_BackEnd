@@ -8,6 +8,8 @@ import lombok.Setter;
 @Getter
 @Setter
 public class NoticeRequestDto {
+    private String channelId;
+
     @NotBlank(message = "공지 제목을 입력해주세요.")
     @Size(max = 256, message = "공지 제목은 256자 이하로 입력해주세요.")
     private String title;
