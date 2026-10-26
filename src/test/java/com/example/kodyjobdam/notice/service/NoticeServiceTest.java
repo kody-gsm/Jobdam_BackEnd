@@ -82,6 +82,37 @@ class NoticeServiceTest {
         verify(recruitRepository, never()).findById(any());
     }
 
+    @Test
+    void 기존_공지_API에_채널_ID가_있으면_선택_채널로_보낸다() {
+        NoticeRequestDto dto = notice("제목", "내용", null);
+        dto.setChannelId("channel-id");
+        when(discordNoticeService.sendNoticeToChannel("channel-id", dto)).thenReturn("message-id");
+
+        assertThat(noticeService.createNotice(dto)).isEqualTo("message-id");
+
+        verify(discordNoticeService, never()).sendNotice(any());
+        verify(recruitRepository, never()).findById(any());
+    }
+
+    @Test
+    void 선택_채널_ID가_있으면_해당_채널의_메시지를_수정한다() {
+        NoticeRequestDto dto = notice("제목", "내용", null);
+
+        noticeService.updateNotice("message-id", "channel-id", dto);
+
+        verify(discordNoticeService).updateNotice("message-id", "channel-id", dto);
+        verify(discordNoticeService, never()).updateNotice("message-id", dto);
+    }
+
+    @Test
+    void 채널_ID가_없으면_기본_채널의_메시지를_수정한다() {
+        NoticeRequestDto dto = notice("제목", "내용", null);
+
+        noticeService.updateNotice("message-id", null, dto);
+
+        verify(discordNoticeService).updateNotice("message-id", dto);
+    }
+
     private NoticeRequestDto notice(String title, String content, String link) {
         NoticeRequestDto dto = new NoticeRequestDto();
         dto.setTitle(title);

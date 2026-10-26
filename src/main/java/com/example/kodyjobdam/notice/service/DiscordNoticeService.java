@@ -10,6 +10,7 @@ import net.dv8tion.jda.api.Permission;
 import net.dv8tion.jda.api.requests.GatewayIntent;
 import net.dv8tion.jda.api.utils.MemberCachePolicy;
 import net.dv8tion.jda.api.entities.Message;
+import net.dv8tion.jda.api.entities.Guild;
 import net.dv8tion.jda.api.entities.channel.concrete.TextChannel;
 import net.dv8tion.jda.api.entities.channel.middleman.StandardGuildMessageChannel;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -25,6 +26,7 @@ public class DiscordNoticeService {
 
     private final JDA jda;
     private final String channelId;
+    private final String guildId;
     private StatisticRecorder statisticRecorder;
 
     @Autowired
@@ -35,16 +37,22 @@ public class DiscordNoticeService {
     @Autowired
     public DiscordNoticeService(
             @Value("${discord.bot.token}") String token,
-            @Value("${discord.bot.channel-id}") String channelId) throws Exception {
+            @Value("${discord.bot.channel-id}") String channelId,
+            @Value("${discord.bot.guild-id:}") String guildId) throws Exception {
         this(JDABuilder.createDefault(token)
                 .enableIntents(GatewayIntent.GUILD_MEMBERS)
                 .setMemberCachePolicy(MemberCachePolicy.ALL)
-                .build().awaitReady(), channelId);
+                .build().awaitReady(), channelId, guildId);
     }
 
     DiscordNoticeService(JDA jda, String channelId) {
+        this(jda, channelId, "");
+    }
+
+    DiscordNoticeService(JDA jda, String channelId, String guildId) {
         this.jda = jda;
         this.channelId = channelId;
+        this.guildId = guildId;
     }
 
     public String sendNotice(NoticeRequestDto dto) {
@@ -60,7 +68,7 @@ public class DiscordNoticeService {
     }
 
     public List<DiscordChannelResponse> getSendableChannels() {
-        var guild = getNoticeChannel().getGuild();
+        Guild guild = getNoticeGuild();
         return Stream.<StandardGuildMessageChannel>concat(
                         guild.getTextChannels().stream(), guild.getNewsChannels().stream())
                 .filter(this::canSendNotice)
@@ -72,11 +80,7 @@ public class DiscordNoticeService {
 
     public String sendNoticeToChannel(String selectedChannelId, NoticeRequestDto dto) {
         try {
-            var guildChannel = jda.getGuildChannelById(selectedChannelId);
-            if (!(guildChannel instanceof StandardGuildMessageChannel channel)
-                    || !channel.getGuild().getId().equals(getGuildId()) || !canSendNotice(channel)) {
-                throw NotificationException.badRequest("선택한 디스코드 채널에 공지를 보낼 수 없습니다.");
-            }
+            StandardGuildMessageChannel channel = getSelectedChannel(selectedChannelId);
             String messageId = channel.sendMessageEmbeds(buildNoticeEmbed(dto).build()).complete().getId();
             recordSend("NOTICE_SELECTED", true);
             return messageId;
@@ -96,6 +100,23 @@ public class DiscordNoticeService {
         channel.editMessageEmbedsById(messageId, buildNoticeEmbed(dto).build()).complete();
     }
 
+    public void updateNotice(String messageId, String selectedChannelId, NoticeRequestDto dto) {
+        getSelectedChannel(selectedChannelId)
+                .editMessageEmbedsById(messageId, buildNoticeEmbed(dto).build()).complete();
+    }
+
+    private StandardGuildMessageChannel getSelectedChannel(String selectedChannelId) {
+        if (selectedChannelId == null || selectedChannelId.isBlank()) {
+            throw NotificationException.badRequest("전송할 디스코드 채널을 선택해주세요.");
+        }
+        var guildChannel = jda.getGuildChannelById(selectedChannelId);
+        if (!(guildChannel instanceof StandardGuildMessageChannel channel)
+                || !channel.getGuild().getId().equals(getGuildId()) || !canSendNotice(channel)) {
+            throw NotificationException.badRequest("선택한 디스코드 채널에 공지를 보낼 수 없습니다.");
+        }
+        return channel;
+    }
+
     private TextChannel getNoticeChannel() {
         TextChannel channel = jda.getTextChannelById(channelId);
 
@@ -111,7 +132,26 @@ public class DiscordNoticeService {
     }
 
     public String getGuildId() {
-        return getNoticeChannel().getGuild().getId();
+        return getNoticeGuild().getId();
+    }
+
+    private Guild getNoticeGuild() {
+        if (guildId != null && !guildId.isBlank()) {
+            Guild guild = jda.getGuildById(guildId);
+            if (guild == null) {
+                throw new IllegalStateException("지정한 디스코드 서버를 찾을 수 없습니다.");
+            }
+            return guild;
+        }
+        TextChannel defaultChannel = jda.getTextChannelById(channelId);
+        if (defaultChannel != null) {
+            return defaultChannel.getGuild();
+        }
+        List<Guild> guilds = jda.getGuilds();
+        if (guilds.size() == 1) {
+            return guilds.get(0);
+        }
+        throw new IllegalStateException("디스코드 서버를 식별할 수 없습니다. DISCORD_BOT_GUILD_ID를 설정해주세요.");
     }
 
     public void sendDirectMessage(String userId, String content) {

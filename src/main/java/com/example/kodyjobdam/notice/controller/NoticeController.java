@@ -2,7 +2,6 @@ package com.example.kodyjobdam.notice.controller;
 
 import com.example.kodyjobdam.notice.dto.NoticeRequestDto;
 import com.example.kodyjobdam.notice.dto.DiscordChannelResponse;
-import com.example.kodyjobdam.notice.dto.ChannelNoticeRequestDto;
 import com.example.kodyjobdam.notice.service.NoticeService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -24,7 +23,7 @@ public class NoticeController {
     }
 
     @PostMapping("/send")
-    public ResponseEntity<String> sendToChannel(@Valid @RequestBody ChannelNoticeRequestDto requestDto) {
+    public ResponseEntity<String> sendToChannel(@Valid @RequestBody NoticeRequestDto requestDto) {
         return ResponseEntity.ok(noticeService.sendNoticeToChannel(requestDto));
     }
 
@@ -36,8 +35,9 @@ public class NoticeController {
 
     @PatchMapping("/{messageId}")
     public ResponseEntity<String> updateNotice(@PathVariable String messageId,
+                                               @RequestParam(required = false) String channelId,
                                                @Valid @RequestBody NoticeRequestDto requestDto) {
-        noticeService.updateNotice(messageId, requestDto);
+        noticeService.updateNotice(messageId, channelId, requestDto);
         return ResponseEntity.ok("디스코드 공지가 수정되었습니다.");
     }
 }

@@ -2,7 +2,6 @@ package com.example.kodyjobdam.notice.service;
 
 import com.example.kodyjobdam.notice.dto.NoticeRequestDto;
 import com.example.kodyjobdam.notice.dto.DiscordChannelResponse;
-import com.example.kodyjobdam.notice.dto.ChannelNoticeRequestDto;
 import com.example.kodyjobdam.recruit.entity.RecruitEntity;
 import com.example.kodyjobdam.recruit.entity.RecruitField;
 import com.example.kodyjobdam.recruit.repository.RecruitRepository;
@@ -26,12 +25,15 @@ public class NoticeService {
         return discordNoticeService.getSendableChannels();
     }
 
-    public String sendNoticeToChannel(ChannelNoticeRequestDto dto) {
+    public String sendNoticeToChannel(NoticeRequestDto dto) {
         return discordNoticeService.sendNoticeToChannel(dto.getChannelId(), dto);
     }
 
     @Transactional
     public String createNotice(NoticeRequestDto dto) {
+        if (dto.getChannelId() != null) {
+            return sendNoticeToChannel(dto);
+        }
         Optional<RecruitEntity> recruit = findRecruitByNoticeLink(dto.getLink());
         if (recruit.isPresent()) {
             RecruitEntity entity = recruit.get();
@@ -51,6 +53,14 @@ public class NoticeService {
 
     public void updateNotice(String messageId, NoticeRequestDto dto) {
         discordNoticeService.updateNotice(messageId, dto);
+    }
+
+    public void updateNotice(String messageId, String channelId, NoticeRequestDto dto) {
+        if (channelId == null) {
+            updateNotice(messageId, dto);
+        } else {
+            discordNoticeService.updateNotice(messageId, channelId, dto);
+        }
     }
 
     private Optional<RecruitEntity> findRecruitByNoticeLink(String link) {
