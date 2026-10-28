@@ -39,9 +39,11 @@ public class GeminiClient {
             "https://generativelanguage.googleapis.com/v1beta/models/%s:generateContent";
 
     private static final String PROMPT = """
-            다음 이미지는 채용 공고 또는 면접 안내문입니다.
+            다음 이미지는 채용 공고, 면접 안내문 또는 그 밖의 취업 관련 안내문입니다.
             이미지에서 아래 항목을 추출해서 JSON으로만 응답하세요. 해당 정보가 없으면 null로 표기하세요.
 
+            - recruitment: 회사가 직원을 뽑는 채용 공고나 면접 안내면 true, 아니면 false.
+              교육생·참가자 모집, 행사·설명회 안내는 false입니다. 교육을 마친 뒤 취업을 연계해 주는 교육생 모집도 false입니다.
             - companyName: 회사(기업) 이름
             - documentPeriod: 서류 접수 기간. "지원 기간", "모집 기간", "접수 기간", "지원 마감"은 모두 여기에 넣으세요.
             - writtenExamPeriod: 필기 전형 기간
@@ -49,7 +51,15 @@ public class GeminiClient {
             - codingTestPeriod: 코딩테스트 전형 기간
             - interviewPeriod: 면접 전형 기간. "면접 일정", "면접일"도 여기에 넣으세요.
             - fields: 이 공고가 뽑는 직무를 아래 목록에서 골라 문자열 배열로 넣으세요.
-            - summary: 그 외 지원자가 꼭 알아야 할 중요 정보(준비물, 장소, 상세 시각 등)를 2~3문장으로 요약
+            - summary: 지원자가 알아야 할 내용 (아래 작성 규칙을 따르세요)
+
+            recruitment가 false이면 기간 항목은 모두 null로 두세요. 그 안내문의 날짜와 마감은 summary에 적으세요.
+
+            summary 작성 규칙
+            - 채용 공고이고 서류 접수 기간이나 면접 일정이 있으면, 그 외 꼭 알아야 할 정보(준비물, 장소, 상세 시각 등)를 2~3문장으로 요약하세요.
+            - recruitment가 false이거나 서류 접수 기간과 면접 일정이 모두 없으면, 이미지에 적힌 내용을 빠짐없이 summary에 정리하세요.
+              대상, 일정과 마감, 장소, 혜택, 신청 방법, 문의처처럼 항목별로 줄을 나눠 적으세요.
+            - summary는 900자를 넘기지 마세요.
 
             직무(fields)는 아래 값만 쓰세요.
             - FRONTEND: 웹 프론트엔드. React, Vue, 퍼블리싱, 웹 UI 개발
@@ -76,8 +86,11 @@ public class GeminiClient {
             - 시각(예: 14:00)은 기간에 넣지 말고 summary에 적으세요.
 
             반드시 아래 JSON 형식으로만 응답하세요.
-            {"companyName": string|null, "documentPeriod": object|null, "writtenExamPeriod": object|null, "practicalExamPeriod": object|null, "codingTestPeriod": object|null, "interviewPeriod": object|null, "fields": string[], "summary": string|null}
+            {"recruitment": boolean, "companyName": string|null, "documentPeriod": object|null, "writtenExamPeriod": object|null, "practicalExamPeriod": object|null, "codingTestPeriod": object|null, "interviewPeriod": object|null, "fields": string[], "summary": string|null}
             """;
+
+    /** RecruitEntity.summary 칼럼 길이. */
+    private static final int SUMMARY_MAX_LENGTH = 1000;
 
     /** 연-월-일 사이에 무엇이 끼어 있어도 숫자만 뽑아낸다. */
     private static final Pattern DATE_PATTERN = Pattern.compile("(\\d{4})\\D{1,3}(\\d{1,2})\\D{1,3}(\\d{1,2})");
@@ -153,18 +166,24 @@ public class GeminiClient {
 
             JsonNode data = objectMapper.readTree(text);
 
+            // 교육생 모집처럼 채용 공고가 아닌 안내문의 날짜를 지원 마감·면접 일정으로 쓰면 학생이 잘못 안다.
+            // 그 날짜는 프롬프트대로 summary에 담기므로 모델이 기간을 채워 보내도 버린다. 값이 없으면 채용 공고로 본다.
+            boolean recruitment = data.path("recruitment").asBoolean(true);
+
             GeminiAnalysisResult result = new GeminiAnalysisResult(
                     readText(data, "companyName"),
-                    readPeriod(data, "documentPeriod"),
-                    readPeriod(data, "writtenExamPeriod"),
-                    readPeriod(data, "practicalExamPeriod"),
-                    readPeriod(data, "codingTestPeriod"),
-                    readPeriod(data, "interviewPeriod"),
+                    recruitment ? readPeriod(data, "documentPeriod") : null,
+                    recruitment ? readPeriod(data, "writtenExamPeriod") : null,
+                    recruitment ? readPeriod(data, "practicalExamPeriod") : null,
+                    recruitment ? readPeriod(data, "codingTestPeriod") : null,
+                    recruitment ? readPeriod(data, "interviewPeriod") : null,
                     readFields(data),
-                    readText(data, "summary")
+                    readSummary(data)
             );
 
-            if (result.documentPeriod() == null || result.interviewPeriod() == null) {
+            if (!recruitment) {
+                log.info("채용 공고가 아닌 이미지로 보고 기간을 비운 채 요약만 남깁니다: model={}, 응답={}", model, text);
+            } else if (result.documentPeriod() == null || result.interviewPeriod() == null) {
                 log.warn("Gemini가 서류 접수/면접 기간을 채우지 않았습니다: model={}, 응답={}", model, text);
             }
             if (result.fields().isEmpty()) {
@@ -228,6 +247,20 @@ public class GeminiClient {
         } catch (IllegalArgumentException e) {
             log.warn("Gemini가 알 수 없는 직무 분야를 반환했습니다: {}", value);
         }
+    }
+
+    /**
+     * 요약을 읽는다. 채용 공고가 아니면 이미지 내용을 통째로 담으므로 길어질 수 있다.
+     * 칼럼 길이를 넘기면 공고 저장이 실패하므로 넘친 뒷부분은 잘라낸다.
+     */
+    private String readSummary(JsonNode data) {
+        String summary = readText(data, "summary");
+        if (summary == null || summary.codePointCount(0, summary.length()) <= SUMMARY_MAX_LENGTH) {
+            return summary;
+        }
+
+        log.warn("Gemini가 돌려준 요약이 {}자를 넘어 뒷부분을 잘라냅니다: {}", SUMMARY_MAX_LENGTH, summary);
+        return summary.substring(0, summary.offsetByCodePoints(0, SUMMARY_MAX_LENGTH));
     }
 
     /** 날짜 형식이 어긋난 항목은 버리고 나머지는 살린다. */
