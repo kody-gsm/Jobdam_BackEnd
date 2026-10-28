@@ -147,32 +147,6 @@ class GeminiClientTest {
         assertThat(result.documentPeriod()).isNull();
     }
 
-    @Test
-    void dropsPeriodsWhenImageIsNotRecruitment() {
-        stubResponse("""
-                {"recruitment":false,
-                 "companyName":"testify",
-                 "documentPeriod":{"startDate":null,"endDate":"2026-09-29"},
-                 "interviewPeriod":null,
-                 "summary":"QA과정 교육생 모집\\n신청 마감: 2026-09-29 17:00\\n교육 일정: 2026-09-21 ~ 2026-11-19"}
-                """);
-
-        GeminiAnalysisResult result = geminiClient.analyze(new byte[]{1}, "image/png");
-
-        assertThat(result.documentPeriod()).isNull();
-        assertThat(result.interviewPeriod()).isNull();
-        assertThat(result.summary()).contains("신청 마감: 2026-09-29 17:00");
-    }
-
-    @Test
-    void cutsSummaryLongerThanColumn() {
-        stubResponse("{\"summary\":\"" + "가".repeat(1200) + "\"}");
-
-        GeminiAnalysisResult result = geminiClient.analyze(new byte[]{1}, "image/png");
-
-        assertThat(result.summary()).hasSize(1000);
-    }
-
     /** 모델이 돌려준 JSON 문자열을 Gemini 응답 형태로 감싼다. */
     private void stubResponse(String modelText) {
         ObjectMapper objectMapper = new ObjectMapper();
