@@ -24,10 +24,12 @@ public class RecruitController {
 
     // ===== 선생님(TEACHER) 전용 =====
 
-    /** 이미지 분석 → 초안 저장 후 결과 반환 */
+    /** 이미지 분석 → 초안 저장 후 결과 반환. createForm을 false로 보내면 지원 폼 없이 만든다. */
     @PostMapping(value = "/teacher/recruit/analyze", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
-    public ResponseEntity<RecruitResponseDTO> analyze(@RequestParam("image") MultipartFile image) {
-        return ResponseEntity.ok(recruitService.analyze(image, securityUtil.getCurrentUserId()));
+    public ResponseEntity<RecruitResponseDTO> analyze(
+            @RequestParam("image") MultipartFile image,
+            @RequestParam(value = "createForm", defaultValue = "true") boolean createForm) {
+        return ResponseEntity.ok(recruitService.analyze(image, createForm, securityUtil.getCurrentUserId()));
     }
 
     /** 이미지 없이 직접 입력해 초안 저장 */

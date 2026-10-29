@@ -33,4 +33,7 @@ public class RecruitCreateDTO {
     private List<RecruitField> fields;
 
     private String summary;
+
+    /** 학번·이름·포트폴리오로 이루어진 기본 지원 폼을 함께 만들지. 생략하면 만든다. */
+    private Boolean createForm;
 }

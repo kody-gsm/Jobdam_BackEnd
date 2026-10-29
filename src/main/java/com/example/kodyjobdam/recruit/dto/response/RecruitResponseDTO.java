@@ -44,7 +44,7 @@ public class RecruitResponseDTO {
     /** 공고 이미지 공개 URL. 로그인 없이도 접근 가능. 이미지가 없으면 null. */
     private String imageUrl;
 
-    /** 공고와 함께 만들어진 지원 폼 식별자 */
+    /** 공고와 함께 만들어진 지원 폼 식별자. 지원 폼 없이 만든 공고는 null. */
     private Long formId;
 
     /** 공개 상태. 서류 접수 종료일이 지났으면 저장된 상태와 무관하게 CLOSED로 나간다. */

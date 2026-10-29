@@ -115,11 +115,26 @@ class RecruitServiceTest {
         when(recruitRepository.save(any(RecruitEntity.class))).thenAnswer(returnsFirstArg());
 
         RecruitResponseDTO response = recruitService.analyze(
-                new MockMultipartFile("image", "recruit.png", "image/png", new byte[]{1, 2}), 2L);
+                new MockMultipartFile("image", "recruit.png", "image/png", new byte[]{1, 2}), true, 2L);
 
         assertThat(response.getFormId()).isEqualTo(7L);
         assertThat(response.getImageUrl()).isEqualTo("/uploads/recruit/2026/09/uuid.png");
         assertThat(response.getFields()).containsExactly(RecruitField.BACKEND);
+    }
+
+    @Test
+    void 분석할_때_지원_폼을_끄면_폼_없이_공고만_만든다() {
+        when(userRepository.findById(2L)).thenReturn(Optional.of(user(2L)));
+        when(geminiClient.analyze(any(), eq("image/png"))).thenReturn(new GeminiAnalysisResult(
+                "잡담", null, null, null, null, null, java.util.Set.of(), "요약"));
+        when(recruitImageStorage.store(any(byte[].class), eq("png"))).thenReturn("/uploads/recruit/2026/09/a.png");
+        when(recruitRepository.save(any(RecruitEntity.class))).thenAnswer(returnsFirstArg());
+
+        RecruitResponseDTO response = recruitService.analyze(
+                new MockMultipartFile("image", "recruit.png", "image/png", new byte[]{1, 2}), false, 2L);
+
+        assertThat(response.getFormId()).isNull();
+        verify(formService, never()).createForRecruit(any(), any(), any());
     }
 
     @Test
@@ -149,6 +164,20 @@ class RecruitServiceTest {
         assertThat(response.getSummary()).isEqualTo("요약");
         verify(geminiClient, never()).analyze(any(), any());
         verify(recruitImageStorage, never()).store(any(), any());
+    }
+
+    @Test
+    void 직접_입력할_때_지원_폼을_끄면_폼_없이_공고만_만든다() throws Exception {
+        when(userRepository.findById(2L)).thenReturn(Optional.of(user(2L)));
+        when(recruitRepository.save(any(RecruitEntity.class))).thenAnswer(returnsFirstArg());
+
+        RecruitCreateDTO dto = objectMapper.readValue(
+                "{\"companyName\":\"잡담\",\"createForm\":false}", RecruitCreateDTO.class);
+
+        RecruitResponseDTO response = recruitService.create(dto, 2L);
+
+        assertThat(response.getFormId()).isNull();
+        verify(formService, never()).createForRecruit(any(), any(), any());
     }
 
     @Test

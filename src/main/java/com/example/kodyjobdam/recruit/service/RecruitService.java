@@ -86,7 +86,7 @@ public class RecruitService {
 
     /** 선생님: 이미지 분석 → 초안(DRAFT)으로 저장 후 결과 반환 */
     @Transactional
-    public RecruitResponseDTO analyze(MultipartFile image, Long userId) {
+    public RecruitResponseDTO analyze(MultipartFile image, boolean createForm, Long userId) {
         if (image == null || image.isEmpty()) {
             throw RecruitException.badRequest("이미지를 첨부해주세요.");
         }
@@ -108,9 +108,10 @@ public class RecruitService {
 
         GeminiAnalysisResult result = geminiClient.analyze(imageBytes, contentType);
 
-        // 공고를 만들 때 학번·이름·포트폴리오로 이루어진 기본 지원 폼도 함께 만들어 붙인다.
-        FormEntity form = formService.createForRecruit(
-                user, result.companyName(), applicationDeadline(result.documentPeriod()));
+        // 선생님이 원하면 학번·이름·포트폴리오로 이루어진 기본 지원 폼도 함께 만들어 붙인다.
+        FormEntity form = createForm
+                ? formService.createForRecruit(user, result.companyName(), applicationDeadline(result.documentPeriod()))
+                : null;
 
         // 학생에게도 원본 공고 이미지를 보여줄 수 있도록 저장해둔다.
         String imageUrl = recruitImageStorage.store(imageBytes, IMAGE_EXTENSIONS.getOrDefault(contentType, ""));
@@ -142,7 +143,10 @@ public class RecruitService {
         String companyName = dto.getCompanyName().trim();
         RecruitPeriod documentPeriod = resolveDocumentPeriod(null, dto.getDocumentPeriod(), dto.getDeadline());
 
-        FormEntity form = formService.createForRecruit(user, companyName, applicationDeadline(documentPeriod));
+        // 지원 폼은 선생님이 끄지 않았을 때만 만든다. 값을 보내지 않으면 지금까지처럼 만든다.
+        FormEntity form = Boolean.FALSE.equals(dto.getCreateForm())
+                ? null
+                : formService.createForRecruit(user, companyName, applicationDeadline(documentPeriod));
 
         RecruitEntity entity = recruitRepository.save(RecruitEntity.builder()
                 .user(user)
