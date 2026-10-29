@@ -26,6 +26,7 @@ import java.time.DateTimeException;
 import java.time.LocalDate;
 import java.util.Base64;
 import java.util.EnumSet;
+import java.util.List;
 import java.util.Set;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -40,6 +41,7 @@ public class GeminiClient {
 
     private static final String PROMPT = """
             다음 이미지는 채용 공고, 면접 안내문 또는 그 밖의 취업 관련 안내문입니다.
+            이미지가 여러 장이면 한 안내문을 나눠 담은 것이니 모두 함께 읽고 하나의 결과로 답하세요.
             이미지에서 아래 항목을 추출해서 JSON으로만 응답하세요. 해당 정보가 없으면 null로 표기하세요.
 
             - recruitment: 회사가 직원을 뽑는 채용 공고나 면접 안내면 true, 아니면 false.
@@ -105,14 +107,13 @@ public class GeminiClient {
     @Value("${gemini.model:gemini-3.1-flash-lite}")
     private String model;
 
-    public GeminiAnalysisResult analyze(byte[] imageBytes, String mimeType) {
+    /** 한 공고를 담은 이미지들을 한 번에 넘겨 하나의 결과로 받는다. */
+    public GeminiAnalysisResult analyze(List<GeminiImage> images) {
         if (apiKey == null || apiKey.isBlank()) {
             throw ConfigException.serviceUnavailable("Gemini API key is not configured.");
         }
 
-        String base64Image = Base64.getEncoder().encodeToString(imageBytes);
-
-        ObjectNode requestBody = buildRequestBody(base64Image, mimeType);
+        ObjectNode requestBody = buildRequestBody(images);
 
         HttpHeaders headers = new HttpHeaders();
         headers.setContentType(MediaType.APPLICATION_JSON);
@@ -140,15 +141,17 @@ public class GeminiClient {
         return parseResponse(response.getBody());
     }
 
-    private ObjectNode buildRequestBody(String base64Image, String mimeType) {
+    private ObjectNode buildRequestBody(List<GeminiImage> images) {
         ObjectNode root = objectMapper.createObjectNode();
 
         ArrayNode parts = root.putArray("contents").addObject().putArray("parts");
         parts.addObject().put("text", PROMPT);
 
-        ObjectNode inlineData = parts.addObject().putObject("inlineData");
-        inlineData.put("mimeType", mimeType);
-        inlineData.put("data", base64Image);
+        for (GeminiImage image : images) {
+            ObjectNode inlineData = parts.addObject().putObject("inlineData");
+            inlineData.put("mimeType", image.mimeType());
+            inlineData.put("data", Base64.getEncoder().encodeToString(image.data()));
+        }
 
         root.putObject("generationConfig").put("responseMimeType", "application/json");
 
