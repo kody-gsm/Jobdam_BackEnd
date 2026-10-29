@@ -53,7 +53,7 @@ public class AuthController {
     }
 
     @PostMapping("/email/password-reset-code")
-    public ResponseEntity<Void> sendPasswordResetVerificationCode(@Valid @RequestBody EmailVerificationRequest request) {
+    public ResponseEntity<Void> sendPasswordResetVerificationCode(@Valid @RequestBody PasswordResetCodeRequest request) {
         authService.sendPasswordResetVerificationCode(request);
         return ResponseEntity.noContent().build();
     }
