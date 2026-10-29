@@ -400,15 +400,20 @@ class FormServiceTest {
     }
 
     @Test
-    void 마감된_폼_조회는_마감으로_구분된다() {
+    void 마감된_폼도_상세_조회할_수_있다() {
         when(formRepository.findById(1L))
                 .thenReturn(Optional.of(publishedForm(1L, LocalDateTime.of(2026, 8, 31, 23, 59, 59))));
 
-        assertThatThrownBy(() -> formService.getPublished(1L))
-                .isInstanceOf(FormException.class)
-                .hasMessage("마감된 폼입니다.")
-                .hasFieldOrPropertyWithValue("code", "FORM_CLOSED")
-                .hasFieldOrPropertyWithValue("status", HttpStatus.NOT_FOUND);
+        assertThat(formService.getPublished(1L).getStatus()).isEqualTo(PublicationStatus.CLOSED);
+    }
+
+    @Test
+    void 선생님이_직접_마감한_폼도_상세_조회할_수_있다() {
+        FormEntity form = publishedForm(1L, LocalDateTime.of(2026, 9, 30, 23, 59, 59));
+        form.close();
+        when(formRepository.findById(1L)).thenReturn(Optional.of(form));
+
+        assertThat(formService.getPublished(1L).getStatus()).isEqualTo(PublicationStatus.CLOSED);
     }
 
     @Test
@@ -431,14 +436,33 @@ class FormServiceTest {
     }
 
     @Test
-    void 학생_폼_목록에서_마감된_폼은_빠진다() {
-        when(formRepository.findByStatusOrderByCreatedAtDesc(FormStatus.PUBLISHED)).thenReturn(List.of(
+    void 학생_폼_목록에_마감된_폼과_내_제출_여부가_포함된다() {
+        FormEntity manuallyClosed = publishedForm(3L, LocalDateTime.of(2026, 9, 30, 23, 59, 59));
+        manuallyClosed.close();
+        when(formRepository.findByStatusInOrderByCreatedAtDesc(List.of(FormStatus.PUBLISHED, FormStatus.CLOSED)))
+                .thenReturn(List.of(
                 publishedForm(1L, LocalDateTime.of(2026, 9, 30, 23, 59, 59)),
-                publishedForm(2L, LocalDateTime.of(2026, 8, 31, 23, 59, 59))));
+                publishedForm(2L, LocalDateTime.of(2026, 8, 31, 23, 59, 59)),
+                manuallyClosed));
+        when(submissionRepository.findSubmittedFormIds(3L, List.of(1L, 2L, 3L))).thenReturn(List.of(2L));
 
-        assertThat(formService.listPublished())
-                .extracting(FormSummaryResponseDTO::getId)
-                .containsExactly(1L);
+        assertThat(formService.listPublished(3L))
+                .extracting(FormSummaryResponseDTO::getId, FormSummaryResponseDTO::getStatus,
+                        FormSummaryResponseDTO::getSubmitted)
+                .containsExactly(
+                        tuple(1L, PublicationStatus.PUBLISHED, false),
+                        tuple(2L, PublicationStatus.CLOSED, true),
+                        tuple(3L, PublicationStatus.CLOSED, false));
+        verify(submissionRepository).findSubmittedFormIds(3L, List.of(1L, 2L, 3L));
+    }
+
+    @Test
+    void 학생_폼_목록이_비어_있으면_제출_조회도_하지_않는다() {
+        when(formRepository.findByStatusInOrderByCreatedAtDesc(List.of(FormStatus.PUBLISHED, FormStatus.CLOSED)))
+                .thenReturn(List.of());
+
+        assertThat(formService.listPublished(3L)).isEmpty();
+        verify(submissionRepository, never()).findSubmittedFormIds(any(), any());
     }
 
     @Test
