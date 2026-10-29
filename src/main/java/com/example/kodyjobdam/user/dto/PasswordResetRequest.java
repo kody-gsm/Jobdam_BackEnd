@@ -2,7 +2,6 @@ package com.example.kodyjobdam.user.dto;
 
 import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
-import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Size;
 import lombok.Getter;
 import lombok.Setter;
@@ -11,12 +10,9 @@ import lombok.Setter;
 @Setter
 public class PasswordResetRequest {
 
+    // 선생님 계정도 재설정할 수 있도록 학생 메일 형식으로 제한하지 않는다. 가입된 계정만 재설정된다.
     @Email
     @NotBlank
-    @Pattern(
-            regexp = "^s.*@gsm\\.hs\\.kr$",
-            message = "이메일은 학교계정을 사용해야합니다."
-    )
     private String email;
 
     @NotBlank
