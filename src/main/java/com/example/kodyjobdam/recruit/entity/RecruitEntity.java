@@ -8,14 +8,18 @@ import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
+import org.hibernate.annotations.BatchSize;
 import org.hibernate.annotations.CreationTimestamp;
 import org.hibernate.annotations.UpdateTimestamp;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.Collection;
 import java.util.EnumSet;
 import java.util.List;
+import java.util.Objects;
+import java.util.Optional;
 import java.util.Set;
 
 @Getter
@@ -96,8 +100,12 @@ public class RecruitEntity {
     @Column(length = 1000)
     private String summary;
 
-    /** 선생님이 올린 공고 원본 이미지의 공개 조회 URL. 로그인 없이도 접근할 수 있다. */
-    private String imageUrl;
+    /** 선생님이 올린 공고 원본 이미지. 올린 순서대로 보여준다. */
+    @OneToMany(mappedBy = "recruit", cascade = CascadeType.ALL, orphanRemoval = true)
+    @OrderBy("orderIndex ASC")
+    @BatchSize(size = 50)
+    @Builder.Default
+    private List<RecruitImageEntity> images = new ArrayList<>();
 
     @Enumerated(EnumType.STRING)
     @Builder.Default
@@ -186,6 +194,42 @@ public class RecruitEntity {
     /** 지원 폼 식별자. 폼이 없으면 null. */
     public Long getFormId() {
         return form == null ? null : form.getId();
+    }
+
+    /** 첫 번째 이미지의 공개 URL. 이미지가 없으면 null. */
+    public String getImageUrl() {
+        return images.isEmpty() ? null : images.get(0).getImageUrl();
+    }
+
+    /** 이미지 공개 URL을 올린 순서대로 돌려준다. */
+    public List<String> getImageUrls() {
+        return images.stream()
+                .map(RecruitImageEntity::getImageUrl)
+                .toList();
+    }
+
+    /** 이미지 추가 (양방향 연관관계 동기화). 지금 붙어 있는 이미지 뒤에 붙인다. */
+    public void addImage(String imageUrl) {
+        int nextOrderIndex = images.stream()
+                .mapToInt(RecruitImageEntity::getOrderIndex)
+                .max()
+                .orElse(0) + 1;
+
+        RecruitImageEntity image = RecruitImageEntity.builder()
+                .orderIndex(nextOrderIndex)
+                .imageUrl(imageUrl)
+                .build();
+        image.assignRecruit(this);
+        images.add(image);
+    }
+
+    /** 이미지 하나를 뗀다. 뗀 이미지의 URL을 돌려주고, 이 공고의 이미지가 아니면 빈 값을 돌려준다. */
+    public Optional<String> removeImage(Long imageId) {
+        Optional<RecruitImageEntity> target = images.stream()
+                .filter(image -> Objects.equals(image.getId(), imageId))
+                .findFirst();
+        target.ifPresent(images::remove);
+        return target.map(RecruitImageEntity::getImageUrl);
     }
 
     /** 학생에게 공개 */

@@ -11,11 +11,14 @@ import com.example.kodyjobdam.form.service.FormService;
 import com.example.kodyjobdam.notice.service.DiscordNoticeService;
 import com.example.kodyjobdam.recruit.client.GeminiAnalysisResult;
 import com.example.kodyjobdam.recruit.client.GeminiClient;
+import com.example.kodyjobdam.recruit.client.GeminiImage;
 import com.example.kodyjobdam.recruit.dto.request.RecruitCreateDTO;
 import com.example.kodyjobdam.recruit.dto.request.RecruitUpdateDTO;
+import com.example.kodyjobdam.recruit.dto.response.RecruitImageResponseDTO;
 import com.example.kodyjobdam.recruit.dto.response.RecruitResponseDTO;
 import com.example.kodyjobdam.recruit.entity.RecruitEntity;
 import com.example.kodyjobdam.recruit.entity.RecruitField;
+import com.example.kodyjobdam.recruit.entity.RecruitImageEntity;
 import com.example.kodyjobdam.recruit.entity.RecruitPeriod;
 import com.example.kodyjobdam.recruit.entity.RecruitStatus;
 import com.example.kodyjobdam.recruit.repository.RecruitRepository;
@@ -26,12 +29,14 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.http.HttpStatus;
 import org.springframework.mock.web.MockMultipartFile;
 import org.springframework.test.util.ReflectionTestUtils;
+import org.springframework.web.multipart.MultipartFile;
 
 import java.time.Clock;
 import java.time.LocalDate;
@@ -104,7 +109,7 @@ class RecruitServiceTest {
         FormEntity form = FormEntity.builder().id(7L).title("잡담 지원서").status(FormStatus.DRAFT).build();
 
         when(userRepository.findById(2L)).thenReturn(Optional.of(teacher));
-        when(geminiClient.analyze(any(), eq("image/png"))).thenReturn(new GeminiAnalysisResult(
+        when(geminiClient.analyze(any())).thenReturn(new GeminiAnalysisResult(
                 "잡담", documentPeriod, null, null, null, null,
                 java.util.Set.of(RecruitField.BACKEND), "요약"));
         when(formService.createForRecruit(
@@ -114,12 +119,147 @@ class RecruitServiceTest {
                 .thenReturn("/uploads/recruit/2026/09/uuid.png");
         when(recruitRepository.save(any(RecruitEntity.class))).thenAnswer(returnsFirstArg());
 
-        RecruitResponseDTO response = recruitService.analyze(
-                new MockMultipartFile("image", "recruit.png", "image/png", new byte[]{1, 2}), 2L);
+        RecruitResponseDTO response = recruitService.analyze(List.of(png("recruit.png")), true, 2L);
 
         assertThat(response.getFormId()).isEqualTo(7L);
         assertThat(response.getImageUrl()).isEqualTo("/uploads/recruit/2026/09/uuid.png");
+        assertThat(response.getImages())
+                .extracting(RecruitImageResponseDTO::getUrl)
+                .containsExactly("/uploads/recruit/2026/09/uuid.png");
         assertThat(response.getFields()).containsExactly(RecruitField.BACKEND);
+    }
+
+    @Test
+    void 분석할_때_지원_폼을_끄면_폼_없이_공고만_만든다() {
+        when(userRepository.findById(2L)).thenReturn(Optional.of(user(2L)));
+        when(geminiClient.analyze(any())).thenReturn(new GeminiAnalysisResult(
+                "잡담", null, null, null, null, null, java.util.Set.of(), "요약"));
+        when(recruitImageStorage.store(any(byte[].class), eq("png"))).thenReturn("/uploads/recruit/2026/09/a.png");
+        when(recruitRepository.save(any(RecruitEntity.class))).thenAnswer(returnsFirstArg());
+
+        RecruitResponseDTO response = recruitService.analyze(List.of(png("recruit.png")), false, 2L);
+
+        assertThat(response.getFormId()).isNull();
+        verify(formService, never()).createForRecruit(any(), any(), any());
+    }
+
+    @Test
+    @SuppressWarnings("unchecked")
+    void 여러_장을_올리면_함께_분석하고_올린_순서대로_저장한다() {
+        when(userRepository.findById(2L)).thenReturn(Optional.of(user(2L)));
+        when(geminiClient.analyze(any())).thenReturn(new GeminiAnalysisResult(
+                "잡담", null, null, null, null, null, java.util.Set.of(), "요약"));
+        when(recruitImageStorage.store(any(byte[].class), eq("png"))).thenReturn("/uploads/recruit/2026/09/a.png");
+        when(recruitImageStorage.store(any(byte[].class), eq("jpg"))).thenReturn("/uploads/recruit/2026/09/b.jpg");
+        when(recruitRepository.save(any(RecruitEntity.class))).thenAnswer(returnsFirstArg());
+
+        RecruitResponseDTO response = recruitService.analyze(List.of(
+                png("page1.png"),
+                new MockMultipartFile("image", "page2.jpg", "image/jpeg", new byte[]{3})), false, 2L);
+
+        ArgumentCaptor<List<GeminiImage>> analyzed = ArgumentCaptor.forClass(List.class);
+        verify(geminiClient).analyze(analyzed.capture());
+        assertThat(analyzed.getValue())
+                .extracting(GeminiImage::mimeType)
+                .containsExactly("image/png", "image/jpeg");
+        assertThat(response.getImages())
+                .extracting(RecruitImageResponseDTO::getUrl)
+                .containsExactly("/uploads/recruit/2026/09/a.png", "/uploads/recruit/2026/09/b.jpg");
+        assertThat(response.getImageUrl()).isEqualTo("/uploads/recruit/2026/09/a.png");
+    }
+
+    @Test
+    void 이미지가_아닌_파일이_섞여_있으면_분석도_저장도_하지_않는다() {
+        assertThatThrownBy(() -> recruitService.analyze(List.of(
+                png("page1.png"),
+                new MockMultipartFile("image", "memo.txt", "text/plain", new byte[]{1})), true, 2L))
+                .isInstanceOf(RecruitException.class)
+                .hasMessage("이미지 파일만 업로드할 수 있습니다.");
+        verify(geminiClient, never()).analyze(any());
+        verify(recruitImageStorage, never()).store(any(), any());
+    }
+
+    @Test
+    void 공고_이미지는_10장까지만_올릴_수_있다() {
+        List<MultipartFile> images = java.util.stream.IntStream.rangeClosed(1, 11)
+                .mapToObj(i -> (MultipartFile) png("page" + i + ".png"))
+                .toList();
+
+        assertThatThrownBy(() -> recruitService.analyze(images, true, 2L))
+                .isInstanceOf(RecruitException.class)
+                .hasMessage("공고 이미지는 최대 10장까지 올릴 수 있습니다.");
+        verify(geminiClient, never()).analyze(any());
+    }
+
+    @Test
+    void 공고에_이미지를_추가하면_기존_이미지_뒤에_붙는다() {
+        RecruitEntity recruit = draftRecruitWithImages("/uploads/recruit/2026/09/a.png");
+        when(recruitRepository.findById(10L)).thenReturn(Optional.of(recruit));
+        when(recruitImageStorage.store(any(byte[].class), eq("png")))
+                .thenReturn("/uploads/recruit/2026/09/b.png", "/uploads/recruit/2026/09/c.png");
+
+        RecruitResponseDTO response = recruitService.addImages(
+                10L, List.of(png("b.png"), png("c.png")), 2L);
+
+        assertThat(response.getImages())
+                .extracting(RecruitImageResponseDTO::getUrl)
+                .containsExactly(
+                        "/uploads/recruit/2026/09/a.png",
+                        "/uploads/recruit/2026/09/b.png",
+                        "/uploads/recruit/2026/09/c.png");
+        assertThat(recruit.getImages())
+                .extracting(RecruitImageEntity::getOrderIndex)
+                .containsExactly(1, 2, 3);
+        verify(recruitRepository).flush();
+    }
+
+    @Test
+    void 이미지를_추가해_10장을_넘기면_거부한다() {
+        RecruitEntity recruit = draftRecruitWithImages(java.util.stream.IntStream.rangeClosed(1, 9)
+                .mapToObj(i -> "/uploads/recruit/2026/09/" + i + ".png")
+                .toArray(String[]::new));
+        when(recruitRepository.findById(10L)).thenReturn(Optional.of(recruit));
+
+        assertThatThrownBy(() -> recruitService.addImages(10L, List.of(png("a.png"), png("b.png")), 2L))
+                .isInstanceOf(RecruitException.class)
+                .hasMessage("공고 이미지는 최대 10장까지 올릴 수 있습니다.");
+        assertThat(recruit.getImages()).hasSize(9);
+        verify(recruitImageStorage, never()).store(any(), any());
+    }
+
+    @Test
+    void 다른_선생님의_공고에는_이미지를_추가할_수_없다() {
+        when(recruitRepository.findById(10L)).thenReturn(Optional.of(draftRecruitWithImages()));
+
+        assertThatThrownBy(() -> recruitService.addImages(10L, List.of(png("a.png")), 3L))
+                .isInstanceOf(RecruitException.class)
+                .hasMessage("채용 공고를 관리할 권한이 없습니다.");
+        verify(recruitImageStorage, never()).store(any(), any());
+    }
+
+    @Test
+    void 공고_이미지를_삭제하면_목록에서_빠지고_파일도_지운다() {
+        RecruitEntity recruit = draftRecruitWithImages(
+                "/uploads/recruit/2026/09/a.png", "/uploads/recruit/2026/09/b.png");
+        when(recruitRepository.findById(10L)).thenReturn(Optional.of(recruit));
+
+        RecruitResponseDTO response = recruitService.deleteImage(10L, 101L, 2L);
+
+        assertThat(response.getImages())
+                .extracting(RecruitImageResponseDTO::getUrl)
+                .containsExactly("/uploads/recruit/2026/09/b.png");
+        verify(recruitImageStorage).delete("/uploads/recruit/2026/09/a.png");
+    }
+
+    @Test
+    void 공고에_없는_이미지는_삭제할_수_없다() {
+        when(recruitRepository.findById(10L))
+                .thenReturn(Optional.of(draftRecruitWithImages("/uploads/recruit/2026/09/a.png")));
+
+        assertThatThrownBy(() -> recruitService.deleteImage(10L, 999L, 2L))
+                .isInstanceOf(RecruitException.class)
+                .hasMessage("공고 이미지를 찾을 수 없습니다.");
+        verify(recruitImageStorage, never()).delete(any());
     }
 
     @Test
@@ -144,11 +284,26 @@ class RecruitServiceTest {
         assertThat(response.getStatus()).isEqualTo(PublicationStatus.DRAFT);
         assertThat(response.getFormId()).isEqualTo(7L);
         assertThat(response.getImageUrl()).isNull();
+        assertThat(response.getImages()).isEmpty();
         assertThat(response.getDeadline()).isEqualTo("2026-09-12");
         assertThat(response.getInterviewDate()).isEqualTo("2026-09-21 ~ 2026-09-22");
         assertThat(response.getSummary()).isEqualTo("요약");
-        verify(geminiClient, never()).analyze(any(), any());
+        verify(geminiClient, never()).analyze(any());
         verify(recruitImageStorage, never()).store(any(), any());
+    }
+
+    @Test
+    void 직접_입력할_때_지원_폼을_끄면_폼_없이_공고만_만든다() throws Exception {
+        when(userRepository.findById(2L)).thenReturn(Optional.of(user(2L)));
+        when(recruitRepository.save(any(RecruitEntity.class))).thenAnswer(returnsFirstArg());
+
+        RecruitCreateDTO dto = objectMapper.readValue(
+                "{\"companyName\":\"잡담\",\"createForm\":false}", RecruitCreateDTO.class);
+
+        RecruitResponseDTO response = recruitService.create(dto, 2L);
+
+        assertThat(response.getFormId()).isNull();
+        verify(formService, never()).createForRecruit(any(), any(), any());
     }
 
     @Test
@@ -239,6 +394,19 @@ class RecruitServiceTest {
 
         verify(recruitRepository).delete(recruit);
         verify(formService).deleteForRecruit(7L);
+    }
+
+    @Test
+    void 공고를_삭제하면_이미지_파일도_모두_지운다() {
+        RecruitEntity recruit = draftRecruitWithImages(
+                "/uploads/recruit/2026/09/a.png", "/uploads/recruit/2026/09/b.png");
+        when(recruitRepository.findById(10L)).thenReturn(Optional.of(recruit));
+
+        recruitService.delete(10L, 2L);
+
+        verify(recruitImageStorage).delete("/uploads/recruit/2026/09/a.png");
+        verify(recruitImageStorage).delete("/uploads/recruit/2026/09/b.png");
+        verify(formService, never()).deleteForRecruit(any());
     }
 
     @Test
@@ -501,6 +669,27 @@ class RecruitServiceTest {
                 .build();
         recruit.replaceFields(List.of(fields));
         return recruit;
+    }
+
+    /** 이미지를 순서대로 붙인 초안 공고. 이미지 식별자는 101부터 차례로 매긴다. */
+    private RecruitEntity draftRecruitWithImages(String... imageUrls) {
+        RecruitEntity recruit = RecruitEntity.builder()
+                .id(10L)
+                .user(user(2L))
+                .companyName("잡담")
+                .status(RecruitStatus.DRAFT)
+                .build();
+        for (String imageUrl : imageUrls) {
+            recruit.addImage(imageUrl);
+        }
+        for (int i = 0; i < recruit.getImages().size(); i++) {
+            ReflectionTestUtils.setField(recruit.getImages().get(i), "id", 101L + i);
+        }
+        return recruit;
+    }
+
+    private MockMultipartFile png(String name) {
+        return new MockMultipartFile("image", name, "image/png", new byte[]{1, 2});
     }
 
     private RecruitEntity publishedRecruit(Long id, LocalDate documentEndDate) {

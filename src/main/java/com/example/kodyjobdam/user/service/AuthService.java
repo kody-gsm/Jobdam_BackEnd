@@ -6,6 +6,7 @@ import com.example.kodyjobdam.user.UserRole;
 import com.example.kodyjobdam.user.dto.AuthResponse;
 import com.example.kodyjobdam.user.dto.EmailVerificationRequest;
 import com.example.kodyjobdam.user.dto.LoginRequest;
+import com.example.kodyjobdam.user.dto.PasswordResetCodeRequest;
 import com.example.kodyjobdam.user.dto.PasswordResetRequest;
 import com.example.kodyjobdam.user.dto.RefreshTokenRequest;
 import com.example.kodyjobdam.user.dto.SignupRequest;
@@ -158,7 +159,7 @@ public class AuthService {
     }
 
     @Transactional
-    public void sendPasswordResetVerificationCode(EmailVerificationRequest request) {
+    public void sendPasswordResetVerificationCode(PasswordResetCodeRequest request) {
         User user = userRepository.findByEmail(request.getEmail()).orElse(null);
 
         if (user == null || !StringUtils.hasText(user.getPassword())) {

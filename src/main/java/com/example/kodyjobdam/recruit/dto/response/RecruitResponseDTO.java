@@ -41,10 +41,13 @@ public class RecruitResponseDTO {
 
     private String summary;
 
-    /** 공고 이미지 공개 URL. 로그인 없이도 접근 가능. 이미지가 없으면 null. */
+    /** 첫 번째 공고 이미지의 공개 URL. 이미지가 없으면 null. 여러 장을 보여줄 때는 images를 쓴다. */
     private String imageUrl;
 
-    /** 공고와 함께 만들어진 지원 폼 식별자 */
+    /** 공고 이미지. 올린 순서대로 담긴다. 로그인 없이도 URL로 접근 가능. 이미지가 없으면 빈 배열. */
+    private List<RecruitImageResponseDTO> images;
+
+    /** 공고와 함께 만들어진 지원 폼 식별자. 지원 폼 없이 만든 공고는 null. */
     private Long formId;
 
     /** 공개 상태. 서류 접수 종료일이 지났으면 저장된 상태와 무관하게 CLOSED로 나간다. */
@@ -69,6 +72,9 @@ public class RecruitResponseDTO {
                 .fields(entity.getSortedFields())
                 .summary(entity.getSummary())
                 .imageUrl(entity.getImageUrl())
+                .images(entity.getImages().stream()
+                        .map(RecruitImageResponseDTO::from)
+                        .toList())
                 .formId(entity.getFormId())
                 .status(entity.publicationStatus(today))
                 .createdAt(entity.getCreatedAt())

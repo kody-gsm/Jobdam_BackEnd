@@ -32,6 +32,7 @@ import java.time.Clock;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.util.List;
+import java.util.Set;
 
 @Service
 @RequiredArgsConstructor
@@ -277,21 +278,23 @@ public class FormService {
         return FormResponseDTO.from(form, now());
     }
 
-    /** 학생용: 공개 중이고 마감되지 않은 폼 목록 */
+    /** 학생용: 초안을 제외한 폼 목록과 현재 학생의 제출 여부 */
     @Transactional(readOnly = true)
-    public List<FormSummaryResponseDTO> listPublished() {
+    public List<FormSummaryResponseDTO> listPublished(Long userId) {
         LocalDateTime now = now();
-        return formRepository.findByStatusOrderByCreatedAtDesc(FormStatus.PUBLISHED).stream()
-                // 마감된 폼은 단건 조회도 막으므로 목록에서도 빼서 눌렀을 때 404가 나지 않게 한다.
-                .filter(form -> form.publicationStatus(now) == PublicationStatus.PUBLISHED)
-                .map(form -> FormSummaryResponseDTO.from(form, now))
+        List<FormEntity> forms = formRepository.findByStatusInOrderByCreatedAtDesc(
+                List.of(FormStatus.PUBLISHED, FormStatus.CLOSED));
+        if (forms.isEmpty()) {
+            return List.of();
+        }
+        List<Long> formIds = forms.stream().map(FormEntity::getId).toList();
+        Set<Long> submittedFormIds = Set.copyOf(submissionRepository.findSubmittedFormIds(userId, formIds));
+        return forms.stream()
+                .map(form -> FormSummaryResponseDTO.from(form, now, submittedFormIds.contains(form.getId())))
                 .toList();
     }
 
-    /**
-     * 학생용: 공개 중이고 마감되지 않은 폼 단건.
-     * 초안·마감된 폼은 보이지 않지만, 프론트가 안내 문구를 나눌 수 있도록 에러 코드로 구분해준다.
-     */
+    /** 학생용: 초안은 숨기고, 공개·마감된 폼은 조회 가능 */
     @Transactional(readOnly = true)
     public FormResponseDTO getPublished(Long formId) {
         FormEntity form = findOrThrow(formId);
@@ -301,10 +304,6 @@ public class FormService {
         if (status == PublicationStatus.DRAFT) {
             throw FormException.notPublished(HttpStatus.NOT_FOUND, "아직 공개되지 않은 폼입니다.");
         }
-        if (status == PublicationStatus.CLOSED) {
-            throw FormException.closed(HttpStatus.NOT_FOUND, "마감된 폼입니다.");
-        }
-
         return FormResponseDTO.from(form, now);
     }
 
