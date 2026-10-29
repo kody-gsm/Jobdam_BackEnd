@@ -194,13 +194,13 @@ public class FormController {
                 .body(download.resource());
     }
 
-    /** 공개된 폼 목록 */
+    /** 공개·마감된 폼 목록과 내 제출 여부 */
     @GetMapping("/form")
     public List<FormSummaryResponseDTO> list() {
-        return formService.listPublished();
+        return formService.listPublished(securityUtil.getCurrentUserId());
     }
 
-    /** 공개된 폼 단건 (질문·선택지 포함) */
+    /** 공개·마감된 폼 단건 (질문·선택지 포함) */
     @GetMapping("/form/{id}")
     public ResponseEntity<FormResponseDTO> get(@PathVariable Long id) {
         return ResponseEntity.ok(formService.getPublished(id));

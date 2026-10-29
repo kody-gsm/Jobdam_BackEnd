@@ -3,6 +3,8 @@ package com.example.kodyjobdam.form.repository;
 import com.example.kodyjobdam.form.entity.FormSubmissionEntity;
 import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
 import java.util.List;
@@ -26,4 +28,8 @@ public interface FormSubmissionRepository extends JpaRepository<FormSubmissionEn
 
     // 학생: 내가 제출한 응답
     Optional<FormSubmissionEntity> findByFormIdAndUserId(Long formId, Long userId);
+
+    // 학생 목록의 제출 여부를 한 번에 계산
+    @Query("select s.form.id from FormSubmissionEntity s where s.user.id = :userId and s.form.id in :formIds")
+    List<Long> findSubmittedFormIds(@Param("userId") Long userId, @Param("formIds") List<Long> formIds);
 }
