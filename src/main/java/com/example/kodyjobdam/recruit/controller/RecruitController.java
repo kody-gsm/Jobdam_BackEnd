@@ -24,12 +24,15 @@ public class RecruitController {
 
     // ===== 선생님(TEACHER) 전용 =====
 
-    /** 이미지 분석 → 초안 저장 후 결과 반환. createForm을 false로 보내면 지원 폼 없이 만든다. */
+    /**
+     * 이미지 분석 → 초안 저장 후 결과 반환.
+     * 이미지는 같은 이름(image)으로 여러 장 보낼 수 있다. createForm을 false로 보내면 지원 폼 없이 만든다.
+     */
     @PostMapping(value = "/teacher/recruit/analyze", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     public ResponseEntity<RecruitResponseDTO> analyze(
-            @RequestParam("image") MultipartFile image,
+            @RequestParam("image") List<MultipartFile> images,
             @RequestParam(value = "createForm", defaultValue = "true") boolean createForm) {
-        return ResponseEntity.ok(recruitService.analyze(image, createForm, securityUtil.getCurrentUserId()));
+        return ResponseEntity.ok(recruitService.analyze(images, createForm, securityUtil.getCurrentUserId()));
     }
 
     /** 이미지 없이 직접 입력해 초안 저장 */
@@ -50,6 +53,19 @@ public class RecruitController {
     public ResponseEntity<Void> delete(@PathVariable Long id) {
         recruitService.delete(id, securityUtil.getCurrentUserId());
         return ResponseEntity.noContent().build();
+    }
+
+    /** 공고 이미지 추가. 같은 이름(image)으로 여러 장 보낼 수 있다. */
+    @PostMapping(value = "/teacher/recruit/{id}/image", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    public ResponseEntity<RecruitResponseDTO> addImages(@PathVariable Long id,
+                                                        @RequestParam("image") List<MultipartFile> images) {
+        return ResponseEntity.ok(recruitService.addImages(id, images, securityUtil.getCurrentUserId()));
+    }
+
+    /** 공고 이미지 한 장 삭제 */
+    @DeleteMapping("/teacher/recruit/{id}/image/{imageId}")
+    public ResponseEntity<RecruitResponseDTO> deleteImage(@PathVariable Long id, @PathVariable Long imageId) {
+        return ResponseEntity.ok(recruitService.deleteImage(id, imageId, securityUtil.getCurrentUserId()));
     }
 
     /** 학생에게 공개 */

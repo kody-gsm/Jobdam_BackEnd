@@ -7,6 +7,7 @@ import com.example.kodyjobdam.form.event.FormPublishedEvent;
 import com.example.kodyjobdam.form.service.FormService;
 import com.example.kodyjobdam.recruit.client.GeminiAnalysisResult;
 import com.example.kodyjobdam.recruit.client.GeminiClient;
+import com.example.kodyjobdam.recruit.client.GeminiImage;
 import com.example.kodyjobdam.recruit.dto.RecruitPeriodDTO;
 import com.example.kodyjobdam.recruit.dto.request.RecruitCreateDTO;
 import com.example.kodyjobdam.recruit.dto.request.RecruitUpdateDTO;
@@ -27,6 +28,8 @@ import org.springframework.context.event.EventListener;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.io.IOException;
@@ -48,6 +51,9 @@ public class RecruitService {
 
     private static final Set<String> SUPPORTED_IMAGE_TYPES =
             Set.of("image/png", "image/jpeg", "image/webp", "image/heic", "image/heif");
+
+    /** 공고 하나에 붙일 수 있는 이미지 수 */
+    private static final int MAX_IMAGES = 10;
 
     /**
      * 지원 폼 마감 시각. 서류 접수 마지막 날의 23:59:59로 잡는다.
@@ -84,39 +90,27 @@ public class RecruitService {
     /** 마감 여부를 판단하는 기준 시계. 마감일은 한국 시간으로 저장된다. */
     private Clock clock = Clock.system(ZoneId.of("Asia/Seoul"));
 
-    /** 선생님: 이미지 분석 → 초안(DRAFT)으로 저장 후 결과 반환 */
+    /**
+     * 선생님: 이미지 분석 → 초안(DRAFT)으로 저장 후 결과 반환.
+     * 이미지가 여러 장이면 한 공고를 나눠 담은 것으로 보고 함께 분석한다.
+     */
     @Transactional
-    public RecruitResponseDTO analyze(MultipartFile image, boolean createForm, Long userId) {
-        if (image == null || image.isEmpty()) {
-            throw RecruitException.badRequest("이미지를 첨부해주세요.");
-        }
-
-        String contentType = image.getContentType();
-        if (contentType == null || !SUPPORTED_IMAGE_TYPES.contains(contentType)) {
-            throw RecruitException.badRequest("이미지 파일만 업로드할 수 있습니다.");
-        }
+    public RecruitResponseDTO analyze(List<MultipartFile> images, boolean createForm, Long userId) {
+        List<ImageFile> imageFiles = readImages(images, 0);
 
         User user = userRepository.findById(userId)
                 .orElseThrow(() -> RecruitException.notFound("회원이 없습니다."));
 
-        byte[] imageBytes;
-        try {
-            imageBytes = image.getBytes();
-        } catch (IOException e) {
-            throw RecruitException.badRequest("이미지를 읽을 수 없습니다.");
-        }
-
-        GeminiAnalysisResult result = geminiClient.analyze(imageBytes, contentType);
+        GeminiAnalysisResult result = geminiClient.analyze(imageFiles.stream()
+                .map(image -> new GeminiImage(image.bytes(), image.contentType()))
+                .toList());
 
         // 선생님이 원하면 학번·이름·포트폴리오로 이루어진 기본 지원 폼도 함께 만들어 붙인다.
         FormEntity form = createForm
                 ? formService.createForRecruit(user, result.companyName(), applicationDeadline(result.documentPeriod()))
                 : null;
 
-        // 학생에게도 원본 공고 이미지를 보여줄 수 있도록 저장해둔다.
-        String imageUrl = recruitImageStorage.store(imageBytes, IMAGE_EXTENSIONS.getOrDefault(contentType, ""));
-
-        RecruitEntity entity = recruitRepository.save(RecruitEntity.builder()
+        RecruitEntity entity = RecruitEntity.builder()
                 .user(user)
                 .companyName(result.companyName())
                 .documentPeriod(result.documentPeriod())
@@ -127,11 +121,12 @@ public class RecruitService {
                 .fields(toFieldSet(result.fields()))
                 .form(form)
                 .summary(result.summary())
-                .imageUrl(imageUrl)
                 .status(RecruitStatus.DRAFT)
-                .build());
+                .build();
+        // 학생에게도 원본 공고 이미지를 보여줄 수 있도록 저장해둔다.
+        imageFiles.forEach(image -> entity.addImage(storeImage(image)));
 
-        return RecruitResponseDTO.from(entity, today());
+        return RecruitResponseDTO.from(recruitRepository.save(entity), today());
     }
 
     /** 선생님: 이미지 없이 직접 입력한 내용으로 초안(DRAFT)을 만든다 */
@@ -251,14 +246,106 @@ public class RecruitService {
         validateOwner(entity, teacherId);
 
         Long formId = entity.getFormId();
-        String imageUrl = entity.getImageUrl();
+        List<String> imageUrls = entity.getImageUrls();
         // 공고가 폼을 참조하므로 공고를 먼저 지운 뒤에 폼을 정리한다.
         recruitRepository.delete(entity);
         recruitRepository.flush();
         if (formId != null) {
             formService.deleteForRecruit(formId);
         }
-        recruitImageStorage.delete(imageUrl);
+        deleteImagesAfterCommit(imageUrls);
+    }
+
+    /** 선생님: 공고 이미지 추가. 지금 붙어 있는 이미지 뒤에 올린 순서대로 붙인다. */
+    @Transactional
+    public RecruitResponseDTO addImages(Long recruitId, List<MultipartFile> images, Long teacherId) {
+        RecruitEntity entity = findOrThrow(recruitId);
+        validateOwner(entity, teacherId);
+
+        readImages(images, entity.getImages().size())
+                .forEach(image -> entity.addImage(storeImage(image)));
+        // 새 이미지의 식별자가 응답에 담기도록 먼저 저장한다.
+        recruitRepository.flush();
+        return RecruitResponseDTO.from(entity, today());
+    }
+
+    /** 선생님: 공고 이미지 한 장 삭제 */
+    @Transactional
+    public RecruitResponseDTO deleteImage(Long recruitId, Long imageId, Long teacherId) {
+        RecruitEntity entity = findOrThrow(recruitId);
+        validateOwner(entity, teacherId);
+
+        String imageUrl = entity.removeImage(imageId)
+                .orElseThrow(() -> RecruitException.notFound("공고 이미지를 찾을 수 없습니다."));
+        deleteImagesAfterCommit(List.of(imageUrl));
+        return RecruitResponseDTO.from(entity, today());
+    }
+
+    /**
+     * 올린 이미지를 검사하고 읽어둔다. 하나라도 문제가 있으면 아무것도 저장하지 않도록 저장 전에 전부 확인한다.
+     *
+     * @param attachedCount 공고에 이미 붙어 있는 이미지 수
+     */
+    private List<ImageFile> readImages(List<MultipartFile> images, int attachedCount) {
+        if (images == null || images.isEmpty() || images.stream().anyMatch(image -> image == null || image.isEmpty())) {
+            throw RecruitException.badRequest("이미지를 첨부해주세요.");
+        }
+        if (attachedCount + images.size() > MAX_IMAGES) {
+            throw RecruitException.badRequest("공고 이미지는 최대 " + MAX_IMAGES + "장까지 올릴 수 있습니다.");
+        }
+
+        return images.stream()
+                .map(this::readImage)
+                .toList();
+    }
+
+    private ImageFile readImage(MultipartFile image) {
+        String contentType = image.getContentType();
+        if (contentType == null || !SUPPORTED_IMAGE_TYPES.contains(contentType)) {
+            throw RecruitException.badRequest("이미지 파일만 업로드할 수 있습니다.");
+        }
+
+        try {
+            return new ImageFile(image.getBytes(), contentType);
+        } catch (IOException e) {
+            throw RecruitException.badRequest("이미지를 읽을 수 없습니다.");
+        }
+    }
+
+    /** 이미지를 저장하고 공개 URL을 돌려준다. 공고 저장이 롤백되면 파일도 지워 고아 파일을 남기지 않는다. */
+    private String storeImage(ImageFile image) {
+        String imageUrl = recruitImageStorage.store(
+                image.bytes(), IMAGE_EXTENSIONS.getOrDefault(image.contentType(), ""));
+        deleteImageAfterRollback(imageUrl);
+        return imageUrl;
+    }
+
+    private void deleteImageAfterRollback(String imageUrl) {
+        if (!TransactionSynchronizationManager.isSynchronizationActive()) {
+            return;
+        }
+        TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+            @Override
+            public void afterCompletion(int status) {
+                if (status == STATUS_ROLLED_BACK) {
+                    recruitImageStorage.delete(imageUrl);
+                }
+            }
+        });
+    }
+
+    /** 파일은 공고 변경이 확정된 뒤에 지운다. 롤백되면 DB에 남은 이미지가 파일을 잃지 않게 한다. */
+    private void deleteImagesAfterCommit(List<String> imageUrls) {
+        if (!TransactionSynchronizationManager.isSynchronizationActive()) {
+            imageUrls.forEach(recruitImageStorage::delete);
+            return;
+        }
+        TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+            @Override
+            public void afterCommit() {
+                imageUrls.forEach(recruitImageStorage::delete);
+            }
+        });
     }
 
     /** 선생님: 학생에게 공개 */
@@ -351,6 +438,7 @@ public class RecruitService {
     }
 
     /** 선생님 관리용: 초안 포함 전체 목록 */
+    @Transactional(readOnly = true)
     public List<RecruitResponseDTO> listForTeacher(Long teacherId) {
         LocalDate today = today();
         return recruitRepository.findByUserIdOrderByCreatedAtDesc(teacherId).stream()
@@ -359,6 +447,7 @@ public class RecruitService {
     }
 
     /** 학생/공개용: 공개 중이고 마감되지 않은 공고 목록 */
+    @Transactional(readOnly = true)
     public List<RecruitResponseDTO> listPublished() {
         LocalDate today = today();
         return recruitRepository.findByStatusOrderByCreatedAtDesc(RecruitStatus.PUBLISHED).stream()
@@ -372,6 +461,7 @@ public class RecruitService {
      * 학생/공개용: 공개 중이고 마감되지 않은 공고 단건.
      * 초안·마감된 공고는 보이지 않지만, 프론트가 안내 문구를 나눌 수 있도록 에러 코드로 구분해준다.
      */
+    @Transactional(readOnly = true)
     public RecruitResponseDTO getPublished(Long recruitId) {
         RecruitEntity entity = findOrThrow(recruitId);
         LocalDate today = today();
@@ -401,5 +491,9 @@ public class RecruitService {
         if (entity.getUser() == null || !entity.getUser().getId().equals(teacherId)) {
             throw RecruitException.forbidden("채용 공고를 관리할 권한이 없습니다.");
         }
+    }
+
+    /** 검사를 마치고 읽어 둔 공고 이미지 */
+    private record ImageFile(byte[] bytes, String contentType) {
     }
 }

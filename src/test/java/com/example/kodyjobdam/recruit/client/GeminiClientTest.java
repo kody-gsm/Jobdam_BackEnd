@@ -1,10 +1,12 @@
 package com.example.kodyjobdam.recruit.client;
 
 import com.example.kodyjobdam.recruit.entity.RecruitField;
+import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.http.HttpEntity;
@@ -13,15 +15,19 @@ import org.springframework.test.util.ReflectionTestUtils;
 import org.springframework.web.client.RestTemplate;
 
 import java.time.LocalDate;
+import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
 class GeminiClientTest {
+
+    private static final List<GeminiImage> IMAGE = List.of(new GeminiImage(new byte[]{1}, "image/png"));
 
     @Mock
     private RestTemplate restTemplate;
@@ -36,6 +42,26 @@ class GeminiClientTest {
     }
 
     @Test
+    @SuppressWarnings("unchecked")
+    void 여러_장을_보내면_이미지마다_붙여_한_번에_요청한다() {
+        stubResponse("{\"companyName\":\"잡담\"}");
+
+        geminiClient.analyze(List.of(
+                new GeminiImage(new byte[]{1}, "image/png"),
+                new GeminiImage(new byte[]{2}, "image/jpeg")));
+
+        ArgumentCaptor<HttpEntity<JsonNode>> request = ArgumentCaptor.forClass(HttpEntity.class);
+        verify(restTemplate).postForEntity(anyString(), request.capture(), eq(String.class));
+        JsonNode parts = request.getValue().getBody().path("contents").path(0).path("parts");
+        assertThat(parts).hasSize(3);
+        assertThat(parts.path(0).has("text")).isTrue();
+        assertThat(parts.path(1).path("inlineData").path("mimeType").asText()).isEqualTo("image/png");
+        assertThat(parts.path(1).path("inlineData").path("data").asText()).isEqualTo("AQ==");
+        assertThat(parts.path(2).path("inlineData").path("mimeType").asText()).isEqualTo("image/jpeg");
+        assertThat(parts.path(2).path("inlineData").path("data").asText()).isEqualTo("Ag==");
+    }
+
+    @Test
     void 직무_분야를_배열로_읽는다() {
         stubResponse("""
                 {"companyName":"잡담",
@@ -43,7 +69,7 @@ class GeminiClientTest {
                  "summary":"요약"}
                 """);
 
-        GeminiAnalysisResult result = geminiClient.analyze(new byte[]{1}, "image/png");
+        GeminiAnalysisResult result = geminiClient.analyze(IMAGE);
 
         assertThat(result.fields()).containsExactly(RecruitField.FRONTEND, RecruitField.BACKEND);
     }
@@ -54,7 +80,7 @@ class GeminiClientTest {
                 {"companyName":"잡담","fields":"iot","summary":"요약"}
                 """);
 
-        GeminiAnalysisResult result = geminiClient.analyze(new byte[]{1}, "image/png");
+        GeminiAnalysisResult result = geminiClient.analyze(IMAGE);
 
         assertThat(result.fields()).containsExactly(RecruitField.IOT);
     }
@@ -65,7 +91,7 @@ class GeminiClientTest {
                 {"companyName":"잡담","fields":["BACKEND","데브옵스",""],"summary":"요약"}
                 """);
 
-        GeminiAnalysisResult result = geminiClient.analyze(new byte[]{1}, "image/png");
+        GeminiAnalysisResult result = geminiClient.analyze(IMAGE);
 
         assertThat(result.fields()).containsExactly(RecruitField.BACKEND);
     }
@@ -76,7 +102,7 @@ class GeminiClientTest {
                 {"companyName":"잡담","summary":"요약"}
                 """);
 
-        GeminiAnalysisResult result = geminiClient.analyze(new byte[]{1}, "image/png");
+        GeminiAnalysisResult result = geminiClient.analyze(IMAGE);
 
         assertThat(result.fields()).isEmpty();
     }
@@ -90,7 +116,7 @@ class GeminiClientTest {
                  "summary":"준비물은 신분증"}
                 """);
 
-        GeminiAnalysisResult result = geminiClient.analyze(new byte[]{1}, "image/png");
+        GeminiAnalysisResult result = geminiClient.analyze(IMAGE);
 
         assertThat(result.documentPeriod().getStartDate()).isEqualTo(LocalDate.of(2026, 9, 1));
         assertThat(result.documentPeriod().getEndDate()).isEqualTo(LocalDate.of(2026, 9, 10));
@@ -109,7 +135,7 @@ class GeminiClientTest {
         when(restTemplate.postForEntity(anyString(), any(HttpEntity.class), eq(String.class)))
                 .thenReturn(ResponseEntity.ok(responseBody));
 
-        GeminiAnalysisResult result = geminiClient.analyze(new byte[]{1}, "image/png");
+        GeminiAnalysisResult result = geminiClient.analyze(IMAGE);
 
         assertThat(result.companyName()).isEqualTo("잡담");
         assertThat(result.documentPeriod().getEndDate()).isEqualTo(LocalDate.of(2026, 9, 10));
@@ -119,7 +145,7 @@ class GeminiClientTest {
     void dropsPeriodWithUnparsableText() {
         stubResponse("{\"documentPeriod\":\"9월 초 마감\",\"companyName\":\"잡담\"}");
 
-        GeminiAnalysisResult result = geminiClient.analyze(new byte[]{1}, "image/png");
+        GeminiAnalysisResult result = geminiClient.analyze(IMAGE);
 
         assertThat(result.documentPeriod()).isNull();
         assertThat(result.companyName()).isEqualTo("잡담");
@@ -130,7 +156,7 @@ class GeminiClientTest {
         stubResponse("{\"documentPeriod\":{\"startDate\":\"2026.09.01\",\"endDate\":\"2026년 9월 10일\"},"
                 + "\"interviewPeriod\":{\"startDate\":\"2026-09-20 14:00\",\"endDate\":\"2026/09/20(금)\"}}");
 
-        GeminiAnalysisResult result = geminiClient.analyze(new byte[]{1}, "image/png");
+        GeminiAnalysisResult result = geminiClient.analyze(IMAGE);
 
         assertThat(result.documentPeriod().getStartDate()).isEqualTo(LocalDate.of(2026, 9, 1));
         assertThat(result.documentPeriod().getEndDate()).isEqualTo(LocalDate.of(2026, 9, 10));
@@ -142,7 +168,7 @@ class GeminiClientTest {
     void dropsDateWithoutYear() {
         stubResponse("{\"documentPeriod\":{\"startDate\":\"9월 1일\",\"endDate\":\"9월 10일\"}}");
 
-        GeminiAnalysisResult result = geminiClient.analyze(new byte[]{1}, "image/png");
+        GeminiAnalysisResult result = geminiClient.analyze(IMAGE);
 
         assertThat(result.documentPeriod()).isNull();
     }
@@ -157,7 +183,7 @@ class GeminiClientTest {
                  "summary":"QA과정 교육생 모집\\n신청 마감: 2026-09-29 17:00\\n교육 일정: 2026-09-21 ~ 2026-11-19"}
                 """);
 
-        GeminiAnalysisResult result = geminiClient.analyze(new byte[]{1}, "image/png");
+        GeminiAnalysisResult result = geminiClient.analyze(IMAGE);
 
         assertThat(result.documentPeriod()).isNull();
         assertThat(result.interviewPeriod()).isNull();
@@ -168,7 +194,7 @@ class GeminiClientTest {
     void cutsSummaryLongerThanColumn() {
         stubResponse("{\"summary\":\"" + "가".repeat(1200) + "\"}");
 
-        GeminiAnalysisResult result = geminiClient.analyze(new byte[]{1}, "image/png");
+        GeminiAnalysisResult result = geminiClient.analyze(IMAGE);
 
         assertThat(result.summary()).hasSize(1000);
     }
