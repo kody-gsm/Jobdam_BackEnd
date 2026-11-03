@@ -45,7 +45,8 @@ public class DataGsmStudentSyncService {
 
     public User syncStudentByEmail(String email) {
         DataGsmStudent student = dataGsmStudentClient.fetchStudentByEmail(email);
-        if (student == null) {
+        // 가입 코드는 요청한 메일로 보내므로, DataGSM이 다른 학생을 돌려주면 그 학생 계정을 쓰지 않는다.
+        if (student == null || !email.equalsIgnoreCase(student.email())) {
             return null;
         }
 
