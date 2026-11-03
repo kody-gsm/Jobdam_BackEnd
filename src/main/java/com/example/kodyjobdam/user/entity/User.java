@@ -60,8 +60,17 @@ public class User {
     @Column(nullable = false, columnDefinition = "boolean default false")
     private boolean tutorialCompleted;
 
-    public void completeTutorial() {
+    // 마지막으로 완료한 튜토리얼 버전. 튜토리얼이 바뀌면 기존 계정도 새 버전을 한 번 보게 한다.
+    @Column(nullable = false, columnDefinition = "int default 0")
+    private int tutorialVersion;
+
+    public boolean hasCompletedTutorial(int currentVersion) {
+        return tutorialVersion >= currentVersion;
+    }
+
+    public void completeTutorial(int version) {
         this.tutorialCompleted = true;
+        this.tutorialVersion = Math.max(this.tutorialVersion, version);
     }
 
 }
