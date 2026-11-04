@@ -25,13 +25,13 @@ public class PassReportController {
 
     // ===== 학생(STUDENT) 전용 =====
 
-    /** 서류·면접 합격을 진로 선생님에게 알린다. 받는 선생님은 /student/course/teachers 목록에서 고른다. */
+    /** 면접 합격을 진로 선생님들에게 알린다. 학번·이름은 로그인한 학생 정보로 채운다. */
     @PostMapping("/student/pass-report")
     public ResponseEntity<PassReportResponseDTO> create(@Valid @RequestBody PassReportCreateDTO dto) {
         return ResponseEntity.ok(passReportService.create(dto, securityUtil.getCurrentUserId()));
     }
 
-    /** 내가 보낸 합격 보고 */
+    /** 내가 보낸 면접 합격 보고 */
     @GetMapping("/student/pass-report")
     public List<PassReportResponseDTO> readMine() {
         return passReportService.readMine(securityUtil.getCurrentUserId());
@@ -39,15 +39,15 @@ public class PassReportController {
 
     // ===== 선생님(TEACHER) 전용 =====
 
-    /** 내가 받은 합격 보고 */
+    /** 면접 합격 보고를 한 학생 전체. 학번순으로 내려준다. */
     @GetMapping("/teacher/pass-report")
-    public List<PassReportResponseDTO> readReceived() {
-        return passReportService.readReceived(securityUtil.getCurrentUserId());
+    public List<PassReportResponseDTO> readAll() {
+        return passReportService.readAll();
     }
 
-    /** 내가 받은 합격 보고 한 건. 알림을 누르면 여기로 온다. */
+    /** 면접 합격 보고 한 건. 알림을 누르면 여기로 온다. */
     @GetMapping("/teacher/pass-report/{id}")
-    public ResponseEntity<PassReportResponseDTO> readReceivedOne(@PathVariable Long id) {
-        return ResponseEntity.ok(passReportService.readReceivedOne(id, securityUtil.getCurrentUserId()));
+    public ResponseEntity<PassReportResponseDTO> readOne(@PathVariable Long id) {
+        return ResponseEntity.ok(passReportService.readOne(id));
     }
 }

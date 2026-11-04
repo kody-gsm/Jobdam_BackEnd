@@ -105,7 +105,7 @@ public class StatisticsService {
         add(totals, statuses, "notifications", "Notification", "type");
         add(totals, statuses, "counselingReminders", "CounselingReminder", "reservationKind");
         add(totals, statuses, "banners", "BannerEntity", "active");
-        add(totals, statuses, "passReports", "PassReportEntity", "type");
+        addCount(totals, "passReports", "PassReportEntity");
         addCount(totals, "formQuestions", "FormQuestionEntity");
         addCount(totals, "formQuestionOptions", "FormQuestionOptionEntity");
         addCount(totals, "formAnswers", "FormAnswerEntity");
