@@ -1,14 +1,15 @@
 package com.example.kodyjobdam.passreport.dto.request;
 
-import com.example.kodyjobdam.passreport.entity.PassType;
 import jakarta.validation.ConstraintViolation;
 import jakarta.validation.Validation;
 import jakarta.validation.Validator;
+import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.NullSource;
 import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.test.util.ReflectionTestUtils;
 
-import java.util.Set;
+import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -16,27 +17,31 @@ class PassReportCreateDTOTest {
 
     private final Validator validator = Validation.buildDefaultValidatorFactory().getValidator();
 
-    @ParameterizedTest
-    @ValueSource(strings = {"02-123-4567", "062-123-4567", "010-1234-5678", "0212345678", "1588-1234", "15881234"})
-    void 회사_전화번호로_받는_형식(String phone) {
-        assertThat(validator.validate(dto(phone))).isEmpty();
+    @Test
+    void 기업_이름만_있으면_보낼_수_있다() {
+        assertThat(validator.validate(dto("카카오"))).isEmpty();
+        assertThat(validator.validate(dto("가".repeat(100)))).isEmpty();
     }
 
     @ParameterizedTest
-    @ValueSource(strings = {"123-4567", "02-12-34", "010-1234-56789", "전화번호", "02 123 4567", "+82-2-123-4567"})
-    void 회사_전화번호로_받지_않는_형식(String phone) {
-        Set<ConstraintViolation<PassReportCreateDTO>> violations = validator.validate(dto(phone));
-
-        assertThat(violations).extracting(violation -> violation.getPropertyPath().toString())
-                .containsExactly("companyPhone");
+    @NullSource
+    @ValueSource(strings = {"", "   "})
+    void 기업_이름이_비어_있으면_보낼_수_없다(String companyName) {
+        assertThat(messages(dto(companyName))).containsExactly("기업 이름을 입력해주세요.");
     }
 
-    private PassReportCreateDTO dto(String phone) {
+    @Test
+    void 기업_이름이_100자를_넘으면_보낼_수_없다() {
+        assertThat(messages(dto("가".repeat(101)))).containsExactly("기업 이름은 100자 이하로 입력해주세요.");
+    }
+
+    private List<String> messages(PassReportCreateDTO dto) {
+        return validator.validate(dto).stream().map(ConstraintViolation::getMessage).toList();
+    }
+
+    private PassReportCreateDTO dto(String companyName) {
         PassReportCreateDTO dto = new PassReportCreateDTO();
-        ReflectionTestUtils.setField(dto, "teacherId", 2L);
-        ReflectionTestUtils.setField(dto, "type", PassType.INTERVIEW);
-        ReflectionTestUtils.setField(dto, "companyName", "카카오");
-        ReflectionTestUtils.setField(dto, "companyPhone", phone);
+        ReflectionTestUtils.setField(dto, "companyName", companyName);
         return dto;
     }
 }

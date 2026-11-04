@@ -3,8 +3,6 @@ package com.example.kodyjobdam.passreport.entity;
 import com.example.kodyjobdam.user.entity.User;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
-import jakarta.persistence.EnumType;
-import jakarta.persistence.Enumerated;
 import jakarta.persistence.FetchType;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
@@ -16,12 +14,14 @@ import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
-import org.hibernate.annotations.CreationTimestamp;
 
-import java.time.LocalDate;
 import java.time.LocalDateTime;
 
-/** 학생이 선생님에게 보낸 합격 보고 (서류 합격·면접 합격) */
+/**
+ * 학생이 진로 선생님들에게 알린 면접 합격 보고.
+ *
+ * <p>학번·이름은 보고한 순간의 값을 복사해 둔다. 학생 정보가 나중에 바뀌어도 보고 내용은 그대로 남는다.</p>
+ */
 @Getter
 @Entity
 @Builder
@@ -34,31 +34,25 @@ public class PassReportEntity {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    /** 보고한 학생 */
+    /** 보고한 학생. 학생이 자기 보고를 찾을 때만 쓴다. */
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
     @JoinColumn(name = "student_id", nullable = false)
     private User student;
 
-    /** 보고를 받는 진로 선생님 */
-    @ManyToOne(fetch = FetchType.LAZY, optional = false)
-    @JoinColumn(name = "teacher_id", nullable = false)
-    private User teacher;
+    @Column(name = "student_number", nullable = false, length = 20)
+    private String studentNumber;
 
-    @Enumerated(EnumType.STRING)
-    @Column(nullable = false, length = 20)
-    private PassType type;
+    @Column(name = "student_name", nullable = false, length = 50)
+    private String studentName;
 
     @Column(name = "company_name", nullable = false, length = 100)
     private String companyName;
 
-    @Column(name = "company_phone", nullable = false, length = 20)
-    private String companyPhone;
-
-    /** 서류 합격일 때만 있는 면접 날짜. 면접 합격 보고는 비어 있다. */
-    @Column(name = "interview_date")
-    private LocalDate interviewDate;
-
-    @CreationTimestamp
-    @Column(name = "created_at", nullable = false, updatable = false)
-    private LocalDateTime createdAt;
+    /**
+     * 학생이 보고를 제출한 한국 시각.
+     *
+     * <p>서버 시간대에 기대지 않도록 서비스가 한국 시간 {@code Clock}으로 넣는다.</p>
+     */
+    @Column(name = "submitted_at", nullable = false, updatable = false)
+    private LocalDateTime submittedAt;
 }
