@@ -4,6 +4,8 @@ services:
     image: mysql:8.0
     restart: unless-stopped
     environment:
+      # DB에서 직접 보는 NOW()·CURRENT_TIMESTAMP도 한국 시간으로 맞춘다. 앱 시각은 Dockerfile에서 맞춘다.
+      TZ: Asia/Seoul
       MYSQL_ROOT_PASSWORD: ${DB_ROOT_PASSWORD}
       MYSQL_DATABASE: kodyjobdam
       MYSQL_USER: ${DB_USER}
