@@ -8,10 +8,11 @@ import lombok.Setter;
 @Setter
 public class SignupRequest {
 
+    // 선생님도 학교 메일로 가입할 수 있도록 s로 시작하는지는 보지 않는다. DB에 있거나 DataGSM에서 찾은 계정만 가입된다.
     @Email
     @NotBlank
     @Pattern(
-            regexp = "^s.*@gsm\\.hs\\.kr$",
+            regexp = "^[^@]+@gsm\\.hs\\.kr$",
             message = "이메일은 학교계정을 사용해야합니다."
     )
     private String email;

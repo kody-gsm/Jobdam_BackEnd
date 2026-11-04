@@ -33,8 +33,17 @@ class AuthEmailPatternTest {
     }
 
     @ParameterizedTest
-    @ValueSource(strings = {"teacher@gsm.hs.kr", "s25035@gmail.com"})
-    void 회원가입_인증_코드는_학생_메일만_받는다(String email) {
+    @ValueSource(strings = {"s25035@gsm.hs.kr", "teacher@gsm.hs.kr", "wee.teacher@gsm.hs.kr"})
+    void 회원가입_인증_코드는_s로_시작하지_않는_학교_메일도_받는다(String email) {
+        EmailVerificationRequest request = new EmailVerificationRequest();
+        ReflectionTestUtils.setField(request, "email", email);
+
+        assertThat(validator.validate(request)).isEmpty();
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"s25035@gmail.com", "teacher@gmail.com", "teacher@mail.gsm.hs.kr", "s25035@gsm.hs.kr.evil.com"})
+    void 회원가입_인증_코드는_학교_메일만_받는다(String email) {
         EmailVerificationRequest request = new EmailVerificationRequest();
         ReflectionTestUtils.setField(request, "email", email);
 
@@ -44,8 +53,19 @@ class AuthEmailPatternTest {
     }
 
     @ParameterizedTest
-    @ValueSource(strings = {"teacher@gsm.hs.kr", "s25035@gmail.com"})
-    void 회원가입은_학생_메일만_받는다(String email) {
+    @ValueSource(strings = {"s25035@gsm.hs.kr", "teacher@gsm.hs.kr", "wee.teacher@gsm.hs.kr"})
+    void 회원가입은_s로_시작하지_않는_학교_메일도_받는다(String email) {
+        SignupRequest request = new SignupRequest();
+        ReflectionTestUtils.setField(request, "email", email);
+        ReflectionTestUtils.setField(request, "password", "new-password-1234");
+        ReflectionTestUtils.setField(request, "verificationCode", "123456");
+
+        assertThat(validator.validate(request)).isEmpty();
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"s25035@gmail.com", "teacher@gmail.com", "teacher@mail.gsm.hs.kr", "s25035@gsm.hs.kr.evil.com"})
+    void 회원가입은_학교_메일만_받는다(String email) {
         SignupRequest request = new SignupRequest();
         ReflectionTestUtils.setField(request, "email", email);
         ReflectionTestUtils.setField(request, "password", "new-password-1234");
