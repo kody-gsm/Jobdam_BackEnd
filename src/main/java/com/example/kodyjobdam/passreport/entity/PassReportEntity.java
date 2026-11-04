@@ -51,7 +51,7 @@ public class PassReportEntity {
     /**
      * 학생이 보고를 제출한 한국 시각.
      *
-     * <p>운영 서버 JVM이 UTC라 {@code @CreationTimestamp}를 쓰면 9시간 늦게 찍힌다. 서비스에서 한국 시간으로 넣는다.</p>
+     * <p>서버 시간대에 기대지 않도록 서비스가 한국 시간 {@code Clock}으로 넣는다.</p>
      */
     @Column(name = "submitted_at", nullable = false, updatable = false)
     private LocalDateTime submittedAt;
