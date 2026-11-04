@@ -9,7 +9,7 @@
 --   student_id는 학생이 '내가 보낸 보고'를 찾을 때만 쓰므로 남긴다.
 -- - created_at을 한국 시간 제출 시각 submitted_at으로 바꾼다.
 --
--- 이 스크립트는 한 번만 실행한다. 5)의 +9시간은 다시 실행하면 또 더해진다.
+-- 이 스크립트는 한 번만 실행한다(다시 실행하면 3)의 ADD COLUMN에서 실패한다).
 --
 -- 제약조건·인덱스 이름은 docs/pass-report-migration.sql 기준이다.
 -- 실행 전에 SHOW CREATE TABLE pass_report; 로 이름이 같은지 확인한다.
@@ -54,14 +54,13 @@ ALTER TABLE pass_report
     DROP COLUMN company_phone,
     DROP COLUMN interview_date;
 
--- 5) 제출 시각을 한국 시간으로 바꾼다.
---    지금까지 created_at은 @CreationTimestamp가 운영 JVM 시간대(UTC)로 넣어 한국 시간보다 9시간 늦다.
---    이름을 submitted_at으로 바꾸고 9시간을 더한다. 앞으로는 앱이 한국 시간을 직접 넣으므로 DB 기본값도 없앤다.
+-- 5) created_at을 제출 시각 submitted_at으로 이름을 바꾼다.
+--    앱이 한국 시간을 직접 넣으므로 DB 기본값은 없앤다.
 --    created_at을 쓰던 인덱스(idx_pass_report_student_created)는 이름이 바뀐 컬럼을 그대로 따라간다.
+--    시간대 보정은 하지 않는다. 기존 created_at 원본 값은 이미 한국 시간이고,
+--    앱 시간대를 Asia/Seoul로 맞추는 배포(docs/app-timezone-seoul-migration.sql)와 함께 나가면 그대로 맞게 읽힌다.
 ALTER TABLE pass_report
     CHANGE COLUMN created_at submitted_at DATETIME(6) NOT NULL;
-
-UPDATE pass_report SET submitted_at = submitted_at + INTERVAL 9 HOUR;
 
 -- 6) 선생님 전체 목록은 학번순, 같은 학생은 먼저 제출한 순으로 읽는다.
 CREATE INDEX idx_pass_report_student_number ON pass_report (student_number, submitted_at);
