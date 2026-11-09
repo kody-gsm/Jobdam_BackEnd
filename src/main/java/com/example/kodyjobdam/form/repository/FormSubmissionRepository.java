@@ -19,8 +19,12 @@ public interface FormSubmissionRepository extends JpaRepository<FormSubmissionEn
     // 폼 삭제·질문 교체 가능 여부 판단용
     boolean existsByFormId(Long formId);
 
-    // 선생님: 폼별 제출 목록 최신순
+    // 공고·폼 삭제용: 제출자 정보가 필요 없다.
     List<FormSubmissionEntity> findByFormIdOrderBySubmittedAtDesc(Long formId);
+
+    // 선생님: 폼별 제출 목록 최신순. 제출자마다 쿼리가 나가지 않도록 학생을 한 번에 읽는다.
+    @EntityGraph(attributePaths = "user")
+    List<FormSubmissionEntity> findWithUserByFormIdOrderBySubmittedAtDesc(Long formId);
 
     // 선생님: 응답 엑셀·첨부 파일 내려받기용. 학생과 답변·첨부 파일까지 한 번에 읽는다.
     @EntityGraph(attributePaths = {"user", "answers", "answers.file"})
