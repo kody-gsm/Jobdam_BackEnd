@@ -18,7 +18,9 @@ import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
 
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.time.LocalDateTime;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -85,8 +87,8 @@ class NotificationServiceTest {
         User student2 = user(2L, UserRole.STUDENT);
         LocalDateTime expiresAt = LocalDateTime.of(2026, 10, 10, 0, 0);
         when(userRepository.findByRole(UserRole.STUDENT)).thenReturn(List.of(student1, student2));
-        when(notificationRepository.existsByReceiver_IdAndTypeAndTargetId(1L, NotificationType.FORM_PUBLISHED, 20L))
-                .thenReturn(true);
+        when(notificationRepository.findReceiverIdsAlreadyNotified(List.of(1L, 2L), NotificationType.FORM_PUBLISHED, 20L))
+                .thenReturn(Set.of(1L));
         when(notificationRepository.saveAll(any())).thenAnswer(invocation -> invocation.getArgument(0));
 
         notificationService.notifyAllStudents(
@@ -111,10 +113,13 @@ class NotificationServiceTest {
         PageRequest pageable = PageRequest.of(0, 20);
         when(notificationRepository.findByReceiver_IdOrderByCreatedAtDesc(1L, pageable))
                 .thenReturn(new PageImpl<>(List.of(notification)));
-        when(notificationTargetStatusResolver.resolve(notification))
-                .thenReturn(new NotificationTargetStatusResolver.TargetStatus("PUBLISHED", false));
+        when(notificationTargetStatusResolver.resolveAll(List.of(notification)))
+                .thenReturn(Map.of(notification.getId(), new NotificationTargetStatusResolver.TargetStatus("PUBLISHED", false)));
 
-        assertThat(notificationService.getNotifications(1L, pageable).getContent()).hasSize(1);
+        List<NotificationResponseDTO> content = notificationService.getNotifications(1L, pageable).getContent();
+
+        assertThat(content).hasSize(1);
+        assertThat(content.getFirst().targetStatus()).isEqualTo("PUBLISHED");
         assertThat(notification.isRead()).isFalse();
     }
 

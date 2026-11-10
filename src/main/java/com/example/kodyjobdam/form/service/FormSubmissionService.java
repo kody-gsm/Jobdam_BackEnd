@@ -128,7 +128,7 @@ public class FormSubmissionService {
         FormEntity form = findFormOrThrow(formId);
         validateOwner(form, teacherId);
 
-        return submissionRepository.findByFormIdOrderBySubmittedAtDesc(formId).stream()
+        return submissionRepository.findWithUserByFormIdOrderBySubmittedAtDesc(formId).stream()
                 .map(FormSubmissionSummaryResponseDTO::from)
                 .toList();
     }
