@@ -20,6 +20,8 @@ import org.springframework.transaction.support.TransactionSynchronizationManager
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
+import java.util.Set;
 import java.time.LocalDateTime;
 
 @Service
@@ -38,10 +40,16 @@ public class NotificationService {
     public List<NotificationResponseDTO> notifyAllStudents(NotificationType type, String title, String content,
                                                            Long targetId, String targetUrl, LocalDateTime expiresAt) {
         List<User> students = userRepository.findByRole(UserRole.STUDENT);
+        if (students.isEmpty()) {
+            return List.of();
+        }
+
+        Set<Long> alreadyNotified = notificationRepository.findReceiverIdsAlreadyNotified(
+                students.stream().map(User::getId).toList(), type, targetId);
         List<Notification> notifications = new ArrayList<>();
 
         for (User student : students) {
-            if (!notificationRepository.existsByReceiver_IdAndTypeAndTargetId(student.getId(), type, targetId)) {
+            if (!alreadyNotified.contains(student.getId())) {
                 notifications.add(createNotification(student, type, title, content, targetId, targetUrl, expiresAt));
             }
         }
@@ -70,8 +78,15 @@ public class NotificationService {
     }
 
     public Page<NotificationResponseDTO> getNotifications(Long receiverId, Pageable pageable) {
-        return notificationRepository.findByReceiver_IdOrderByCreatedAtDesc(receiverId, pageable)
-                .map(this::toResponse);
+        Page<Notification> notifications =
+                notificationRepository.findByReceiver_IdOrderByCreatedAtDesc(receiverId, pageable);
+        Map<Long, NotificationTargetStatusResolver.TargetStatus> statuses =
+                notificationTargetStatusResolver.resolveAll(notifications.getContent());
+
+        return notifications.map(notification -> {
+            NotificationTargetStatusResolver.TargetStatus status = statuses.get(notification.getId());
+            return NotificationResponseDTO.from(notification, status.status(), status.expired());
+        });
     }
 
     public UnreadCountResponseDTO getUnreadCount(Long receiverId) {
