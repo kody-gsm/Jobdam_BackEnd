@@ -22,7 +22,7 @@ public class User {
     @Column(nullable = false, length = 255)
     private String name;
 
-    @Column(nullable = false, length = 255)
+    @Column(length = 255)
     private String student_number;
 
     @Column(unique = true, length = 32)

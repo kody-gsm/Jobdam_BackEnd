@@ -168,7 +168,8 @@ public class FormExportService {
                     .filter(answer -> answer.getFile() != null)
                     .sorted(Comparator.comparingInt(answer -> answer.getQuestion().getOrderIndex()))
                     .forEach(answer -> names.put(answer, uniqueName(safeFileName(
-                            user.getStudent_number() + "_" + user.getName() + "_"
+                            Objects.toString(user.getStudent_number(), "학번없음-" + user.getId())
+                                    + "_" + user.getName() + "_"
                                     + answer.getFile().getOriginalName()), used)));
         }
         return names;
