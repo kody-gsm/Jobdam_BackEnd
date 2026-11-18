@@ -16,6 +16,11 @@ WORKDIR /app
 # JDBC 드라이버가 저장·조회 때 시각을 9시간씩 옮기지 않는다.
 ENV TZ=Asia/Seoul
 
+# docker-compose.prod.yml의 healthcheck가 curl로 /actuator/health/readiness를 확인한다.
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends curl \
+    && rm -rf /var/lib/apt/lists/*
+
 COPY --from=builder /app/build/libs/*.jar app.jar
 
 EXPOSE 8088

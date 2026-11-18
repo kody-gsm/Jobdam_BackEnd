@@ -48,6 +48,8 @@ public class SecurityConfig {
                 )
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers("/error").permitAll()
+                        // 배포 헬스체크용. 외부 요청은 프록시에서 막는다.
+                        .requestMatchers(HttpMethod.GET, "/actuator/health", "/actuator/health/**").permitAll()
                         .requestMatchers(HttpMethod.POST, "/api/notices").hasRole("TEACHER")
                         .requestMatchers(HttpMethod.GET, "/api/notices/channels").hasRole("TEACHER")
                         .requestMatchers(HttpMethod.POST, "/api/notices/send").hasRole("TEACHER")

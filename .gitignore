@@ -44,3 +44,8 @@ out/
 
 ### Uploads ###
 uploads/
+
+### Blue-green deploy (서버에서 deploy.sh가 만드는 파일) ###
+deploy/nginx-live/
+deploy/.deploy.lock
+deploy/.standby_color

@@ -3,6 +3,8 @@ package com.example.kodyjobdam.notification.service;
 import com.example.kodyjobdam.notification.dto.NotificationResponseDTO;
 import com.example.kodyjobdam.notification.dto.ReservationRealtimeEvent;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.context.event.ContextClosedEvent;
+import org.springframework.context.event.EventListener;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
@@ -63,6 +65,26 @@ public class NotificationSseService {
                 sendToEmitter(userId, emitter, "heartbeat", "ping");
             }
         }
+    }
+
+    /**
+     * 배포로 이 컨테이너가 내려갈 때 열린 SSE 연결을 먼저 닫는다.
+     *
+     * ContextClosedEvent는 graceful shutdown(웹 서버가 진행 중인 요청을 기다리는 단계)보다 먼저 온다.
+     * 닫지 않으면 최대 1시간짜리 SSE 요청 때문에 graceful shutdown이 타임아웃까지 기다렸다가 강제로 끊긴다.
+     * 먼저 닫아 주면 프론트가 바로 다시 연결하고, 그때는 프록시가 이미 새 컨테이너를 가리키고 있다.
+     */
+    @EventListener(ContextClosedEvent.class)
+    public void closeAllOnShutdown() {
+        int closed = 0;
+        for (List<SseEmitter> userEmitters : emitters.values()) {
+            for (SseEmitter emitter : userEmitters) {
+                completeEmitter(emitter);
+                closed++;
+            }
+        }
+        emitters.clear();
+        log.info("종료 전에 SSE 연결 {}개를 닫았습니다.", closed);
     }
 
     private void sendToEmitter(Long userId, SseEmitter emitter, String eventName, Object data) {

@@ -1,5 +1,6 @@
 package com.example.kodyjobdam.user.service;
 
+import net.javacrumbs.shedlock.spring.annotation.SchedulerLock;
 import com.example.kodyjobdam.user.EmailVerificationCodeRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Value;
@@ -20,6 +21,7 @@ public class EmailVerificationCodeCleanupScheduler {
 
     @Scheduled(cron = "${app.email-verification.cleanup-cron:0 0 3 * * *}")
     @Transactional
+    @SchedulerLock(name = "email-verification-cleanup", lockAtMostFor = "PT30M", lockAtLeastFor = "PT1M")
     public void cleanupExpiredOrUsedCodes() {
         LocalDateTime threshold = LocalDateTime.now().minusDays(retentionDays);
         emailVerificationCodeRepository.deleteExpiredOrUsedBefore(threshold);

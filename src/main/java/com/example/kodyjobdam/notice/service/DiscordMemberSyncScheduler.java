@@ -5,6 +5,7 @@ import jakarta.annotation.PreDestroy;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import net.dv8tion.jda.api.entities.Guild;
+import net.javacrumbs.shedlock.spring.annotation.SchedulerLock;
 import org.springframework.boot.context.event.ApplicationReadyEvent;
 import org.springframework.context.event.EventListener;
 import org.springframework.scheduling.annotation.Scheduled;
@@ -37,8 +38,17 @@ public class DiscordMemberSyncScheduler {
         syncMembers();
     }
 
-    /** 누락된 이벤트와 DB 학생 정보 변경을 바로잡는 저빈도 전체 점검. */
+    /**
+     * 누락된 이벤트와 DB 학생 정보 변경을 바로잡는 저빈도 전체 점검.
+     * 배포 중 두 컨테이너가 함께 떠 있어도 한 번만 돌도록 잠근다.
+     * 기동·세션 재연결 때의 동기화는 컨테이너마다 캐시를 채워야 하므로 잠그지 않는다(syncMembers 직접 호출).
+     */
     @Scheduled(cron = "${discord.member-sync.cron:0 0 4 * * *}", zone = "Asia/Seoul")
+    @SchedulerLock(name = "discord-member-sync", lockAtMostFor = "PT10M", lockAtLeastFor = "PT1M")
+    public void syncMembersOnSchedule() {
+        syncMembers();
+    }
+
     public void syncMembers() {
         requestFullSync().whenComplete((result, error) -> {
             if (error != null) log.error("디스코드 서버 멤버 동기화 실패", error);

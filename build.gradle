@@ -24,6 +24,12 @@ dependencies {
     implementation 'org.springframework.boot:spring-boot-starter-security'
     implementation 'org.springframework.boot:spring-boot-starter-validation'
     implementation 'org.springframework.boot:spring-boot-starter-data-jpa'
+    // 블루-그린 배포 때 /actuator/health/readiness로 새 컨테이너가 준비됐는지 확인한다.
+    implementation 'org.springframework.boot:spring-boot-starter-actuator'
+
+    // 배포 중 두 컨테이너가 함께 떠 있어도 예약 작업이 한 번만 돌도록 DB로 잠근다.
+    implementation 'net.javacrumbs.shedlock:shedlock-spring:6.10.0'
+    implementation 'net.javacrumbs.shedlock:shedlock-provider-jdbc-template:6.10.0'
 
     implementation 'me.paulschwarz:spring-dotenv:4.0.0'
 

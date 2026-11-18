@@ -1,5 +1,6 @@
 package com.example.kodyjobdam.notice.service;
 
+import net.javacrumbs.shedlock.spring.annotation.SchedulerLock;
 import com.example.kodyjobdam.notice.entity.ReservationKind;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -21,6 +22,7 @@ public class CounselingReminderScheduler {
 
     @Scheduled(cron = "${discord.counseling-reminder.cron:0 * * * * *}",
             zone = "Asia/Seoul", scheduler = "discordReminderTaskScheduler")
+    @SchedulerLock(name = "counseling-reminder", lockAtMostFor = "PT2M", lockAtLeastFor = "PT20S")
     public void sendReminders() {
         LocalDateTime now = LocalDateTime.now(clock);
         send(ReservationKind.COMMON, reminderService.commonReservationIds(now.toLocalDate()));

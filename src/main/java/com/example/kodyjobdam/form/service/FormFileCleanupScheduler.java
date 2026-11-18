@@ -1,5 +1,6 @@
 package com.example.kodyjobdam.form.service;
 
+import net.javacrumbs.shedlock.spring.annotation.SchedulerLock;
 import com.example.kodyjobdam.form.entity.FormFileEntity;
 import com.example.kodyjobdam.form.repository.FormFileRepository;
 import lombok.RequiredArgsConstructor;
@@ -39,6 +40,7 @@ public class FormFileCleanupScheduler {
             zone = "${form.file.cleanup.zone:Asia/Seoul}"
     )
     @Transactional
+    @SchedulerLock(name = "form-file-cleanup", lockAtMostFor = "PT30M", lockAtLeastFor = "PT1M")
     public void deleteOrphanFiles() {
         try {
             LocalDateTime threshold = LocalDateTime.now(ZoneId.of(zone)).minusHours(orphanRetentionHours);
