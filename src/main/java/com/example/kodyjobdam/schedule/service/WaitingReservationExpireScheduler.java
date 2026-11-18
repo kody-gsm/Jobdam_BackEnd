@@ -1,5 +1,6 @@
 package com.example.kodyjobdam.schedule.service;
 
+import net.javacrumbs.shedlock.spring.annotation.SchedulerLock;
 import com.example.kodyjobdam.common.service.CommonService;
 import com.example.kodyjobdam.course.service.CourseService;
 import lombok.RequiredArgsConstructor;
@@ -28,11 +29,13 @@ public class WaitingReservationExpireScheduler {
 
     /** 서버가 꺼져 있던 동안 밀린 신청이 남지 않도록 기동할 때 한 번 실행한다. */
     @EventListener(ApplicationReadyEvent.class)
+    @SchedulerLock(name = "waiting-reservation-expire", lockAtMostFor = "PT2M", lockAtLeastFor = "PT20S")
     public void expireOnStartup() {
         expireWaitingReservations();
     }
 
     @Scheduled(cron = "${reservation.waiting-expire.cron:0 * * * * *}", zone = "Asia/Seoul")
+    @SchedulerLock(name = "waiting-reservation-expire", lockAtMostFor = "PT2M", lockAtLeastFor = "PT20S")
     public void expireWaitingReservations() {
         LocalDateTime now = LocalDateTime.now(clock);
         expire("일반 상담", () -> commonService.expireWaitingReservations(now));

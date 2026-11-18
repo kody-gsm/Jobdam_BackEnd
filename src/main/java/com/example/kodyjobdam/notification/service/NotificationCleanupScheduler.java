@@ -1,5 +1,6 @@
 package com.example.kodyjobdam.notification.service;
 
+import net.javacrumbs.shedlock.spring.annotation.SchedulerLock;
 import com.example.kodyjobdam.notification.repository.NotificationRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -20,6 +21,7 @@ public class NotificationCleanupScheduler {
             zone = "${notification.cleanup.zone:Asia/Seoul}"
     )
     @Transactional
+    @SchedulerLock(name = "notification-cleanup", lockAtMostFor = "PT30M", lockAtLeastFor = "PT1M")
     public void deleteExpiredNotifications() {
         try {
             int deletedCount = notificationRepository.deleteExpiredNotifications(notificationExpirationService.now());

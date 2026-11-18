@@ -1,5 +1,6 @@
 package com.example.kodyjobdam.user.service;
 
+import net.javacrumbs.shedlock.spring.annotation.SchedulerLock;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.scheduling.annotation.Scheduled;
@@ -13,6 +14,7 @@ public class DataGsmStudentSyncScheduler {
     private final DataGsmStudentSyncService studentSyncService;
 
     @Scheduled(cron = "${datagsm.student-sync.cron:0 0 8 * * SAT}", zone = "Asia/Seoul")
+    @SchedulerLock(name = "datagsm-student-sync", lockAtMostFor = "PT1H", lockAtLeastFor = "PT1M")
     public void syncStudents() {
         try {
             int syncedCount = studentSyncService.syncAllStudents();

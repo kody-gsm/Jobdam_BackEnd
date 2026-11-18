@@ -1,5 +1,6 @@
 package com.example.kodyjobdam.timetable.service;
 
+import net.javacrumbs.shedlock.spring.annotation.SchedulerLock;
 import com.example.kodyjobdam.course.service.CourseService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -46,11 +47,13 @@ public class CareerClassLockScheduler {
 
     /** 배포 직후에도 수업 시간이 잠겨 있도록 기동할 때 한 번 실행한다. */
     @EventListener(ApplicationReadyEvent.class)
+    @SchedulerLock(name = "career-class-lock", lockAtMostFor = "PT10M", lockAtLeastFor = "PT1M")
     public void lockOnStartup() {
         lockCareerClasses();
     }
 
     @Scheduled(cron = "${reservation.career-class-lock.cron:0 20 3 * * *}", zone = "Asia/Seoul")
+    @SchedulerLock(name = "career-class-lock", lockAtMostFor = "PT10M", lockAtLeastFor = "PT1M")
     public void lockCareerClasses() {
         if (teacherName == null || teacherName.isBlank() || subjects.isEmpty()) {
             return;

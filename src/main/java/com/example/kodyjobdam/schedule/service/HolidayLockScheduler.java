@@ -1,5 +1,6 @@
 package com.example.kodyjobdam.schedule.service;
 
+import net.javacrumbs.shedlock.spring.annotation.SchedulerLock;
 import com.example.kodyjobdam.common.service.CommonService;
 import com.example.kodyjobdam.course.service.CourseService;
 import lombok.RequiredArgsConstructor;
@@ -40,11 +41,13 @@ public class HolidayLockScheduler {
 
     /** 배포 직후에도 휴업일이 잠겨 있도록 기동할 때 한 번 실행한다. */
     @EventListener(ApplicationReadyEvent.class)
+    @SchedulerLock(name = "holiday-lock", lockAtMostFor = "PT10M", lockAtLeastFor = "PT1M")
     public void lockOnStartup() {
         lockHolidays();
     }
 
     @Scheduled(cron = "${reservation.holiday-lock.cron:0 10 3 * * *}", zone = "Asia/Seoul")
+    @SchedulerLock(name = "holiday-lock", lockAtMostFor = "PT10M", lockAtLeastFor = "PT1M")
     public void lockHolidays() {
         LocalDate today = LocalDate.now(clock);
         LocalDate to = YearMonth.from(today).plusMonths(monthsAhead).atEndOfMonth();
