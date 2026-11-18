@@ -1,4 +1,81 @@
 # 그냥 3306으로 접근 불가, 3306포트가 뚫려있지 않음
+#
+# 블루-그린 무중단 배포 (docs/zero-downtime-deploy.md)
+# - app-blue, app-green 중 하나만 서비스한다. 어느 쪽인지는 서버의 deploy/nginx-live/active_backend가 정한다.
+# - 배포는 deploy/deploy.sh가 한다. 이 파일로 `docker compose up -d`를 직접 실행하면 두 앱이 모두 뜬다.
+# - 바깥(프론트 Nginx)은 지금처럼 8088로 보낸다. 8088은 proxy가 받아 활성 색으로 넘긴다.
+
+# 두 앱 컨테이너가 같은 설정을 쓰도록 한 곳에 둔다.
+x-app: &app
+  image: ghcr.io/kody-gsm/jobdam_backend:latest
+  restart: unless-stopped
+  environment:
+    SPRING_PROFILES_ACTIVE: prod
+    DB_URL: jdbc:mysql://db:3306/kodyjobdam?serverTimezone=Asia/Seoul&characterEncoding=UTF-8&useSSL=false&allowPublicKeyRetrieval=true
+    DB_USER: ${DB_USER}
+    DB_PASSWORD: ${DB_PASSWORD}
+    JWT_SIGN: ${JWT_SIGN}
+    JWT_ACCESS_TOKEN_EXPIRATION: ${JWT_ACCESS_TOKEN_EXPIRATION:-3600000}
+    JWT_REFRESH_TOKEN_EXPIRATION: ${JWT_REFRESH_TOKEN_EXPIRATION:-1209600000}
+    DATAGSM_API_BASE_URL: ${DATAGSM_API_BASE_URL:-https://openapi.datagsm.kr}
+    DATAGSM_API_KEY: ${DATAGSM_API_KEY}
+    DATAGSM_STUDENT_SYNC_CRON: "${DATAGSM_STUDENT_SYNC_CRON:-0 0 8 * * SAT}"
+    MULTIPART_MAX_FILE_SIZE: ${MULTIPART_MAX_FILE_SIZE:-10MB}
+    MULTIPART_MAX_REQUEST_SIZE: ${MULTIPART_MAX_REQUEST_SIZE:-12MB}
+    GEMINI_API_KEY: ${GEMINI_API_KEY}
+    GEMINI_MODEL: ${GEMINI_MODEL:-gemini-3.1-flash-lite}
+    DISCORD_BOT_TOKEN: ${DISCORD_BOT_TOKEN}
+    DISCORD_BOT_CHANNEL_ID: ${DISCORD_BOT_CHANNEL_ID}
+    FRONTEND_BASE_URL: ${FRONTEND_BASE_URL:-https://jobdam.kro.kr}
+    RESERVATION_LOCKED_PERIODS: ${RESERVATION_LOCKED_PERIODS:-4교시}
+    COUNSELING_RESERVATION_CRYPTO_KEY: ${COUNSELING_RESERVATION_CRYPTO_KEY}
+    NEIS_API_KEY: ${NEIS_API_KEY}
+    NEIS_CACHE_TTL_MINUTES: ${NEIS_CACHE_TTL_MINUTES:-60}
+    MAIL_HOST: ${MAIL_HOST:-smtp.gmail.com}
+    MAIL_PORT: ${MAIL_PORT:-587}
+    MAIL_USERNAME: ${MAIL_USERNAME}
+    MAIL_PASSWORD: ${MAIL_PASSWORD}
+    JPA_DDL_AUTO: ${JPA_DDL_AUTO:-validate}
+    EMAIL_CODE_EXPIRATION_MINUTES: ${EMAIL_CODE_EXPIRATION_MINUTES:-10}
+    EMAIL_CODE_MAX_FAILED_ATTEMPTS: ${EMAIL_CODE_MAX_FAILED_ATTEMPTS:-5}
+    EMAIL_CODE_RETENTION_DAYS: ${EMAIL_CODE_RETENTION_DAYS:-1}
+    EMAIL_CODE_CLEANUP_CRON: "${EMAIL_CODE_CLEANUP_CRON:-0 0 3 * * *}"
+    PROFILE_IMAGE_UPLOAD_DIR: ${PROFILE_IMAGE_UPLOAD_DIR:-/app/uploads/profile-images}
+    PROFILE_IMAGE_PUBLIC_PATH: ${PROFILE_IMAGE_PUBLIC_PATH:-/uploads/profile-images}
+    PROFILE_IMAGE_MAX_SIZE: ${PROFILE_IMAGE_MAX_SIZE:-5MB}
+    RECRUIT_IMAGE_STORAGE_PATH: ${RECRUIT_IMAGE_STORAGE_PATH:-/app/uploads/recruit}
+    RECRUIT_IMAGE_PUBLIC_PATH: ${RECRUIT_IMAGE_PUBLIC_PATH:-/uploads/recruit}
+    FORM_FILE_STORAGE_PATH: ${FORM_FILE_STORAGE_PATH:-/app/uploads/form}
+    BANNER_IMAGE_STORAGE_PATH: ${BANNER_IMAGE_STORAGE_PATH:-/app/uploads/banner}
+    BANNER_IMAGE_PUBLIC_PATH: ${BANNER_IMAGE_PUBLIC_PATH:-/uploads/banner}
+    NOTIFICATION_CLEANUP_CRON: "${NOTIFICATION_CLEANUP_CRON:-0 0 3 * * *}"
+    NOTIFICATION_CLEANUP_ZONE: ${NOTIFICATION_CLEANUP_ZONE:-Asia/Seoul}
+    NOTIFICATION_DEFAULT_RETENTION_DAYS: ${NOTIFICATION_DEFAULT_RETENTION_DAYS:-90}
+    NOTIFICATION_RECRUIT_RETENTION_DAYS: ${NOTIFICATION_RECRUIT_RETENTION_DAYS:-30}
+    NOTIFICATION_FORM_RETENTION_DAYS: ${NOTIFICATION_FORM_RETENTION_DAYS:-30}
+    NOTIFICATION_COUNSELING_RETENTION_DAYS: ${NOTIFICATION_COUNSELING_RETENTION_DAYS:-90}
+  # 업로드 파일은 이름 있는 볼륨에 둔다. blue와 green이 같은 볼륨을 붙여서 어느 쪽이 서비스해도 같은 파일을 본다.
+  volumes:
+    - profile-images:/app/uploads/profile-images
+    - recruit-images:/app/uploads/recruit
+    - form-files:/app/uploads/form
+    - banner-images:/app/uploads/banner
+  # 포트를 호스트에 열지 않는다. proxy만 도커 네트워크로 접근한다.
+  expose:
+    - "8088"
+  depends_on:
+    db:
+      condition: service_healthy
+  healthcheck:
+    test: ["CMD", "curl", "-fsS", "-o", "/dev/null", "http://localhost:8088/actuator/health/readiness"]
+    interval: 5s
+    timeout: 3s
+    retries: 3
+    # 기동(JPA 검증, 디스코드 로그인, 기동 작업) 동안의 실패는 세지 않는다.
+    start_period: 180s
+  # docker stop 후 강제 종료까지 기다리는 시간. 스프링 graceful shutdown(SHUTDOWN_TIMEOUT 30s)보다 길어야 한다.
+  stop_grace_period: 60s
+
 services:
   db:
     image: mysql:8.0
@@ -20,67 +97,28 @@ services:
       timeout: 5s
       retries: 10
 
-  app:
-    image: ghcr.io/kody-gsm/jobdam_backend:latest
+  app-blue:
+    <<: *app
+
+  app-green:
+    <<: *app
+
+  proxy:
+    image: nginx:1.27-alpine
     restart: unless-stopped
-    environment:
-      SPRING_PROFILES_ACTIVE: prod
-      DB_URL: jdbc:mysql://db:3306/kodyjobdam?serverTimezone=Asia/Seoul&characterEncoding=UTF-8&useSSL=false&allowPublicKeyRetrieval=true
-      DB_USER: ${DB_USER}
-      DB_PASSWORD: ${DB_PASSWORD}
-      JWT_SIGN: ${JWT_SIGN}
-      JWT_ACCESS_TOKEN_EXPIRATION: ${JWT_ACCESS_TOKEN_EXPIRATION:-3600000}
-      JWT_REFRESH_TOKEN_EXPIRATION: ${JWT_REFRESH_TOKEN_EXPIRATION:-1209600000}
-      DATAGSM_API_BASE_URL: ${DATAGSM_API_BASE_URL:-https://openapi.datagsm.kr}
-      DATAGSM_API_KEY: ${DATAGSM_API_KEY}
-      DATAGSM_STUDENT_SYNC_CRON: "${DATAGSM_STUDENT_SYNC_CRON:-0 0 8 * * SAT}"
-      MULTIPART_MAX_FILE_SIZE: ${MULTIPART_MAX_FILE_SIZE:-10MB}
-      MULTIPART_MAX_REQUEST_SIZE: ${MULTIPART_MAX_REQUEST_SIZE:-12MB}
-      GEMINI_API_KEY: ${GEMINI_API_KEY}
-      GEMINI_MODEL: ${GEMINI_MODEL:-gemini-3.1-flash-lite}
-      DISCORD_BOT_TOKEN: ${DISCORD_BOT_TOKEN}
-      DISCORD_BOT_CHANNEL_ID: ${DISCORD_BOT_CHANNEL_ID}
-      FRONTEND_BASE_URL: ${FRONTEND_BASE_URL:-https://jobdam.kro.kr}
-      RESERVATION_LOCKED_PERIODS: ${RESERVATION_LOCKED_PERIODS:-4교시}
-      COUNSELING_RESERVATION_CRYPTO_KEY: ${COUNSELING_RESERVATION_CRYPTO_KEY}
-      NEIS_API_KEY: ${NEIS_API_KEY}
-      NEIS_CACHE_TTL_MINUTES: ${NEIS_CACHE_TTL_MINUTES:-60}
-      MAIL_HOST: ${MAIL_HOST:-smtp.gmail.com}
-      MAIL_PORT: ${MAIL_PORT:-587}
-      MAIL_USERNAME: ${MAIL_USERNAME}
-      MAIL_PASSWORD: ${MAIL_PASSWORD}
-      JPA_DDL_AUTO: ${JPA_DDL_AUTO:-validate}
-      EMAIL_CODE_EXPIRATION_MINUTES: ${EMAIL_CODE_EXPIRATION_MINUTES:-10}
-      EMAIL_CODE_MAX_FAILED_ATTEMPTS: ${EMAIL_CODE_MAX_FAILED_ATTEMPTS:-5}
-      EMAIL_CODE_RETENTION_DAYS: ${EMAIL_CODE_RETENTION_DAYS:-1}
-      EMAIL_CODE_CLEANUP_CRON: "${EMAIL_CODE_CLEANUP_CRON:-0 0 3 * * *}"
-      PROFILE_IMAGE_UPLOAD_DIR: ${PROFILE_IMAGE_UPLOAD_DIR:-/app/uploads/profile-images}
-      PROFILE_IMAGE_PUBLIC_PATH: ${PROFILE_IMAGE_PUBLIC_PATH:-/uploads/profile-images}
-      PROFILE_IMAGE_MAX_SIZE: ${PROFILE_IMAGE_MAX_SIZE:-5MB}
-      RECRUIT_IMAGE_STORAGE_PATH: ${RECRUIT_IMAGE_STORAGE_PATH:-/app/uploads/recruit}
-      RECRUIT_IMAGE_PUBLIC_PATH: ${RECRUIT_IMAGE_PUBLIC_PATH:-/uploads/recruit}
-      FORM_FILE_STORAGE_PATH: ${FORM_FILE_STORAGE_PATH:-/app/uploads/form}
-      NOTIFICATION_CLEANUP_CRON: "${NOTIFICATION_CLEANUP_CRON:-0 0 3 * * *}"
-      NOTIFICATION_CLEANUP_ZONE: ${NOTIFICATION_CLEANUP_ZONE:-Asia/Seoul}
-      NOTIFICATION_DEFAULT_RETENTION_DAYS: ${NOTIFICATION_DEFAULT_RETENTION_DAYS:-90}
-      NOTIFICATION_RECRUIT_RETENTION_DAYS: ${NOTIFICATION_RECRUIT_RETENTION_DAYS:-30}
-      NOTIFICATION_FORM_RETENTION_DAYS: ${NOTIFICATION_FORM_RETENTION_DAYS:-30}
-      NOTIFICATION_COUNSELING_RETENTION_DAYS: ${NOTIFICATION_COUNSELING_RETENTION_DAYS:-90}
     ports:
       - "8088:8088"
     volumes:
-      - profile-images:/app/uploads/profile-images
-      - recruit-images:/app/uploads/recruit
-      - form-files:/app/uploads/form
-    depends_on:
-      db:
-        condition: service_healthy
+      # deploy.sh가 검사를 통과한 설정만 nginx-live에 옮긴다. 저장소의 deploy/nginx/default.conf를 바로 붙이지 않는다.
+      # 디렉터리째 붙인다. 파일 하나만 붙이면 deploy.sh가 파일을 바꿔도 컨테이너가 옛 파일을 본다.
+      - ./deploy/nginx-live:/etc/nginx/conf.d:ro
 
 volumes:
   db-data:
   profile-images:
   recruit-images:
   form-files:
+  banner-images:
 
 networks:
   default:
