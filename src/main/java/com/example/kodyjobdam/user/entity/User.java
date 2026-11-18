@@ -54,6 +54,9 @@ public class User {
 
     private LocalDateTime refreshTokenExpiresAt;
 
+    @Column(name = "auth_token_version", nullable = false)
+    private long authTokenVersion;
+
     @Column(length = 512)
     private String profileImageUrl;
 
@@ -62,6 +65,16 @@ public class User {
 
     public void completeTutorial() {
         this.tutorialCompleted = true;
+    }
+
+    public void resetRegistration() {
+        this.password = null;
+        this.emailVerified = false;
+        this.refreshToken = null;
+        this.refreshTokenExpiresAt = null;
+        this.profileImageUrl = null;
+        this.tutorialCompleted = false;
+        this.authTokenVersion++;
     }
 
 }

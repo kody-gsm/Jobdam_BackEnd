@@ -12,11 +12,13 @@ import com.example.kodyjobdam.user.dto.RefreshTokenRequest;
 import com.example.kodyjobdam.user.dto.SignupRequest;
 import com.example.kodyjobdam.user.dto.UserProfileResponse;
 import com.example.kodyjobdam.user.dto.UserResponse;
+import com.example.kodyjobdam.user.dto.WithdrawalRequest;
 import com.example.kodyjobdam.user.entity.EmailVerificationCode;
 import com.example.kodyjobdam.user.entity.EmailVerificationPurpose;
 import com.example.kodyjobdam.user.entity.User;
 import com.example.kodyjobdam.user.security.JwtTokenProvider;
 import com.example.kodyjobdam.user.security.SecurityUtil;
+import com.example.kodyjobdam.common.exception.AuthException;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
@@ -147,6 +149,25 @@ public class AuthService {
     }
 
     @Transactional
+    public void withdraw(WithdrawalRequest request) {
+        Long userId = securityUtil.getCurrentUserId();
+        User user = userRepository.findByIdForUpdate(userId)
+                .orElseThrow(() -> AuthException.unauthorized("회원 정보를 찾을 수 없습니다."));
+        if (!StringUtils.hasText(user.getPassword())
+                || !passwordEncoder.matches(request.password(), user.getPassword())) {
+            throw AuthException.unauthorized("비밀번호가 올바르지 않습니다.");
+        }
+
+        String previousImageUrl = user.getProfileImageUrl();
+        emailVerificationCodeRepository.markAllUnusedCodesAsUsed(user.getEmail(), LocalDateTime.now());
+        user.resetRegistration();
+        userRepository.saveAndFlush(user);
+        if (previousImageUrl != null) {
+            cleanupProfileImagesAfterTransaction(previousImageUrl, null);
+        }
+    }
+
+    @Transactional
     public void sendSignupVerificationCode(EmailVerificationRequest request) {
         User user = userRepository.findByEmail(request.getEmail())
                 .orElseGet(() -> dataGsmStudentSyncService.syncStudentByEmail(request.getEmail()));
@@ -249,7 +270,8 @@ public class AuthService {
         String accessToken = jwtTokenProvider.createToken(
                 user.getId(),
                 user.getEmail(),
-                user.getRole().name()
+                user.getRole().name(),
+                user.getAuthTokenVersion()
         );
 
         return AuthResponse.builder()

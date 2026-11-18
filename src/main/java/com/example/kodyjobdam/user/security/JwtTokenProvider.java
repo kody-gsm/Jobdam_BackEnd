@@ -26,7 +26,7 @@ public class JwtTokenProvider {
         this.accessTokenExpiration = accessTokenExpiration;
     }
 
-    public String createToken(Long userId, String email, String role) {    //토큰 만들기(유저 정보 → jwt 문자열 생성)
+    public String createToken(Long userId, String email, String role, long authTokenVersion) {    //토큰 만들기(유저 정보 → jwt 문자열 생성)
         Date now = new Date();
         Date expiry = new Date(now.getTime() + accessTokenExpiration);
 
@@ -34,6 +34,7 @@ public class JwtTokenProvider {
                 .setSubject(String.valueOf(userId))
                 .claim("email", email)
                 .claim("role", role)
+                .claim("authTokenVersion", authTokenVersion)
                 .setIssuedAt(now)
                 .setExpiration(expiry)
                 .signWith(key, SignatureAlgorithm.HS256)
