@@ -150,6 +150,21 @@ class FormExportServiceTest {
     }
 
     @Test
+    void 학번이_없는_졸업생의_첨부파일_이름에는_사용자_ID를_사용한다() throws IOException {
+        givenSubmissions(submission(30L, user(2L, "홍길동", null, UserRole.STUDENT),
+                SubmissionStatus.SUBMITTED,
+                fileAnswer(portfolio, file("포트폴리오.pdf", "2026/10/a.pdf"))));
+        when(storage.load("2026/10/a.pdf")).thenReturn(new ByteArrayResource("A".getBytes()));
+
+        FormFileArchiveDTO archive = formExportService.prepareFileArchive(5L, TEACHER_ID);
+        ByteArrayOutputStream out = new ByteArrayOutputStream();
+        formExportService.writeFileArchive(archive, out);
+
+        assertThat(unzip(out.toByteArray()))
+                .containsExactly(Map.entry("학번없음-2_홍길동_포트폴리오.pdf", "A"));
+    }
+
+    @Test
     void 첨부_파일이_하나도_없으면_ZIP을_만들지_않는다() {
         givenSubmissions(submission(30L, user(2L, "홍길동", "3101", UserRole.STUDENT),
                 SubmissionStatus.SUBMITTED, textAnswer(motive, "답변")));
