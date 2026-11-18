@@ -5,6 +5,7 @@ import com.example.kodyjobdam.user.UserRepository;
 import com.example.kodyjobdam.user.UserRole;
 import com.example.kodyjobdam.user.dto.EmailVerificationRequest;
 import com.example.kodyjobdam.user.dto.SignupRequest;
+import com.example.kodyjobdam.user.dto.WithdrawalRequest;
 import com.example.kodyjobdam.user.entity.EmailVerificationCode;
 import com.example.kodyjobdam.user.entity.EmailVerificationPurpose;
 import com.example.kodyjobdam.user.entity.User;
@@ -19,14 +20,18 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.test.util.ReflectionTestUtils;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.AdditionalAnswers.returnsFirstArg;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
@@ -117,5 +122,69 @@ class AuthServiceTest {
         authService.sendSignupVerificationCode(request);
 
         verifyNoInteractions(emailVerificationCodeRepository, emailVerificationService);
+    }
+
+    @Test
+    void 탈퇴하면_가입_정보와_토큰을_초기화하고_DataGSM_정보는_유지한다() {
+        User user = User.builder()
+                .id(10L)
+                .dataGsmStudentId(20L)
+                .name("김학생")
+                .email("student@gsm.hs.kr")
+                .student_number("3101")
+                .grade(3)
+                .classNum(1)
+                .number(1)
+                .role(UserRole.STUDENT)
+                .password("encoded-password")
+                .emailVerified(true)
+                .refreshToken("old-refresh-token-hash")
+                .refreshTokenExpiresAt(java.time.LocalDateTime.now().plusDays(1))
+                .profileImageUrl("/uploads/profile-images/photo.jpg")
+                .tutorialCompleted(true)
+                .build();
+        when(securityUtil.getCurrentUserId()).thenReturn(10L);
+        when(userRepository.findByIdForUpdate(10L)).thenReturn(Optional.of(user));
+        when(passwordEncoder.matches("password", "encoded-password")).thenReturn(true);
+
+        TransactionSynchronizationManager.initSynchronization();
+        try {
+            authService.withdraw(new WithdrawalRequest("password"));
+            verify(profileImageStorageService, never()).delete("/uploads/profile-images/photo.jpg");
+            TransactionSynchronizationManager.getSynchronizations()
+                    .forEach(TransactionSynchronization::afterCommit);
+        } finally {
+            TransactionSynchronizationManager.clearSynchronization();
+        }
+
+        assertThat(user.getPassword()).isNull();
+        assertThat(user.isEmailVerified()).isFalse();
+        assertThat(user.getRefreshToken()).isNull();
+        assertThat(user.getRefreshTokenExpiresAt()).isNull();
+        assertThat(user.getProfileImageUrl()).isNull();
+        assertThat(user.isTutorialCompleted()).isFalse();
+        assertThat(user.getAuthTokenVersion()).isEqualTo(1);
+        assertThat(user.getDataGsmStudentId()).isEqualTo(20L);
+        assertThat(user.getStudent_number()).isEqualTo("3101");
+        assertThat(user.getGrade()).isEqualTo(3);
+        assertThat(user.getRole()).isEqualTo(UserRole.STUDENT);
+        verify(emailVerificationCodeRepository)
+                .markAllUnusedCodesAsUsed(eq("student@gsm.hs.kr"), org.mockito.ArgumentMatchers.any());
+        verify(userRepository).saveAndFlush(user);
+        verify(profileImageStorageService).delete("/uploads/profile-images/photo.jpg");
+    }
+
+    @Test
+    void 비밀번호가_틀리면_탈퇴하지_않는다() {
+        User user = User.builder().id(10L).name("김학생").email("student@gsm.hs.kr")
+                .password("encoded-password").emailVerified(true).role(UserRole.STUDENT).build();
+        when(securityUtil.getCurrentUserId()).thenReturn(10L);
+        when(userRepository.findByIdForUpdate(10L)).thenReturn(Optional.of(user));
+
+        assertThatThrownBy(() -> authService.withdraw(new WithdrawalRequest("wrong")))
+                .hasMessage("비밀번호가 올바르지 않습니다.");
+        assertThat(user.getPassword()).isEqualTo("encoded-password");
+        assertThat(user.isEmailVerified()).isTrue();
+        verifyNoInteractions(emailVerificationCodeRepository);
     }
 }
