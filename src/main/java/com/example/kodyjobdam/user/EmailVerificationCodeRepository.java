@@ -32,6 +32,15 @@ public interface EmailVerificationCodeRepository extends JpaRepository<EmailVeri
             @Param("usedAt") LocalDateTime usedAt
     );
 
+    @Modifying(flushAutomatically = true)
+    @Query("""
+            update EmailVerificationCode e
+            set e.usedAt = :usedAt
+            where e.email = :email
+              and e.usedAt is null
+            """)
+    int markAllUnusedCodesAsUsed(@Param("email") String email, @Param("usedAt") LocalDateTime usedAt);
+
     @Modifying(clearAutomatically = true, flushAutomatically = true)
     @Query("""
             delete from EmailVerificationCode e

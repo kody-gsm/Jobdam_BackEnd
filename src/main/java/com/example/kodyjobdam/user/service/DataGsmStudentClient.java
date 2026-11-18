@@ -26,7 +26,8 @@ public class DataGsmStudentClient {
     public List<DataGsmStudent> fetchStudents(int page, int size) {
         URI uri = UriComponentsBuilder.fromHttpUrl(baseUrl)
                 .path("/v1/students")
-                .queryParam("onlyEnrolled", true)
+                .queryParam("includeGraduates", true)
+                .queryParam("includeWithdrawn", true)
                 .queryParam("sortBy", "STUDENT_NUMBER")
                 .queryParam("sortDirection", "ASC")
                 .queryParam("page", page)

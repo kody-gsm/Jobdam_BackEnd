@@ -1,6 +1,7 @@
 package com.example.kodyjobdam.user.config;
 
 import com.example.kodyjobdam.user.security.CustomUserDetailsService;
+import com.example.kodyjobdam.user.security.CustomUserDetails;
 import com.example.kodyjobdam.user.security.JwtTokenProvider;
 import io.jsonwebtoken.Claims;
 import jakarta.servlet.FilterChain;
@@ -48,6 +49,16 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
             String email = claims.get("email", String.class);
 
             UserDetails userDetails = userDetailsService.loadUserByUsername(email);
+            Object versionClaim = claims.get("authTokenVersion");
+            long tokenVersion = versionClaim instanceof Number number ? number.longValue() : 0L;
+            if (!(userDetails instanceof CustomUserDetails currentUser)
+                    || !currentUser.isEnabled()
+                    || !currentUser.getId().toString().equals(claims.getSubject())
+                    || currentUser.getAuthTokenVersion() != tokenVersion) {
+                SecurityContextHolder.clearContext();
+                authenticationEntryPoint.commence(request, response, new BadCredentialsException("Inactive account or revoked JWT."));
+                return;
+            }
             UsernamePasswordAuthenticationToken authentication =
                     new UsernamePasswordAuthenticationToken(
                             userDetails,
