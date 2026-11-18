@@ -66,6 +66,9 @@ class AuthServiceTest {
     @Mock
     private ProfileImageStorageService profileImageStorageService;
 
+    @Mock
+    private AccountWithdrawalCleanupService withdrawalCleanupService;
+
     @InjectMocks
     private AuthService authService;
 
@@ -141,6 +144,7 @@ class AuthServiceTest {
                 .refreshToken("old-refresh-token-hash")
                 .refreshTokenExpiresAt(java.time.LocalDateTime.now().plusDays(1))
                 .profileImageUrl("/uploads/profile-images/photo.jpg")
+                .discordUserId("discord-123")
                 .tutorialCompleted(true)
                 .build();
         when(securityUtil.getCurrentUserId()).thenReturn(10L);
@@ -162,14 +166,15 @@ class AuthServiceTest {
         assertThat(user.getRefreshToken()).isNull();
         assertThat(user.getRefreshTokenExpiresAt()).isNull();
         assertThat(user.getProfileImageUrl()).isNull();
+        assertThat(user.getDiscordUserId()).isNull();
         assertThat(user.isTutorialCompleted()).isFalse();
         assertThat(user.getAuthTokenVersion()).isEqualTo(1);
         assertThat(user.getDataGsmStudentId()).isEqualTo(20L);
         assertThat(user.getStudent_number()).isEqualTo("3101");
         assertThat(user.getGrade()).isEqualTo(3);
         assertThat(user.getRole()).isEqualTo(UserRole.STUDENT);
-        verify(emailVerificationCodeRepository)
-                .markAllUnusedCodesAsUsed(eq("student@gsm.hs.kr"), org.mockito.ArgumentMatchers.any());
+        verify(withdrawalCleanupService).deleteRecords(user);
+        verify(emailVerificationCodeRepository).deleteByEmail("student@gsm.hs.kr");
         verify(userRepository).saveAndFlush(user);
         verify(profileImageStorageService).delete("/uploads/profile-images/photo.jpg");
     }
@@ -186,5 +191,6 @@ class AuthServiceTest {
         assertThat(user.getPassword()).isEqualTo("encoded-password");
         assertThat(user.isEmailVerified()).isTrue();
         verifyNoInteractions(emailVerificationCodeRepository);
+        verifyNoInteractions(withdrawalCleanupService);
     }
 }

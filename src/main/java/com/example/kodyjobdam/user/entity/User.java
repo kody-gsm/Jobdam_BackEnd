@@ -69,6 +69,7 @@ public class User {
 
     public void resetRegistration() {
         this.password = null;
+        this.discordUserId = null;
         this.emailVerified = false;
         this.refreshToken = null;
         this.refreshTokenExpiresAt = null;

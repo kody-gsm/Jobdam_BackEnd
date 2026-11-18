@@ -11,6 +11,7 @@ import java.time.LocalDateTime;
 import java.util.Optional;
 
 public interface EmailVerificationCodeRepository extends JpaRepository<EmailVerificationCode, Long> {
+    void deleteByEmail(String email);
     Optional<EmailVerificationCode> findTopByEmailAndPurposeAndUsedAtIsNullOrderByCreatedAtDesc(
             String email,
             EmailVerificationPurpose purpose

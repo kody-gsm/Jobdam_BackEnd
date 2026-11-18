@@ -12,6 +12,8 @@ import java.util.List;
 @Repository
 public interface FormFileRepository extends JpaRepository<FormFileEntity, Long> {
 
+    List<FormFileEntity> findByUser_Id(Long userId);
+
     List<FormFileEntity> findByFormId(Long formId);
 
     /** 올려만 두고 어떤 답변에도 붙지 않은 파일 (제출을 중간에 그만둔 경우) */

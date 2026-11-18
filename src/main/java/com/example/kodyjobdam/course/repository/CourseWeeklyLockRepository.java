@@ -11,6 +11,8 @@ import java.util.Optional;
 @Repository
 public interface CourseWeeklyLockRepository extends JpaRepository<CourseWeeklyLockEntity, Long> {
 
+    void deleteByTeacher_Id(Long teacherId);
+
     boolean existsByTeacher_IdAndDayOfWeekAndPeriod(Long teacherId, DayOfWeek dayOfWeek, String period);
 
     Optional<CourseWeeklyLockEntity> findByTeacher_IdAndDayOfWeekAndPeriod(

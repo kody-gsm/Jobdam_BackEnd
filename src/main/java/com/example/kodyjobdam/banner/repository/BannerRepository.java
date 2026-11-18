@@ -8,6 +8,8 @@ import java.util.Optional;
 
 public interface BannerRepository extends JpaRepository<BannerEntity, Long> {
 
+    List<BannerEntity> findByUser_Id(Long userId);
+
     Optional<BannerEntity> findFirstByActiveTrueOrderByUpdatedAtDesc();
 
     List<BannerEntity> findByActiveTrue();

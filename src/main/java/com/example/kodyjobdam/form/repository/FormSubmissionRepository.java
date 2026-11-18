@@ -13,6 +13,8 @@ import java.util.Optional;
 @Repository
 public interface FormSubmissionRepository extends JpaRepository<FormSubmissionEntity, Long> {
 
+    List<FormSubmissionEntity> findByUser_Id(Long userId);
+
     // 중복 제출 방지용
     boolean existsByFormIdAndUserId(Long formId, Long userId);
 

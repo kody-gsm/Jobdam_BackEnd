@@ -9,9 +9,12 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
 import java.time.LocalDateTime;
+import java.util.Collection;
 import java.util.Optional;
 
 public interface CounselingReminderRepository extends JpaRepository<CounselingReminder, Long> {
+
+    void deleteByReservationKindAndReservationIdIn(ReservationKind kind, Collection<Long> reservationIds);
 
     @Query("select r from CounselingReminder r where r.reservationKind = :kind "
             + "and r.reservationId = :reservationId and r.startsAt = :startsAt and r.hoursBefore = :hoursBefore")
