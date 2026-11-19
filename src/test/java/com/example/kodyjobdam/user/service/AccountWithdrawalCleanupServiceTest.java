@@ -16,6 +16,9 @@ import com.example.kodyjobdam.form.service.FormService;
 import com.example.kodyjobdam.notice.entity.ReservationKind;
 import com.example.kodyjobdam.notice.repository.CounselingReminderRepository;
 import com.example.kodyjobdam.notification.repository.NotificationRepository;
+import com.example.kodyjobdam.notification.entity.NotificationType;
+import com.example.kodyjobdam.notification.service.NotificationExpirationService;
+import com.example.kodyjobdam.notification.service.NotificationService;
 import com.example.kodyjobdam.passreport.repository.PassReportRepository;
 import com.example.kodyjobdam.recruit.repository.RecruitRepository;
 import com.example.kodyjobdam.recruit.service.RecruitService;
@@ -28,6 +31,8 @@ import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.util.List;
 import java.util.Set;
+import java.time.LocalDate;
+import java.time.ZoneId;
 
 import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.Mockito.verify;
@@ -50,6 +55,8 @@ class AccountWithdrawalCleanupServiceTest {
     @Mock private RecruitService recruitService;
     @Mock private PassReportRepository passReportRepository;
     @Mock private NotificationRepository notificationRepository;
+    @Mock private NotificationService notificationService;
+    @Mock private NotificationExpirationService notificationExpirationService;
     @Mock private BannerRepository bannerRepository;
     @Mock private BannerImageStorage bannerImageStorage;
 
@@ -58,8 +65,12 @@ class AccountWithdrawalCleanupServiceTest {
     @Test
     void 탈퇴하면_일반_진로_상담과_알림_예약을_모두_제거한다() {
         User user = User.builder().id(10L).build();
-        CommonEntity common = CommonEntity.builder().reservation_id(100L).build();
-        CourseEntity course = CourseEntity.builder().reservation_id(200L).build();
+        User teacher = User.builder().id(20L).build();
+        LocalDate date = LocalDate.now(ZoneId.of("Asia/Seoul")).plusDays(1);
+        CommonEntity common = CommonEntity.builder().reservation_id(100L).teacher(teacher)
+                .date(date).period("1교시").state(com.example.kodyjobdam.common.entity.StateEnum.WAITING).build();
+        CourseEntity course = CourseEntity.builder().reservation_id(200L).teacher(teacher)
+                .date(date).period("2교시").state(com.example.kodyjobdam.course.entity.StateEnum.RESERVED).build();
         when(cryptoService.submitterHash(10L)).thenReturn("user-hash");
         when(commonRepository.findBySubmitterHash("user-hash")).thenReturn(List.of(common));
         when(commonRepository.findByTeacher_Id(10L)).thenReturn(List.of(common));
@@ -78,6 +89,12 @@ class AccountWithdrawalCleanupServiceTest {
                 urls.containsAll(List.of("/teacher/common/100", "/student/common/100",
                         "/teacher/course/200", "/student/course/200"))));
         verify(notificationRepository).deleteByReceiver_Id(10L);
+        verify(notificationService).notifyUser(teacher, NotificationType.COMMON_COUNSELING_CANCELED_BY_WITHDRAWAL,
+                "상담 예약 취소", date + " 1교시 상담 예약이 학생의 회원 탈퇴로 취소되었습니다.",
+                100L, "/teacher/common", null);
+        verify(notificationService).notifyUser(teacher, NotificationType.COURSE_COUNSELING_CANCELED_BY_WITHDRAWAL,
+                "상담 예약 취소", date + " 2교시 상담 예약이 학생의 회원 탈퇴로 취소되었습니다.",
+                200L, "/teacher/course", null);
         verify(formFileService).deleteAllByUser(10L);
     }
 }

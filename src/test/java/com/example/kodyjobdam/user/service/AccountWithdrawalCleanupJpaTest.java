@@ -13,7 +13,12 @@ import com.example.kodyjobdam.form.service.FormFileService;
 import com.example.kodyjobdam.form.service.FormService;
 import com.example.kodyjobdam.notification.entity.Notification;
 import com.example.kodyjobdam.notification.entity.NotificationType;
+import com.example.kodyjobdam.notification.entity.NotificationType;
 import com.example.kodyjobdam.notification.repository.NotificationRepository;
+import com.example.kodyjobdam.notification.service.NotificationExpirationService;
+import com.example.kodyjobdam.notification.service.NotificationService;
+import com.example.kodyjobdam.notification.service.NotificationSseService;
+import com.example.kodyjobdam.notification.service.NotificationTargetStatusResolver;
 import com.example.kodyjobdam.recruit.service.RecruitService;
 import com.example.kodyjobdam.user.UserRole;
 import com.example.kodyjobdam.user.entity.User;
@@ -24,9 +29,11 @@ import org.springframework.boot.test.autoconfigure.jdbc.AutoConfigureTestDatabas
 import org.springframework.boot.test.autoconfigure.orm.jpa.DataJpaTest;
 import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.context.annotation.Import;
+import org.springframework.data.domain.PageRequest;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.ZoneId;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.when;
@@ -39,7 +46,7 @@ import static org.mockito.Mockito.when;
         "spring.jpa.database-platform=org.hibernate.dialect.H2Dialect"
 })
 @AutoConfigureTestDatabase(replace = AutoConfigureTestDatabase.Replace.NONE)
-@Import(AccountWithdrawalCleanupService.class)
+@Import({AccountWithdrawalCleanupService.class, NotificationService.class})
 class AccountWithdrawalCleanupJpaTest {
 
     @Autowired private EntityManager entityManager;
@@ -54,6 +61,9 @@ class AccountWithdrawalCleanupJpaTest {
     @MockBean private FormService formService;
     @MockBean private RecruitService recruitService;
     @MockBean private BannerImageStorage bannerImageStorage;
+    @MockBean private NotificationSseService notificationSseService;
+    @MockBean private NotificationTargetStatusResolver notificationTargetStatusResolver;
+    @MockBean private NotificationExpirationService notificationExpirationService;
 
     @Test
     void 탈퇴하면_상담과_폼_제출과_연결된_알림은_사라지고_다른_계정은_남는다() {
@@ -63,10 +73,15 @@ class AccountWithdrawalCleanupJpaTest {
                 .name("선생님").email("teacher@gsm.hs.kr").role(UserRole.TEACHER).build());
         when(cryptoService.submitterHash(student.getId())).thenReturn("student-hash");
 
+        LocalDate date = LocalDate.now(ZoneId.of("Asia/Seoul")).plusDays(7);
+        when(notificationExpirationService.counselingExpiresAt(date))
+                .thenReturn(LocalDateTime.now().plusDays(90));
+        when(notificationExpirationService.counselingExpiresAt(date.plusDays(1)))
+                .thenReturn(LocalDateTime.now().plusDays(91));
         CommonEntity common = CommonEntity.builder().teacher(teacher).submitterHash("student-hash")
-                .date(LocalDate.of(2026, 12, 1)).period("1교시").build();
+                .date(date).period("1교시").build();
         CourseEntity course = CourseEntity.builder().teacher(teacher).submitterHash("student-hash")
-                .date(LocalDate.of(2026, 12, 2)).period("2교시").build();
+                .date(date.plusDays(1)).period("2교시").build();
         entityManager.persist(common);
         entityManager.persist(course);
 
@@ -87,7 +102,14 @@ class AccountWithdrawalCleanupJpaTest {
         assertThat(commonRepository.findBySubmitterHash("student-hash")).isEmpty();
         assertThat(courseRepository.findBySubmitterHash("student-hash")).isEmpty();
         assertThat(submissionRepository.findByUser_Id(student.getId())).isEmpty();
-        assertThat(notificationRepository.findAll()).isEmpty();
+        var notifications = notificationRepository.findByReceiver_IdOrderByCreatedAtDesc(
+                teacher.getId(), PageRequest.of(0, 10)).getContent();
+        assertThat(notifications).hasSize(2);
+        assertThat(notifications).extracting(Notification::getType).containsExactlyInAnyOrder(
+                NotificationType.COMMON_COUNSELING_CANCELED_BY_WITHDRAWAL,
+                NotificationType.COURSE_COUNSELING_CANCELED_BY_WITHDRAWAL);
+        assertThat(notifications).extracting(Notification::getTargetUrl).containsExactlyInAnyOrder(
+                "/teacher/common", "/teacher/course");
         assertThat(entityManager.find(User.class, teacher.getId())).isNotNull();
         assertThat(entityManager.find(FormEntity.class, form.getId())).isNotNull();
     }
