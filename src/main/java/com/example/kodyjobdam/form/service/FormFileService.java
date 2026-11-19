@@ -141,6 +141,16 @@ public class FormFileService {
                 .toList());
     }
 
+    @Transactional
+    public void deleteAllByUser(Long userId) {
+        List<FormFileEntity> files = fileRepository.findByUser_Id(userId);
+        if (files.isEmpty()) {
+            return;
+        }
+        fileRepository.deleteAll(files);
+        deleteStoredFilesAfterCommit(files.stream().map(FormFileEntity::getStoredName).toList());
+    }
+
     private void deleteStoredFileAfterRollback(String storedName) {
         if (!TransactionSynchronizationManager.isSynchronizationActive()) {
             return;

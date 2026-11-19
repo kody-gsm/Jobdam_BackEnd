@@ -54,6 +54,7 @@ public class AuthService {
     private final DataGsmStudentSyncService dataGsmStudentSyncService;
     private final SecurityUtil securityUtil;
     private final ProfileImageStorageService profileImageStorageService;
+    private final AccountWithdrawalCleanupService withdrawalCleanupService;
 
     @Value("${jwt.refresh-token-expiration}")
     private long refreshTokenExpiration;
@@ -159,7 +160,8 @@ public class AuthService {
         }
 
         String previousImageUrl = user.getProfileImageUrl();
-        emailVerificationCodeRepository.markAllUnusedCodesAsUsed(user.getEmail(), LocalDateTime.now());
+        withdrawalCleanupService.deleteRecords(user);
+        emailVerificationCodeRepository.deleteByEmail(user.getEmail());
         user.resetRegistration();
         userRepository.saveAndFlush(user);
         if (previousImageUrl != null) {

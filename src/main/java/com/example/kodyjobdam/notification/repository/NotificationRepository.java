@@ -17,6 +17,10 @@ import java.util.Set;
 @Repository
 public interface NotificationRepository extends JpaRepository<Notification, Long> {
 
+    void deleteByReceiver_Id(Long receiverId);
+
+    void deleteByTargetUrlIn(Collection<String> targetUrls);
+
     Page<Notification> findByReceiver_IdOrderByCreatedAtDesc(Long receiverId, Pageable pageable);
 
     long countByReceiver_IdAndReadFalse(Long receiverId);

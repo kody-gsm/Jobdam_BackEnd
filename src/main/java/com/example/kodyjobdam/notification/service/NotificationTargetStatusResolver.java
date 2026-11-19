@@ -38,6 +38,9 @@ public class NotificationTargetStatusResolver {
     public Map<Long, TargetStatus> resolveAll(List<Notification> notifications) {
         Map<TargetKind, Set<Long>> targetIds = new EnumMap<>(TargetKind.class);
         for (Notification notification : notifications) {
+            if (isWithdrawalCancellation(notification)) {
+                continue;
+            }
             TargetKind kind = kindOf(notification);
             if (kind != null) {
                 targetIds.computeIfAbsent(kind, ignored -> new HashSet<>()).add(notification.getTargetId());
@@ -49,10 +52,21 @@ public class NotificationTargetStatusResolver {
 
         Map<Long, TargetStatus> result = new HashMap<>();
         for (Notification notification : notifications) {
+            if (isWithdrawalCancellation(notification)) {
+                result.put(notification.getId(), new TargetStatus("CANCEL", false));
+                continue;
+            }
             Map<Long, TargetStatus> statuses = loaded.getOrDefault(kindOf(notification), Map.of());
             result.put(notification.getId(), statuses.getOrDefault(notification.getTargetId(), TargetStatus.missing()));
         }
         return result;
+    }
+
+    private boolean isWithdrawalCancellation(Notification notification) {
+        return (notification.getType() == NotificationType.COMMON_COUNSELING_CANCELED_BY_WITHDRAWAL
+                || notification.getType() == NotificationType.COURSE_COUNSELING_CANCELED_BY_WITHDRAWAL)
+                && ("/teacher/common".equals(notification.getTargetUrl())
+                || "/teacher/course".equals(notification.getTargetUrl()));
     }
 
     private TargetKind kindOf(Notification notification) {
@@ -76,7 +90,8 @@ public class NotificationTargetStatusResolver {
                 || type == NotificationType.COUNSELING_CANCELED_BY_STUDENT
                 || type == NotificationType.COUNSELING_EXPIRED) {
             String targetUrl = notification.getTargetUrl();
-            return targetUrl != null && targetUrl.contains("/course/") ? TargetKind.COURSE : TargetKind.COMMON;
+            return targetUrl != null && (targetUrl.contains("/course/") || targetUrl.endsWith("/course"))
+                    ? TargetKind.COURSE : TargetKind.COMMON;
         }
         return null;
     }
